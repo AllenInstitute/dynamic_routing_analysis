@@ -1,0 +1,21 @@
+[project]
+name = "dynamic_routing_analysis"
+version = "0.1.0"
+description = "Tools for accessing, processing and presenting data from Dynamic Routing experiments."
+authors = [
+    {name = "Ben Hardcastle", email = "ben.hardcastle@alleninstitute.org"},
+]
+dependencies = [
+    "numpy>=1.24.4",
+    "pandas>=2.0.3",
+    "matplotlib>=3.7.2",
+    "pynwb>=2.3.3",
+    "nwbwidgets>=0.11.3",
+]
+requires-python = ">=3.8"
+readme = "README.md"
+license = {text = "MIT"}
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
