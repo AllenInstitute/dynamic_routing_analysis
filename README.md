@@ -1,2 +1,7 @@
 # dynamic_routing_analysis
-Tools for accessing, processing and presenting data from Dynamic Routing experiments.
+
+## Quickstart
+
+* Duplicate this capsule: https://codeocean.allenneuraldynamics.org/capsule/3127916
+* Attach your AWS and GitHub credentials
+* Fire-up VSCode
