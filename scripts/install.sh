@@ -3,6 +3,8 @@
 conda deactivate
 python -m pip install pipx
 pipx install pdm
-pdm venv create
+dirname=${PWD##*/} 
+pyversion=$(python -V 2>&1 | grep -Po '(?<=Python )(.+)')
+python -m venv .venv --without-pip --prompt "$dirname-$pyversion"
 source .venv/bin/activate
 pdm install
