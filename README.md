@@ -1,7 +1,7 @@
 # **dynamic_routing_analysis**
 
 
-## **quickstart**
+## contributing
 
 ### **first-time capsule use**
 
@@ -40,17 +40,18 @@
     ```
 
 ***
-## Add/remove dependencies
+### **adding/removing dependencies**
 
 * when adding, this method will find a compatible version of the dependency, based on the package's Python version requirement and other existing dependencies
 
-* the dependency will be added/removed from dependencies in [pyproject.toml](pyproject.toml) 
-
-* the dependency will be added/removed from the currently-activated venv
-
-* if removed, all of the sub-dependencies will also be removed from the venv
-
-* multiple dependencies can be specified together
+* the dependency will be added/removed from:
+    * [pyproject.toml](pyproject.toml), which specifies required dependencies
+    * the currently-activated dev venv
+        * if removed, all of its sub-dependencies will also be removed
+    * [pdm.lock](pdm.lock), which specifies the dev venv
+        - commit any changes to the `pdm.lock` to signal updates to the common dev venv
+        - if you're unsure if your lock file is correct, run `pdm update` - this will add add the most up-to-date versions of dependencies specifed in [pyproject.toml](pyproject.toml) 
+        - if your venv is broken, delete the `.venv` folder and [re-install](scripts/install.sh)
 
 For dependencies of the package itself (ie. needed for code within `dynamic_routing_analysis`):
 
@@ -65,3 +66,11 @@ For dependencies needed for development of the package (ie. testing, linting, fo
 pdm add -G dev mypy pytest
 pdm remove -G dev mypy pytest
 ```
+
+### **updating dependencies**
+
+If we specify only a lower bound on a dependency (e.g. `pandas >= 2.0`), any new install of `dynamic_routing_analysis` will also install the latest version of `pandas`.
+
+To make sure that the latest versions of dependencies don't introduce breaking changes, we should update the dev venv periodically by running `pdm update` and running any tests, then committing [pdm.lock](pdm.lock).
+
+More info on `pdm` and the lock file: https://pdm.fming.dev/latest/usage/dependency/#install-the-packages-pinned-in-lock-file
