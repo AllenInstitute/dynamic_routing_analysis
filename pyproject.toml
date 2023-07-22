@@ -20,8 +20,8 @@ license = {text = "MIT"}
 [project.optional-dependencies]
 dev = [
     "mypy>=1.4.1",
-    "ruff>=0.0.279",
     "pytest>=7.4.0",
+    "ruff>=0.0.279",
 ]
 
 [build-system]
