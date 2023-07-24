@@ -6,32 +6,25 @@
 ### **first-time capsule use**
 
 1. clone the dev capsule https://codeocean.allenneuraldynamics.org/capsule/3127916
-2. fire up VSCode
-3. pull the latest changes and update the dev venv:
-
-    `linux`
+2. attach AWS and GitHub credentials (requires an access token)
+3. fire up VSCode
+4. pull from origin/main, activate and update the dev venv:
     ```bash
-    source scripts/update.sh
-    ```
-
-    `windows`
-    ```cmd
-    scripts\update.bat
+    source install.sh
     ```
 4. verify that the venv is activated in VSCode
 
-    - `Ctrl+Shift+P` and start typing `Select Interpreter`, then select `Python: Select Interpreter`
+    - `Ctrl+Shift+P` and start typing any part of `Python: Select Interpreter`
     - the interpreter should be set to `Python 3.9.12 ('.venv': venv) ./.venv/bin/python`
     - if that's not an option, hit the refresh button 
     - if it still doesn't appear, hit `Enter interpreter path...` and enter `./.venv/bin/python`
-
 5. verify that the venv is activated in a new terminal ```[Ctrl+Shift+`]```
 
     the folder name and Python version should be indicated on the command line (e.g. `dra-3.9`):
     ```shell
     (dra-3.9) root@c5876abdc7b5:/code/dra# |
     ```
-
+    
 ### **capsule re-use**
 1. Make sure to check for updates in the source control tab in VSCode `[Ctrl+Shift+G]` and pull where appropriate
 2. Update the venv in a terminal with 
