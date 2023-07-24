@@ -5,7 +5,7 @@
 
 ### **first-time capsule use**
 
-1. clone the dev capsule https://codeocean.allenneuraldynamics.org/capsule/3127916
+1. duplicate the dev capsule https://codeocean.allenneuraldynamics.org/capsule/3127916
 2. attach AWS and GitHub credentials (requires an access token)
 3. fire up VSCode
 4. pull from origin/main, activate and update the dev venv:
