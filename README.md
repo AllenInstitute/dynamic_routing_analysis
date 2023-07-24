@@ -8,8 +8,9 @@
 1. clone the dev capsule https://codeocean.allenneuraldynamics.org/capsule/3127916
 2. attach AWS and GitHub credentials (requires an access token)
 3. fire up VSCode
-4. pull from origin/main, activate and update the dev venv:
+4. pull from origin/main, activate and update the dev venv outside of conda:
     ```bash
+    conda deactivate
     source install.sh
     ```
 4. verify that the venv is activated in VSCode
