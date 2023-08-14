@@ -1,10 +1,10 @@
 [project]
 name = "dynamic_routing_analysis"
-version = "0.1.0"
+version = "0.1.1"
 description = "Tools for accessing, processing and presenting data from Dynamic Routing experiments."
 authors = [
-    {name = "Ben Hardcastle", email = "ben.hardcastle@alleninstitute.org"},
-    {name = "Ethan McBride", email = "ethan.mcbride@alleninstitute.org"},
+    { name = "Ben Hardcastle", email = "ben.hardcastle@alleninstitute.org" },
+    { name = "Ethan McBride", email = "ethan.mcbride@alleninstitute.org" },
 ]
 dependencies = [
     "numpy>=1.24.4",
@@ -19,7 +19,6 @@ dependencies = [
 ]
 requires-python = ">=3.9"
 readme = "README.md"
-license = {text = "MIT"}
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
@@ -29,6 +28,9 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
 ]
+
+[project.license]
+text = "MIT"
 
 [project.urls]
 Repository = "https://github.com/AllenInstitute/dynamic_routing_analysis"
@@ -73,33 +75,32 @@ composite = [
     "pdm publish",
 ]
 
-[build-system]
-requires = ["setuptools>=61", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [tool.ruff]
 fix = true
 ignore-init-module-imports = true
-# See https://github.com/charliermarsh/ruff#rules for error code definitions.
 select = [
-    "ANN", # annotations
-    "B", # bugbear
-    "C", # comprehensions
-    "E", # style errors
-    "F", # flakes
-    "I", # import sorting
-    "RUF100", # meta
-    "N", # naming
-    "U", # upgrade
-    "W", # style warnings
-    "YTT", # sys.version
+    "ANN",
+    "B",
+    "C",
+    "E",
+    "F",
+    "I",
+    "RUF100",
+    "N",
+    "U",
+    "W",
+    "YTT",
 ]
-extend-exclude = ["tests"]
-src = ["src", "tests"]
+extend-exclude = [
+    "tests",
+]
+src = [
+    "src",
+    "tests",
+]
 target-version = "py39"
 
 [tool.ruff.flake8-tidy-imports]
-# Disallow all relative imports.
 ban-relative-imports = "all"
 
 [tool.pytest.ini_options]
@@ -109,13 +110,11 @@ addopts = [
     "--ignore-glob=*scripts*,*examples*",
     "--doctest-glob=*README.md",
 ]
-
 doctest_optionflags = [
     "NORMALIZE_WHITESPACE",
     "IGNORE_EXCEPTION_DETAIL",
     "ELLIPSIS",
 ]
-
 testpaths = [
     ".",
     "tests",
@@ -123,12 +122,18 @@ testpaths = [
 ]
 
 [tool.coverage.paths]
-source = ["src"]
+source = [
+    "src",
+]
 
 [tool.coverage.run]
 branch = true
-source = ["src"]
-omit = ["*__init__*"]
+source = [
+    "src",
+]
+omit = [
+    "*__init__*",
+]
 
 [tool.coverage.report]
 skip_covered = true
@@ -141,3 +146,10 @@ exclude_also = [
     "@(abc.)?abstractmethod",
     "@typing.runtime_checkable",
 ]
+
+[build-system]
+requires = [
+    "setuptools>=61",
+    "wheel",
+]
+build-backend = "setuptools.build_meta"
