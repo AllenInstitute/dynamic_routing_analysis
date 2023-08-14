@@ -15,6 +15,7 @@ dependencies = [
     "fsspec>=2023.6.0",
     "s3fs>=2023.6.0",
     "universal-pathlib>=0.0.24",
+    "npc-lims>=0.1.0",
 ]
 requires-python = ">=3.9"
 readme = "README.md"
@@ -33,16 +34,43 @@ classifiers = [
 Repository = "https://github.com/AllenInstitute/dynamic_routing_analysis"
 Issues = "https://github.com/AllenInstitute/dynamic_routing_analysis/issues"
 
-[project.optional-dependencies]
+[tool.pdm.dev-dependencies]
 dev = [
-    "mypy>=1.4.1",
     "pytest>=7.4.0",
-    "ruff>=0.0.279",
-    "coverage[toml]>=7.2.2",
-    "pytest-cov>=4.0.0",
-    "bump>=1.3.2",
-    "types-backports>=0.1.3",
-    "pre-commit>=3.3.3",
+    "ruff>=0.0.282",
+    "pdm-bump>=0.7.3",
+    "mypy>=1.4.1",
+    "pytest-cov>=4.1.0",
+    "black>=23.7.0",
+]
+
+[tool.pdm.scripts]
+ruff = "ruff check src --fix-only"
+black = "black src"
+test = "pytest --cov"
+mypy = "mypy src"
+bumpver = "pdm bump micro"
+tag = "pdm bump tag"
+
+[tool.pdm.scripts.prebuild]
+composite = [
+    "black",
+    "ruff",
+    "test",
+    "mypy",
+]
+
+[tool.pdm.scripts.dryrun]
+composite = [
+    "prebuild",
+    "pdm publish --repository testpypi",
+]
+
+[tool.pdm.scripts.pub]
+composite = [
+    "prebuild",
+    "bumpver",
+    "pdm publish",
 ]
 
 [build-system]
@@ -60,7 +88,7 @@ select = [
     "E", # style errors
     "F", # flakes
     "I", # import sorting
-    "M", # meta
+    "RUF100", # meta
     "N", # naming
     "U", # upgrade
     "W", # style warnings
@@ -78,6 +106,8 @@ ban-relative-imports = "all"
 addopts = [
     "--import-mode=importlib",
     "--doctest-modules",
+    "--ignore-glob=*scripts*,*examples*",
+    "--doctest-glob=*README.md",
 ]
 
 doctest_optionflags = [
@@ -87,6 +117,7 @@ doctest_optionflags = [
 ]
 
 testpaths = [
+    ".",
     "tests",
     "src",
 ]
@@ -100,12 +131,13 @@ source = ["src"]
 omit = ["*__init__*"]
 
 [tool.coverage.report]
+skip_covered = true
 show_missing = true
-
-[tool.pdm.scripts]
-# usage: pdm run <script> [args]
-format = {composite = [ "black src", "ruff check src --fix"]}
-test = {composite = ["mypy src", "pytest --cov"]}
-bump = "bump -p pyproject.toml"
-pre = {composite = ["pdm format", "pdm test"]}
-pub = {composite = ["pdm pre", "pdm bump", "pdm publish"]}
+skip_empty = true
+exclude_also = [
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "@(abc.)?abstractmethod",
+    "@typing.runtime_checkable",
+]
