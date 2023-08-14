@@ -1,0 +1,73 @@
+# This workflow will install Python dependencies, run tests and lint/formatting - possibly with a variety of Python versions - bump version, re-commit  publish to PYPI
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: Publish Python package
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+    
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+      
+jobs:
+  package:
+
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.9"]
+    permissions: write-all
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+        
+    - uses: pdm-project/setup-pdm@v3
+      with:
+        version: 'head' 
+        
+    - name: Install dependencies
+      run: |
+        rm pdm.lock
+        pdm install
+        
+    - name: Test, format, lint
+      # env:
+      #   DBHUB_API_KEY: ${{ secrets.DBHUB_API_KEY }}
+      #   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #   AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      #   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #   CODE_OCEAN_API_TOKEN: ${{ secrets.CODE_OCEAN_API_TOKEN }}
+      #   CODE_OCEAN_DOMAIN: ${{ secrets.CODE_OCEAN_DOMAIN }}
+      #   FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+      #   REDIS_DEFAULT_USER_PASSWORD: ${{ secrets.REDIS_DEFAULT_USER_PASSWORD }}
+      run: |
+        pdm prebuild
+        
+    - name: Bump project version
+      run: |
+        pdm bumpver
+        
+    - name: Commit changes
+      uses: EndBug/add-and-commit@v9
+      with:
+        default_author: github_actions
+        message: "Bump [skip actions]"
+        
+    - name: Tag commit
+      run: |
+        pdm tag
+        git push --tags
+        
+    - name: Publish
+      run: |
+        pdm publish
