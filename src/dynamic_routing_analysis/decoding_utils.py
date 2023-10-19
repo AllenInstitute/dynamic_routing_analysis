@@ -42,7 +42,7 @@ def linearSVC_decoder(input_data,labels):
     params=[]
 
     for train,test in skf.split(X, y):
-        clf=svm.LinearSVC(max_iter=5000)
+        clf=svm.LinearSVC(max_iter=5000,dual='auto')
         clf.fit(X[train],y[train])
         ypred[test] = clf.predict(X[test])
         y_dec_func[test] = clf.decision_function(X[test])
@@ -198,7 +198,7 @@ def decode_context_from_units(session,params):
 
                         svc_results[p][aa][tt][u_idx][nn]['shuffle']=linearSVC_decoder(
                             input_data=sel_data.T,
-                            labels=np.random.choice(pred_var[subset_ind],len(pred_var),replace=False).flatten())
+                            labels=np.random.choice(pred_var[subset_ind],len(pred_var[subset_ind]),replace=False).flatten())
 
                         svc_results[p][aa][tt][u_idx][nn]['trial_sel_idx']=trial_sel
                         svc_results[p][aa][tt][u_idx][nn]['unit_sel_idx']=unit_subset
