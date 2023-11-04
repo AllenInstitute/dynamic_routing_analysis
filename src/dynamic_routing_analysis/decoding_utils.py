@@ -85,12 +85,11 @@ def decode_context_from_units(session,params):
     # make unit xarrays
     time_before = 0.5
     time_after = 0.5
-    binsize = 0.1
     trial_da = spike_utils.make_neuron_time_trials_tensor(session.units, session.trials, time_before, time_after, binsize)
 
     area_counts=session.units[:]['structure'].value_counts()
     
-#     predict=['stim_ids','block_ids','trial_response']
+    # predict=['stim_ids','block_ids','trial_response']
     predict=['block_ids']
 
     #save metadata about this session & decoder params
@@ -135,7 +134,7 @@ def decode_context_from_units(session,params):
                 trial_sel = session.trials[:].index
                 
             #or, use whether mouse responded
-            pred_var = session.trials[:]['is_rewarded'][trial_sel].values
+            pred_var = session.trials[:]['is_response'][trial_sel].values
 
 
         area_sel = ['all']+list(area_counts[area_counts>=u_min].index)
@@ -143,9 +142,9 @@ def decode_context_from_units(session,params):
         #loop through areas
         for aa in area_sel:
             if aa=='all':
-                unit_sel = session.units[:].index.values
+                unit_sel = session.units[:]['unit_id'].values
             else:
-                unit_sel = session.units[:].query('structure==@aa').index.values
+                unit_sel = session.units[:].query('structure==@aa')['unit_id'].values
             svc_results[p][aa]={}
             svc_results[p][aa]['n_units']=len(unit_sel)
             
@@ -200,7 +199,7 @@ def decode_context_from_units(session,params):
                             input_data=sel_data.T,
                             labels=np.random.choice(pred_var[subset_ind],len(pred_var[subset_ind]),replace=False).flatten())
 
-                        svc_results[p][aa][tt][u_idx][nn]['trial_sel_idx']=trial_sel
+                        svc_results[p][aa][tt][u_idx][nn]['trial_sel_idx']=trial_sel[subset_ind]
                         svc_results[p][aa][tt][u_idx][nn]['unit_sel_idx']=unit_subset
                     
 
@@ -211,3 +210,126 @@ def decode_context_from_units(session,params):
 
     with open(os.path.join(savepath,session.id+'_'+filename), 'wb') as handle:
         pickle.dump(svc_results, handle, protocol=pickle.HIGHEST_PROTOCOL) 
+
+    svc_results={}
+
+
+def decode_context_from_units_all_timebins(session,params):
+
+
+    trnum=params['trnum']
+    n_units=params['n_units']
+    u_min=params['u_min']
+    n_repeats=params['n_repeats']
+    binsize=params['binsize']
+    balance_labels=params['balance_labels']
+    savepath=params['savepath']
+    filename=params['filename']
+
+    svc_results={}
+
+    timebin_da,timebins_table=spike_utils.make_neuron_timebins_matrix(session.units[:], session.trials[:], binsize)
+
+    area_counts=session.units[:]['structure'].value_counts()
+    
+    # predict=['stim_ids','block_ids','trial_response']
+    predict=['block_ids']
+
+    #save metadata about this session & decoder params
+    svc_results['metadata']=session.metadata
+    svc_results['trial_numbers']=trnum
+    svc_results['unit_numbers']=n_units
+    svc_results['min_n_units']=u_min
+    svc_results['n_repeats']=n_repeats
+    svc_results['balance_labels']=balance_labels
+    
+    #loop through different labels to predict
+    for p in predict:
+        svc_results[p]={}
+
+        timebin_context=[]
+        for cc in range(0,len(timebins_table)):
+            if timebins_table['is_vis_context'].iloc[cc]:
+                timebin_context.append('vis')
+            else: #timebins_table['is_aud_context'].iloc[cc]:
+                timebin_context.append('aud')
+
+        timebins_table['context']=timebin_context
+        pred_var = timebins_table['context'].values
+
+        area_sel = ['all']+list(area_counts[area_counts>=u_min].index)
+        
+        #loop through areas
+        for aa in area_sel:
+            if aa=='all':
+                unit_sel = session.units[:].index.values
+            else:
+                unit_sel = session.units[:].query('structure==@aa').index.values
+            svc_results[p][aa]={}
+            svc_results[p][aa]['n_units']=len(unit_sel)
+            
+            # since time bins are observatinos here, no need to loop through diff time bins
+            # keep the index for analysis consistency
+            tt=0
+            svc_results[p][aa][tt]={}
+            for u_idx,u_num in enumerate(n_units):
+                svc_results[p][aa][tt][u_idx]={}
+                
+                #loop through repeats
+                for nn in range(0,n_repeats):
+
+                    if u_num=='all':
+                        unit_subset = unit_sel #np.random.choice(unit_sel,len(unit_sel),replace=False)
+                    elif u_num<=len(unit_sel):
+                        unit_subset = np.random.choice(unit_sel,u_num,replace=False)
+                    else:
+                        continue
+
+                    #option to balance number of labels for training
+                    if balance_labels:
+                        subset_ind=[]
+                        conds = np.unique(pred_var)
+                        cond_count=[]
+
+                        if trnum=='all':
+                            for cc in conds:
+                                cond_count.append(np.sum(pred_var==cc))
+                            use_trnum=np.min(cond_count)
+                        else:
+                            use_trnum = trnum
+
+                        for cc in conds:
+                            cond_inds=np.where(pred_var==cc)[0]
+                            # if len(cond_inds)<use_trnum:
+                            #     use_trnum=len(cond_inds)
+                            subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))   
+                        subset_ind=np.sort(np.hstack(subset_ind))
+                    else:
+                        subset_ind=np.arange(0,len(pred_var))
+
+
+                    sel_data = timebin_da.sel(timebin=subset_ind,
+                                              unit_id=session.units[:]['unit_id'].loc[unit_subset].values
+                                              ).values
+
+                    svc_results[p][aa][tt][u_idx][nn]=linearSVC_decoder(
+                        input_data=sel_data.T,
+                        labels=pred_var[subset_ind].flatten())
+
+                    svc_results[p][aa][tt][u_idx][nn]['shuffle']=linearSVC_decoder(
+                        input_data=sel_data.T,
+                        labels=np.random.choice(pred_var[subset_ind],len(pred_var[subset_ind]),replace=False).flatten())
+
+                    svc_results[p][aa][tt][u_idx][nn]['trial_sel_idx']=subset_ind
+                    svc_results[p][aa][tt][u_idx][nn]['unit_sel_idx']=unit_subset
+                    
+
+            print(aa+' done')
+            
+    print(session.id+' done')
+    
+
+    with open(os.path.join(savepath,session.id+'_'+filename), 'wb') as handle:
+        pickle.dump(svc_results, handle, protocol=pickle.HIGHEST_PROTOCOL) 
+
+    svc_results={}
