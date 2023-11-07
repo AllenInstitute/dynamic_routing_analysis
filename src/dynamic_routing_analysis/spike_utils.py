@@ -99,9 +99,13 @@ def make_timebins_table(trials, bin_size):
         if trials['is_vis_context'].loc[switch_trial_num]:
             timebins_table['is_vis_context'][(timebins_table['bin_start']>=block_start) & 
                                             (timebins_table['bin_start']<block_end)]=True
-        if trials['is_aud_context'].loc[switch_trial_num]:
+            timebins_table['is_aud_context'][(timebins_table['bin_start']>=block_start) & 
+                                            (timebins_table['bin_start']<block_end)]=False
+        elif trials['is_aud_context'].loc[switch_trial_num]:
             timebins_table['is_aud_context'][(timebins_table['bin_start']>=block_start) & 
                                             (timebins_table['bin_start']<block_end)]=True
+            timebins_table['is_vis_context'][(timebins_table['bin_start']>=block_start) & 
+                                            (timebins_table['bin_start']<block_end)]=False
         if ii > 0:    
             timebins_table['is_context_switch'][(timebins_table['bin_start']>=block_start) &
                                                 (timebins_table['bin_start']<block_start+bin_size)]=True
