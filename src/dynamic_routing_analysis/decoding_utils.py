@@ -74,20 +74,31 @@ def decode_context_from_units(session,params):
     n_units=params['n_units']
     u_min=params['u_min']
     n_repeats=params['n_repeats']
-    binsize=params['binsize']
-    time_bins=params['time_bins']
+    spikes_binsize=params['spikes_binsize']
+    spikes_time_before=params['spikes_time_before']
+    spikes_time_after=params['spikes_time_after']
+    decoder_binsize=params['decoder_binsize']
+    decoder_time_before=params['decoder_time_before']
+    decoder_time_after=params['decoder_time_after']
     balance_labels=params['balance_labels']
     savepath=params['savepath']
     filename=params['filename']
+    use_structure_probe=params['use_structure_probe']
+    
+    time_bins=np.arange(-decoder_time_before,decoder_time_after,decoder_binsize)
 
     svc_results={}
     
     # make unit xarrays
-    time_before = 0.5
-    time_after = 0.5
-    trial_da = spike_utils.make_neuron_time_trials_tensor(session.units, session.trials, time_before, time_after, binsize)
+    # time_before = 0.2
+    # time_after = 0.5
+    trial_da = spike_utils.make_neuron_time_trials_tensor(session.units, session.trials, spikes_time_before, spikes_time_after, spikes_binsize)
 
-    area_counts=session.units[:]['structure'].value_counts()
+    if use_structure_probe:
+        structure_probe=spike_utils.get_structure_probe(session)
+        area_counts=structure_probe['structure_probe'].value_counts()
+    else:
+        area_counts=session.units[:]['structure'].value_counts()
     
     # predict=['stim_ids','block_ids','trial_response']
     predict=['block_ids']
@@ -99,6 +110,12 @@ def decode_context_from_units(session,params):
     svc_results['min_n_units']=u_min
     svc_results['n_repeats']=n_repeats
     svc_results['time_bins']=time_bins
+    svc_results['spikes_time_before']=spikes_time_before
+    svc_results['spikes_time_after']=spikes_time_after
+    svc_results['spikes_binsize']=spikes_binsize
+    svc_results['decoder_time_before']=decoder_time_before
+    svc_results['decoder_time_after']=decoder_time_after
+    svc_results['decoder_binsize']=decoder_binsize
     svc_results['balance_labels']=balance_labels
     
     #loop through different labels to predict
@@ -143,6 +160,8 @@ def decode_context_from_units(session,params):
         for aa in area_sel:
             if aa=='all':
                 unit_sel = session.units[:]['unit_id'].values
+            elif use_structure_probe:
+                unit_sel = structure_probe.query('structure_plus_probe==@aa')['unit_id'].values
             else:
                 unit_sel = session.units[:].query('structure==@aa')['unit_id'].values
             svc_results[p][aa]={}
@@ -190,7 +209,7 @@ def decode_context_from_units(session,params):
                         sel_data = trial_da.sel(time=slice(t_start,time_bins[tt+1]),
                                                 trials=trial_sel[subset_ind],
                                                 unit_id=unit_subset).mean(dim='time').values
-
+                        
                         svc_results[p][aa][tt][u_idx][nn]=linearSVC_decoder(
                             input_data=sel_data.T,
                             labels=pred_var[subset_ind].flatten())

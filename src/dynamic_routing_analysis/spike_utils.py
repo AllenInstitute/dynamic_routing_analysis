@@ -180,3 +180,29 @@ def make_neuron_timebins_matrix(units, trials, bin_size):
                                 })
 
     return timebin_da, timebins_table
+
+
+def get_structure_probe(session):
+    
+    unique_areas=session.units[:]['structure'].unique()
+
+    structure_probe=np.full(len(session.units[:]),'',dtype=object)
+
+    for aa in unique_areas:
+        unique_probes=session.units[:].query('structure==@aa')['group_name'].unique()
+
+        if len(unique_probes)>1:
+            for up in unique_probes:
+                unit_idx=session.units[:].query('structure==@aa and group_name==@up').index.values
+                structure_probe[unit_idx]=aa+'_'+up
+        elif len(unique_probes)==1:
+            unit_idx=session.units[:].query('structure==@aa').index.values
+            structure_probe[unit_idx]=aa
+        else:
+            print('no units in '+aa)
+
+    structure_probe=pd.DataFrame({
+        'structure_probe':structure_probe,
+        'unit_id':session.units[:]['unit_id']},index=session.units[:].index.values)
+
+    return structure_probe
