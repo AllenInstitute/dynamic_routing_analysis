@@ -161,7 +161,7 @@ def decode_context_from_units(session,params):
             if aa=='all':
                 unit_sel = session.units[:]['unit_id'].values
             elif use_structure_probe:
-                unit_sel = structure_probe.query('structure_plus_probe==@aa')['unit_id'].values
+                unit_sel = structure_probe.query('structure_probe==@aa')['unit_id'].values
             else:
                 unit_sel = session.units[:].query('structure==@aa')['unit_id'].values
             svc_results[p][aa]={}
