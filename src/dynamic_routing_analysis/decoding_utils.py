@@ -11,13 +11,12 @@ from sklearn.preprocessing import StandardScaler
 from dynamic_routing_analysis import spike_utils
 
 
-def linearSVC_decoder(input_data,labels):
+def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None):
     
     output={}
 
     scaler = StandardScaler()
-    skf = StratifiedKFold(n_splits=5,shuffle=True)
-    
+
     scaler.fit(input_data)
     X = scaler.transform(input_data)
     y = labels
@@ -41,7 +40,26 @@ def linearSVC_decoder(input_data,labels):
     intercept=[]
     params=[]
 
-    for train,test in skf.split(X, y):
+    #make train, test splits based on block number
+    if crossval=='blockwise':
+        if crossval_index is None:
+            raise ValueError('Must provide crossval_index')
+        train=[]
+        test=[]
+        block_number=crossval_index
+        block_numbers=np.unique(block_number)
+        for bb in block_numbers:
+            not_block_inds=np.where(block_number!=bb)[0]
+            train.append(not_block_inds)
+            block_inds=np.where(block_number==bb)[0]
+            test.append(block_inds)
+        train_test_split=zip(train,test)
+    elif crossval=='5_fold':
+        skf = StratifiedKFold(n_splits=5,shuffle=True)
+        train_test_split = skf.split(input_data, labels)
+
+
+    for train,test in train_test_split:
         clf=svm.LinearSVC(max_iter=5000,dual='auto')
         clf.fit(X[train],y[train])
         ypred[test] = clf.predict(X[test])
@@ -69,7 +87,6 @@ def linearSVC_decoder(input_data,labels):
 
 def decode_context_from_units(session,params):
 
-
     trnum=params['trnum']
     n_units=params['n_units']
     u_min=params['u_min']
@@ -84,6 +101,7 @@ def decode_context_from_units(session,params):
     savepath=params['savepath']
     filename=params['filename']
     use_structure_probe=params['use_structure_probe']
+    crossval=params['crossval']
     
     time_bins=np.arange(-decoder_time_before,decoder_time_after,decoder_binsize)
 
@@ -117,6 +135,7 @@ def decode_context_from_units(session,params):
     svc_results['decoder_time_after']=decoder_time_after
     svc_results['decoder_binsize']=decoder_binsize
     svc_results['balance_labels']=balance_labels
+    svc_results['crossval']=crossval
     
     #loop through different labels to predict
     for p in predict:
@@ -153,6 +172,12 @@ def decode_context_from_units(session,params):
             #or, use whether mouse responded
             pred_var = session.trials[:]['is_response'][trial_sel].values
 
+        if crossval=='blockwise':
+            crossval_index=session.trials[:]['block_index'][trial_sel].values
+            svc_results['crossval_index']=crossval_index
+        else:
+            crossval_index=None
+            svc_results['crossval_index']=None
 
         area_sel = ['all']+list(area_counts[area_counts>=u_min].index)
         
@@ -212,11 +237,15 @@ def decode_context_from_units(session,params):
                         
                         svc_results[p][aa][tt][u_idx][nn]=linearSVC_decoder(
                             input_data=sel_data.T,
-                            labels=pred_var[subset_ind].flatten())
+                            labels=pred_var[subset_ind].flatten(),
+                            crossval=crossval,
+                            crossval_index=crossval_index)
 
                         svc_results[p][aa][tt][u_idx][nn]['shuffle']=linearSVC_decoder(
                             input_data=sel_data.T,
-                            labels=np.random.choice(pred_var[subset_ind],len(pred_var[subset_ind]),replace=False).flatten())
+                            labels=np.random.choice(pred_var[subset_ind],len(pred_var[subset_ind]),replace=False).flatten(),
+                            crossval=crossval,
+                            crossval_index=crossval_index)
 
                         svc_results[p][aa][tt][u_idx][nn]['trial_sel_idx']=trial_sel[subset_ind]
                         svc_results[p][aa][tt][u_idx][nn]['unit_sel_idx']=unit_subset
