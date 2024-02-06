@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import npc_lims
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -153,12 +154,38 @@ def make_timebins_table(trials, bin_size):
 
 
 
-def make_neuron_timebins_matrix(units, trials, bin_size):
+def make_neuron_timebins_matrix(units, trials, bin_size, generate_context_labels=False):
     
     #units: units table to include in matrix
     #trials: trials table to create timebins table
     #bin_size: size of each bin in seconds
     
+    # generate 10-minute blocks of context labels
+    if generate_context_labels:
+        start_time=trials[:]['start_time'].iloc[0]
+        block_context_names=np.array(['vis','aud'])
+        context=np.full(len(trials), fill_value='nan')
+        block_nums=np.full(len(trials), fill_value=np.nan)
+
+        # make "real" subdivided blocks
+        if np.random.choice(block_context_names,1)=='vis':
+            block_context_index=[0,1]*3
+        #elif np.random.choice(block_context_names,1)=='aud': #sometimes this if & elif aren't reached, IDK why
+        else:
+            block_context_index=[1,0]*3
+        block_contexts=block_context_names[block_context_index]
+        for block in range(0,6):
+            block_start_time=start_time+block*600
+            block_trials=trials.query('start_time>=@block_start_time').index
+            context[block_trials]=block_contexts[block]
+            block_nums[block_trials]=block
+        trials['context_name']=context
+        context_switches=np.where(np.diff(trials['context_name'].values=='vis'))[0]+1
+        trials['is_context_switch']=np.full(len(trials), fill_value=False)
+        trials['is_context_switch'].iloc[context_switches]=True
+        trials['is_vis_context']=context=='vis'
+        trials['is_aud_context']=context=='aud'
+
     timebins_table,bins = make_timebins_table(trials, bin_size)
 
     unit_count = len(units[:])
@@ -184,25 +211,29 @@ def make_neuron_timebins_matrix(units, trials, bin_size):
 
 def get_structure_probe(session):
     
-    unique_areas=session.units[:]['structure'].unique()
+    units=pd.read_parquet(
+                npc_lims.get_cache_path('units',session.id,version='v0.0.173')
+            )
 
-    structure_probe=np.full(len(session.units[:]),'',dtype=object)
+    unique_areas=units[:]['structure'].unique()
+
+    structure_probe=np.full(len(units[:]),'',dtype=object)
 
     for aa in unique_areas:
-        unique_probes=session.units[:].query('structure==@aa')['group_name'].unique()
+        unique_probes=units[:].query('structure==@aa')['group_name'].unique()
 
         if len(unique_probes)>1:
             for up in unique_probes:
-                unit_idx=session.units[:].query('structure==@aa and group_name==@up').index.values
+                unit_idx=units[:].query('structure==@aa and group_name==@up').index.values
                 structure_probe[unit_idx]=aa+'_'+up
         elif len(unique_probes)==1:
-            unit_idx=session.units[:].query('structure==@aa').index.values
+            unit_idx=units[:].query('structure==@aa').index.values
             structure_probe[unit_idx]=aa
         else:
             print('no units in '+aa)
 
     structure_probe=pd.DataFrame({
         'structure_probe':structure_probe,
-        'unit_id':session.units[:]['unit_id']},index=session.units[:].index.values)
+        'unit_id':units[:]['unit_id']},index=units[:].index.values)
 
     return structure_probe
