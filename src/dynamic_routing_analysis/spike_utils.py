@@ -29,24 +29,25 @@ def makePSTH(spike_times, event_times, time_before, time_after, bin_size):
     return np.vstack(event_aligned_spikes).T, bin_centers
 
 
-def make_neuron_time_trials_tensor(units, trials, time_before, time_after, bin_size):
+def make_neuron_time_trials_tensor(units, trials, time_before, time_after, bin_size, event_name='stim_start_time'):
     
     #units: units to include in tensor
     #trials: trials to include in tensor
     #time_before: time before event to include in PSTH
     #time_after: time after event to include in PSTH
     #bin_size: size of each bin in seconds
+    #event_name: optional input to specify column to use to align events
     #returns: 3d tensor of shape (units, time, trials)
 
     unit_count = len(units[:])
     trial_count = len(trials[:])
-    time_count = int((time_before+time_after)/bin_size)
+    bins = np.arange(-time_before, time_after, bin_size)
 
-    tensor = np.zeros((unit_count, time_count-1, trial_count))
+    tensor = np.zeros((unit_count, len(bins)-1, trial_count))
 
-    for uu, unit in units[:].iterrows():
+    for uu, (_, unit) in enumerate(units[:].iterrows()):
         spike_times = np.array(unit['spike_times'])
-        event_times = trials[:]['stim_start_time']
+        event_times = trials[:][event_name]
         event_aligned_spikes, bin_centers = makePSTH(spike_times, event_times, time_before, time_after, bin_size)
         tensor[uu,:,:] = event_aligned_spikes/bin_size
 
