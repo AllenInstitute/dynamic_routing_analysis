@@ -1,20 +1,212 @@
 import os
 import pickle
+import time
 
 import npc_lims
 import numpy as np
 import pandas as pd
 import xarray as xr
-from sklearn import ensemble, svm
 from sklearn.metrics import balanced_accuracy_score, classification_report
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import RobustScaler, StandardScaler
 
-from dynamic_routing_analysis import spike_utils
+from dynamic_routing_analysis import data_utils, spike_utils
 
+
+# 'linearSVC' or 'LDA' or 'RandomForest'
+def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',crossval_index=None,labels_as_index=False):
+    if decoder_type=='linearSVC':
+        from sklearn import svm
+        clf=svm.LinearSVC(max_iter=5000,dual='auto',class_weight='balanced')
+    elif decoder_type=='LDA':
+        from sklearn import discriminant_analysis
+        clf=discriminant_analysis.LinearDiscriminantAnalysis(solver='svd')
+    elif decoder_type=='RandomForest':
+        from sklearn import ensemble
+        clf=ensemble.RandomForestClassifier(class_weight='balanced')
+
+    output={}
+
+    # scaler = StandardScaler()
+    scaler = RobustScaler()
+
+    scaler.fit(input_data)
+    X = scaler.transform(input_data)
+    unique_labels=np.unique(labels)
+    if labels_as_index==True:
+        labels=np.array([np.where(unique_labels==x)[0][0] for x in labels])
+
+    y = labels
+
+    if len(np.unique(labels))>2:
+        y_dec_func=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
+    else:
+        y_dec_func=np.full(len(y), fill_value=np.nan)
+ 
+    if type(y[0])==bool:
+        ypred=np.full(len(y), fill_value=False)
+        ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value=False)
+    elif type(y[0])==str:
+        ypred=np.full(len(y), fill_value='       ')
+        ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value='       ')
+    else:
+        ypred=np.full(len(y), fill_value=np.nan)
+        ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
+
+    tidx_used=[]
+    
+    coefs=[]
+    classes=[]
+    intercept=[]
+    params=[]
+    ypred_all=[]
+    ypred_train=[]
+    ytrue_train=[]
+    train_trials=[]
+    test_trials=[]
+    dec_func_all=[]
+    models=[]
+
+    #make train, test splits based on block number
+    if crossval=='blockwise':
+        if crossval_index is None:
+            raise ValueError('Must provide crossval_index')
+        train=[]
+        test=[]
+        block_number=crossval_index
+        block_numbers=np.unique(block_number)
+        for bb in block_numbers:
+            not_block_inds=np.where(block_number!=bb)[0]
+            train.append(not_block_inds)
+
+            #equalize number of trials for each condition
+            subset_ind=[]
+            conds = np.unique(y[not_block_inds])
+            cond_count=[]
+            for cc in conds:
+                cond_count.append(np.sum(y[not_block_inds]==cc))
+            use_trnum=np.min(cond_count)
+            for cc in conds:
+                cond_inds=np.where(y[not_block_inds]==cc)[0]
+                subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))   
+            subset_ind=np.sort(np.hstack(subset_ind))
+            train.append(not_block_inds[subset_ind])
+
+            block_inds=np.where(block_number==bb)[0]
+            test.append(block_inds)
+        train_test_split=zip(train,test)
+
+    elif 'forecast' in crossval:
+        if crossval_index is None:
+            raise ValueError('Must provide crossval_index')
+        train=[]
+        test=[]
+        block_number=crossval_index
+        block_numbers=np.unique(block_number)
+
+        #make list of training and test blocks
+        #training = adjacent blocks
+        #testing = block before and block after (if exist)
+        train_blocks=[]
+        test_blocks=[]
+
+        if crossval=='forecast_train_2':
+            for bb in block_numbers[:-1]:
+                train_blocks.append([bb,bb+1])
+                if bb==0:
+                    test_blocks.append([bb+2])
+                elif bb==block_numbers[-2]:
+                    test_blocks.append([bb-1])
+                else:
+                    test_blocks.append([bb-1,bb+2])
+
+        elif crossval=='forecast_train_3':
+            for bb in block_numbers[:-2]:
+                train_blocks.append([bb,bb+1,bb+2])
+                if bb==0:
+                    test_blocks.append([bb+3])
+                elif bb==block_numbers[-3]:
+                    test_blocks.append([bb-1])
+                else:
+                    test_blocks.append([bb-1,bb+3])
+
+        for bb in range(0,len(train_blocks)):
+            train.append(np.where(np.isin(block_number,train_blocks[bb]))[0])
+            test.append(np.where(np.isin(block_number,test_blocks[bb]))[0])
+
+        train_test_split=zip(train,test)
+        
+    elif crossval=='5_fold':
+        skf = StratifiedKFold(n_splits=5,shuffle=True)
+        train_test_split = skf.split(input_data, labels)
+
+    for train,test in train_test_split:
+        
+        clf.fit(X[train],y[train])
+        prediction=clf.predict(X[test])
+        decision_function=clf.decision_function(X[test])
+        ypred_all.append(prediction)
+        ypred[test] = prediction
+        ypred_train.append(clf.predict(X[train]))
+        ytrue_train.append(y[train])
+        y_dec_func[test] = decision_function
+        dec_func_all.append(decision_function)
+        tidx_used.append([test])
+        classes.append(clf.classes_)
+        intercept.append(clf.intercept_)
+        params.append(clf.get_params())
+        train_trials.append(train)
+        test_trials.append(test)
+
+        if decoder_type == 'LDA' or decoder_type == 'linearSVC':
+            coefs.append(clf.coef_)
+        else:
+            coefs.append(np.full((X.shape[1]), fill_value=np.nan))
+
+        if decoder_type == 'LDA' or decoder_type == 'RandomForest':
+            ypred_proba[test,:] = clf.predict_proba(X[test])
+        else:
+            ypred_proba[test,:] = np.full((len(test)), fill_value=np.nan)
+
+        models.append(clf)
+
+    cr_dict=classification_report(y, ypred, output_dict=True)
+    balanced_accuracy=balanced_accuracy_score(y, ypred, sample_weight=None, adjusted=False)
+
+    cr_dict_train=classification_report(np.hstack(ytrue_train), np.hstack(ypred_train), output_dict=True)
+    balanced_accuracy_train=balanced_accuracy_score(np.hstack(ytrue_train), np.hstack(ypred_train), sample_weight=None, adjusted=False)
+
+    output['cr']=cr_dict
+    output['pred_label']=ypred
+    output['true_label']=y
+    output['pred_label_all']=ypred_all
+    output['trials_used']=tidx_used
+    output['decision_function']=y_dec_func
+    output['decision_function_all']=dec_func_all
+    output['predict_proba']=ypred_proba
+    output['coefs']=coefs
+    output['classes']=classes
+    output['intercept']=intercept
+    output['params']=params
+    output['balanced_accuracy']=balanced_accuracy
+    
+    output['pred_label_train']=np.hstack(ypred_train)
+    output['true_label_train']=np.hstack(ytrue_train)
+    output['cr_train']=cr_dict_train
+    output['balanced_accuracy_train']=balanced_accuracy_train
+    output['train_trials']=train_trials
+    output['test_trials']=test_trials
+    output['models']=models
+    output['scaler']=scaler
+    output['label_names']=unique_labels
+    # output['input_data']=input_data
+    output['labels']=labels
+
+    return output
+    
 
 def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,labels_as_index=False):
-    
+    from sklearn import svm
     output={}
 
     # scaler = StandardScaler()
@@ -128,7 +320,6 @@ def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,la
         skf = StratifiedKFold(n_splits=5,shuffle=True)
         train_test_split = skf.split(input_data, labels)
 
-
     for train,test in train_test_split:
         clf=svm.LinearSVC(max_iter=5000,dual='auto',class_weight='balanced')
         # clf=svm.SVC(class_weight='balanced',kernel='linear',probability=True)
@@ -187,140 +378,9 @@ def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,la
     return output
 
 
-def random_forest_decoder(input_data,labels,crossval='5_fold',crossval_index=None,labels_as_index=False):
-    
-    output={}
-
-    # scaler = StandardScaler()
-    # scaler = RobustScaler()
-
-    # scaler.fit(input_data)
-    # X = scaler.transform(input_data)
-    X = input_data
-    unique_labels=np.unique(labels)
-    if labels_as_index==True:
-        labels=np.array([np.where(unique_labels==x)[0][0] for x in labels])
-
-    y = labels
-
-    # if len(np.unique(labels))>2:
-    #     y_dec_func=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
-    # else:
-    #     y_dec_func=np.full(len(y), fill_value=np.nan)
-
-    y_predict_proba=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
-    # feature_importances=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
- 
-    if type(y[0])==bool:
-        ypred=np.full(len(y), fill_value=False)
-    elif type(y[0])==str:
-        ypred=np.full(len(y), fill_value='       ')
-    else:
-        ypred=np.full(len(y), fill_value=np.nan)
-
-    tidx_used=[]
-    
-    coefs=[]
-    classes=[]
-    # intercept=[]
-    params=[]
-    ypred_train=[]
-    ytrue_train=[]
-    train_trials=[]
-    test_trials=[]
-    models=[]
-
-
-    #make train, test splits based on block number
-    if crossval=='blockwise':
-        if crossval_index is None:
-            raise ValueError('Must provide crossval_index')
-        train=[]
-        test=[]
-        block_number=crossval_index
-        block_numbers=np.unique(block_number)
-        for bb in block_numbers:
-            not_block_inds=np.where(block_number!=bb)[0]
-            # train.append(not_block_inds)
-
-            #equalize number of trials for each condition
-            subset_ind=[]
-            conds = np.unique(y[not_block_inds])
-            cond_count=[]
-            for cc in conds:
-                cond_count.append(np.sum(y[not_block_inds]==cc))
-            use_trnum=np.min(cond_count)
-            for cc in conds:
-                cond_inds=np.where(y[not_block_inds]==cc)[0]
-                subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))   
-            subset_ind=np.sort(np.hstack(subset_ind))
-            train.append(not_block_inds[subset_ind])
-
-            block_inds=np.where(block_number==bb)[0]
-            test.append(block_inds)
-        train_test_split=zip(train,test)
-    elif crossval=='5_fold':
-        skf = StratifiedKFold(n_splits=5,shuffle=True)
-        train_test_split = skf.split(input_data, labels)
-
-
-    for train,test in train_test_split:
-        # clf=svm.LinearSVC(max_iter=5000,dual='auto',class_weight='balanced')
-        # clf=svm.SVC(class_weight='balanced',kernel='linear',probability=True)
-        clf=ensemble.RandomForestClassifier(class_weight='balanced',)
-        
-        clf.fit(X[train],y[train])
-        ypred[test] = clf.predict(X[test])
-        ypred_train.append(clf.predict(X[train]))
-        ytrue_train.append(y[train])
-        # y_dec_func[test] = clf.decision_function(X[test])
-        y_predict_proba[test,:] = clf.predict_proba(X[test])
-        tidx_used.append([test])
-        # coefs.append(clf.dual_coef_)
-        # coefs.append(clf.coef_) #for linear SVC only
-        classes.append(clf.classes_)
-        # intercept.append(clf.intercept_)
-        params.append(clf.get_params())
-        train_trials.append(train)
-        test_trials.append(test)
-
-        models.append(clf)
-
-    cr_dict=classification_report(y, ypred, output_dict=True)
-    balanced_accuracy=balanced_accuracy_score(y, ypred, sample_weight=None, adjusted=False)
-
-    cr_dict_train=classification_report(np.hstack(ytrue_train), np.hstack(ypred_train), output_dict=True)
-    balanced_accuracy_train=balanced_accuracy_score(np.hstack(ytrue_train), np.hstack(ypred_train), sample_weight=None, adjusted=False)
-
-    output['cr']=cr_dict
-    output['pred_label']=ypred
-    output['true_label']=y
-    output['trials_used']=tidx_used
-    # output['decision_function']=y_dec_func
-    output['predict_proba']=y_predict_proba
-    output['coefs']=coefs
-    output['classes']=classes
-    # output['intercept']=intercept
-    output['params']=params
-    output['balanced_accuracy']=balanced_accuracy
-    
-    output['pred_label_train']=np.hstack(ypred_train)
-    output['true_label_train']=np.hstack(ytrue_train)
-    output['cr_train']=cr_dict_train
-    output['balanced_accuracy_train']=balanced_accuracy_train
-    output['train_trials']=train_trials
-    output['test_trials']=test_trials
-    output['models']=models
-    # output['scaler']=scaler
-    output['label_names']=unique_labels
-    # output['input_data']=input_data
-    output['labels']=labels
-
-    return output
-
-
 def decode_context_from_units(session,params):
 
+    predict=params['predict']
     trnum=params['trnum']
     n_units=params['n_units']
     u_min=params['u_min']
@@ -340,6 +400,7 @@ def decode_context_from_units(session,params):
     labels_as_index=params['labels_as_index']
     decoder_type=params['decoder_type']
     generate_labels=params['generate_labels']
+    session_id=str(session.id)
     
     time_bins=np.arange(-decoder_time_before,decoder_time_after,decoder_binsize)
 
@@ -350,11 +411,11 @@ def decode_context_from_units(session,params):
     # time_after = 0.5
 
     trials=pd.read_parquet(
-                npc_lims.get_cache_path('trials',session.id,version='v0.0.173')
-            )
+        npc_lims.get_cache_path('trials',session.id,version='0.0.214')
+    )
     units=pd.read_parquet(
-                npc_lims.get_cache_path('units',session.id,version='v0.0.173')
-            )
+        npc_lims.get_cache_path('units',session.id,version='0.0.214')
+    )
 
     trial_da = spike_utils.make_neuron_time_trials_tensor(units, trials, spikes_time_before, spikes_time_after, spikes_binsize)
 
@@ -365,10 +426,11 @@ def decode_context_from_units(session,params):
         area_counts=units['structure'].value_counts()
     
     # predict=['stim_ids','block_ids','trial_response']
-    predict=['block_ids']
+    # predict=['block_ids']
 
     #save metadata about this session & decoder params
     # svc_results['metadata']=session.metadata 
+    svc_results['predict']=predict
     svc_results['trial_numbers']=trnum
     svc_results['unit_numbers']=n_units
     svc_results['min_n_units']=u_min
@@ -386,6 +448,7 @@ def decode_context_from_units(session,params):
     svc_results['labels_as_index']=labels_as_index
     svc_results['decoder_type']=decoder_type
     svc_results['generate_labels']=generate_labels
+    svc_results['session_id']=session_id
     
     #loop through different labels to predict
     for p in predict:
@@ -432,8 +495,6 @@ def decode_context_from_units(session,params):
                 fake_block_index=fake_block_nums[trial_sel]
                 pred_var=fake_context[trial_sel]
 
-
-
         elif p=='trial_response':
             #exclude any trials that had opto stimulation
             if 'opto_power' in trials[:].columns:
@@ -443,6 +504,45 @@ def decode_context_from_units(session,params):
                 
             #or, use whether mouse responded
             pred_var = trials[:]['is_response'][trial_sel].values
+
+        elif p=='cr_vs_fa':
+            trials=trials.query('(is_correct_reject and is_target) or (is_false_alarm and is_target)')
+            #exclude any trials that had opto stimulation
+            if 'opto_power' in trials[:].columns:
+                trial_sel = trials[:].query('opto_power.isnull()').index
+            else:
+                trial_sel = trials[:].index
+
+            cr_fa=[]
+            for ii in range(len(trials)):
+                if trials.iloc[ii]['is_correct_reject']:
+                    cr_fa.append('correct_reject')
+                else:
+                    cr_fa.append('false_alarm')
+            trials['cr_fa']=cr_fa
+            pred_var = trials[:]['cr_fa'][trial_sel].values
+
+        elif p=='mouse_response_context':
+            trials=trials.query('(is_correct_reject and is_target) or (is_false_alarm and is_target)')
+
+            #exclude any trials that had opto stimulation
+            if 'opto_power' in trials[:].columns:
+                trial_sel = trials[:].query('opto_power.isnull()').index
+            else:
+                trial_sel = trials[:].index
+                
+            #add new labels to trials = visual_context_like_behavior, auditory_context_like_behavior
+            behavior_type=[]
+            for ii in range(len(trials)):
+                if ((trials.iloc[ii]['is_vis_context'] and trials.iloc[ii]['is_aud_target'] and not trials.iloc[ii]['is_response']) or
+                    (trials.iloc[ii]['is_aud_context'] and trials.iloc[ii]['is_vis_target'] and trials.iloc[ii]['is_response'])):
+                    behavior_type.append('vis_context_like')
+                elif ((trials.iloc[ii]['is_aud_context'] and trials.iloc[ii]['is_vis_target'] and not trials.iloc[ii]['is_response']) or
+                    (trials.iloc[ii]['is_vis_context'] and trials.iloc[ii]['is_aud_target'] and trials.iloc[ii]['is_response'])):
+                    behavior_type.append('aud_context_like')
+            trials['behavior_type']=behavior_type
+            pred_var=trials['behavior_type'][trial_sel].values
+
 
         if (crossval=='blockwise') | ('forecast' in crossval):
             if generate_labels == False:
@@ -483,9 +583,11 @@ def decode_context_from_units(session,params):
                     
                     #loop through repeats
                     for nn in range(0,n_repeats):
-
+                        
                         if u_num=='all':
                             unit_subset = unit_sel #np.random.choice(unit_sel,len(unit_sel),replace=False)
+                            if nn>0:
+                                continue
                         elif u_num<=len(unit_sel):
                             unit_subset = np.random.choice(unit_sel,u_num,replace=False)
                         else:
@@ -582,10 +684,10 @@ def decode_context_from_units_all_timebins(session,params):
     svc_results={}
 
     trials=pd.read_parquet(
-                npc_lims.get_cache_path('trials',session.id,version='v0.0.173')
+                npc_lims.get_cache_path('trials',session.id)
             )
     units=pd.read_parquet(
-                npc_lims.get_cache_path('units',session.id,version='v0.0.173')
+                npc_lims.get_cache_path('units',session.id)
             )
 
     timebin_da,timebins_table=spike_utils.make_neuron_timebins_matrix(units, trials, binsize)
@@ -693,3 +795,226 @@ def decode_context_from_units_all_timebins(session,params):
         pickle.dump(svc_results, handle, protocol=pickle.HIGHEST_PROTOCOL) 
 
     svc_results={}
+
+##TODO: FINISH!
+def decode_context_with_linear_shift(session,params):
+    
+    decoder_results={}
+
+    input_data_type=params['input_data_type']
+    vid_angle=params['vid_angle']
+    central_section=params['central_section']
+    exclude_cue_trials=params['exclude_cue_trials']
+    n_unit_threshold=params['n_unit_threshold']
+    keep_n_SVDs=params['keep_n_SVDs']
+
+    # predict=params['predict']
+    # trnum=params['trnum']
+    # n_units=params['n_units']
+    # u_min=params['u_min']
+    # n_repeats=params['n_repeats']
+    spikes_binsize=params['spikes_binsize']
+    spikes_time_before=params['spikes_time_before']
+    spikes_time_after=params['spikes_time_after']
+    decoder_binsize=params['decoder_binsize']
+    decoder_time_before=params['decoder_time_before']
+    decoder_time_after=params['decoder_time_after']
+    # balance_labels=params['balance_labels']
+    savepath=params['savepath']
+    filename=params['filename']
+    # use_structure_probe=params['use_structure_probe']
+    crossval=params['crossval']
+    # all_areas=params['all_areas']
+    labels_as_index=params['labels_as_index']
+    decoder_type=params['decoder_type']
+    # generate_labels=params['generate_labels']
+    session_id=str(session.id)
+
+    ##TODO: change to directly input trials and units
+    #make helper functions to grab data? load_utils or something?
+
+    session_info=npc_lims.get_session_info(session)
+
+    #load trials and units
+    try:
+        trials=pd.read_parquet(
+            npc_lims.get_cache_path('trials',session_id,version='0.0.214')
+        )
+    except:
+        print('no cached trials table, using npc_sessions')
+        trials = session.trials[:]
+
+    if exclude_cue_trials:
+        trials=trials.query('is_reward_scheduled==False').reset_index()
+
+    if input_data_type=='spikes':
+        #make data array
+        try:
+            units=pd.read_parquet(
+                npc_lims.get_cache_path('units',session_id,version='0.0.214')
+            )
+        except:
+            print('no cached units table, using npc_sessions')
+            units = session.units[:]
+        #add probe to structure name
+        structure_probe=spike_utils.get_structure_probe(units)
+        for uu, unit in units.iterrows():
+            units.loc[units['unit_id']==unit['unit_id'],'structure']=structure_probe.loc[structure_probe['unit_id']==unit['unit_id'],'structure_probe']
+        
+        #make trial data array for baseline activity
+        trial_da = spike_utils.make_neuron_time_trials_tensor(units, trials, spikes_time_before, spikes_time_after, spikes_binsize)
+
+    elif input_data_type=='facemap':
+        # mean_trial_behav_SVD,mean_trial_behav_motion = load_facemap_data(session,session_info,trials,vid_angle)
+        mean_trial_behav_SVD = data_utils.load_facemap_data(session,session_info,trials,vid_angle,keep_n_SVDs)
+    
+    
+    #make fake blocks for templeton sessions
+    if 'Templeton' in session_info.project:
+        start_time=trials['start_time'].iloc[0]
+        fake_context=np.full(len(trials), fill_value='nan')
+        fake_block_nums=np.full(len(trials), fill_value=np.nan)
+        block_context_names=['vis','aud']
+
+        if np.random.choice(block_context_names,1)=='vis':
+            block_contexts=['vis','aud','vis','aud','vis','aud']
+        else:
+            block_contexts=['aud','vis','aud','vis','aud','vis']
+
+        for block in range(0,6):
+            block_start_time=start_time+block*10*60
+            block_end_time=start_time+(block+1)*10*60
+            block_trials=trials[:].query('start_time>=@block_start_time').index
+            fake_context[block_trials]=block_contexts[block]
+            fake_block_nums[block_trials]=block
+        trials['block_index']=fake_block_nums
+        trials['context_name']=fake_context
+
+    if central_section=='4_blocks':
+        #find middle 4 block labels
+        middle_4_block_trials=trials.query('block_index>0 and block_index<5')
+        middle_4_blocks=middle_4_block_trials.index.values
+
+        #find the number of trials to shift by, from -1 to +1 block
+        negative_shift=middle_4_blocks.min()
+        positive_shift=trials.index.max()-middle_4_blocks.max()
+        shifts=np.arange(-negative_shift,positive_shift+1)
+    elif central_section=='4_blocks_plus':
+        #find middle 4 block labels
+        first_block=trials.query('block_index==0').index.values
+        middle_of_first=first_block[np.round(len(first_block)/2).astype('int')]
+
+        last_block=trials.query('block_index==5').index.values
+        middle_of_last=last_block[np.round(len(last_block)/2).astype('int')]
+
+        middle_4_block_trials=trials.loc[middle_of_first:middle_of_last]
+        middle_4_blocks=middle_4_block_trials.index.values
+
+        #find the number of trials to shift by, from -1 to +1 block
+        negative_shift=middle_4_blocks.min()
+        positive_shift=trials.index.max()-middle_4_blocks.max()
+        shifts=np.arange(-negative_shift,positive_shift+1)
+
+    decoder_results[session_id]={}
+    decoder_results[session_id]['shifts'] = shifts
+    decoder_results[session_id]['middle_4_blocks'] = middle_4_blocks
+    decoder_results[session_id]['spikes_binsize'] = spikes_binsize
+    decoder_results[session_id]['spikes_time_before'] = spikes_time_before
+    decoder_results[session_id]['spikes_time_after'] = spikes_time_after
+    decoder_results[session_id]['decoder_binsize'] = decoder_binsize
+    decoder_results[session_id]['decoder_time_before'] = decoder_time_before
+    decoder_results[session_id]['decoder_time_after'] = decoder_time_after
+    decoder_results[session_id]['input_data_type'] = input_data_type
+    if input_data_type=='facemap':
+        decoder_results[session_id]['vid_angle'] = vid_angle
+    decoder_results[session_id]['trials'] = trials
+    decoder_results[session_id]['results'] = {}
+
+    
+    if input_data_type=='spikes':
+        areas=units['structure'].unique()
+        areas=np.concatenate([areas,['all']])
+    elif input_data_type=='facemap':
+        # areas = list(mean_trial_behav_SVD.keys())
+        areas=[0]
+
+    decoder_results[session_id]['areas'] = areas
+
+    for aa in areas:
+        #make shifted trial data array
+        if input_data_type=='spikes':
+            if aa == 'all':
+                area_units=units
+            else:
+                area_units=units.query('structure==@aa')
+
+            n_units=len(area_units)
+            if n_units<n_unit_threshold:
+                continue
+        
+        decoder_results[session_id]['results'][aa]={}
+        decoder_results[session_id]['results'][aa]['shift']={}
+
+        if input_data_type=='spikes':
+            
+            decoder_results[session_id]['results'][aa]['unit_ids']={}
+            decoder_results[session_id]['results'][aa]['n_units']={}
+            decoder_results[session_id]['results'][aa]['unit_ids']=area_units['unit_id'].values
+            decoder_results[session_id]['results'][aa]['n_units']=len(area_units)
+
+            #find mean ccf location of units
+            decoder_results[session_id]['results'][aa]['ccf_ap_mean']=area_units['ccf_ap'].mean()
+            decoder_results[session_id]['results'][aa]['ccf_dv_mean']=area_units['ccf_dv'].mean()
+            decoder_results[session_id]['results'][aa]['ccf_ml_mean']=area_units['ccf_ml'].mean()
+
+        #loop through shifts
+
+        for sh,shift in enumerate(shifts):
+            
+            labels=middle_4_block_trials['context_name'].values
+
+            if input_data_type=='spikes':
+                shifted_trial_da = trial_da.sel(trials=middle_4_blocks+shift,unit_id=area_units['unit_id'].values).mean(dim='time').values
+                input_data=shifted_trial_da.T
+
+            elif input_data_type=='facemap':
+                trials_used=middle_4_blocks+shift
+                shift_exists=[]
+                for tt in trials_used:
+                    if tt<mean_trial_behav_SVD[aa].shape[1]:
+                        shift_exists.append(True)
+                    else:
+                        shift_exists.append(False)
+                shift_exists=np.array(shift_exists)
+                trials_used=trials_used[shift_exists]
+
+                SVD=mean_trial_behav_SVD[aa][:,trials_used]
+                input_data=SVD.T
+
+                if np.sum(np.isnan(input_data))>0:
+                    incl_inds=~np.isnan(input_data).any(axis=1)
+                    input_data=input_data[incl_inds,:]
+                    labels=labels[incl_inds]
+
+            # decoder_results[session_id]['results'][aa]['shift'][sh]=linearSVC_decoder(
+            #         input_data=input_data,
+            #         labels=labels,
+            #         crossval='5_fold',
+            #         crossval_index=None,
+            #         labels_as_index=True
+            #     )
+            decoder_results[session_id]['results'][aa]['shift'][sh] = decoder_helper(
+                input_data=input_data,
+                labels=labels,
+                decoder_type=decoder_type,
+                crossval=crossval,
+                crossval_index=None,
+                labels_as_index=labels_as_index)
+            
+        print(f'finished {session_id} {aa}')
+    #save results
+    with open(os.path.join(savepath,session.id+'_'+filename), 'wb') as handle:
+        pickle.dump(decoder_results, handle, protocol=pickle.HIGHEST_PROTOCOL) 
+
+    print(f'finished {session_id}')
+    # print(f'time elapsed: {time.time()-start_time}')
