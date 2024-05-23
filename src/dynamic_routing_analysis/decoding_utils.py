@@ -16,14 +16,17 @@ from dynamic_routing_analysis import data_utils, spike_utils
 # 'linearSVC' or 'LDA' or 'RandomForest'
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',crossval_index=None,labels_as_index=False):
     if decoder_type=='linearSVC':
-        from sklearn import svm
-        clf=svm.LinearSVC(max_iter=5000,dual='auto',class_weight='balanced')
+        from sklearn.svm import LinearSVC
+        clf=LinearSVC(max_iter=5000,dual='auto',class_weight='balanced')
     elif decoder_type=='LDA':
-        from sklearn import discriminant_analysis
-        clf=discriminant_analysis.LinearDiscriminantAnalysis(solver='svd')
+        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+        clf=LinearDiscriminantAnalysis(solver='svd')
     elif decoder_type=='RandomForest':
-        from sklearn import ensemble
-        clf=ensemble.RandomForestClassifier(class_weight='balanced')
+        from sklearn.ensemble import RandomForestClassifier
+        clf=RandomForestClassifier(class_weight='balanced')
+    elif decoder_type=='LogisticRegression':
+        from sklearn.linear_model import LogisticRegression
+        clf=LogisticRegression(class_weight='balanced')
 
     output={}
 
@@ -163,10 +166,10 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         else:
             coefs.append(np.full((X.shape[1]), fill_value=np.nan))
 
-        if decoder_type == 'LDA' or decoder_type == 'RandomForest':
+        if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression':
             ypred_proba[test,:] = clf.predict_proba(X[test])
         else:
-            ypred_proba[test,:] = np.full((len(test)), fill_value=np.nan)
+            ypred_proba[test,:] = np.full((len(test),len(np.unique(labels))), fill_value=np.nan)
 
         models.append(clf)
 

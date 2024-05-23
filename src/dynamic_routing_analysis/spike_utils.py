@@ -282,7 +282,7 @@ def compute_lick_modulation(trials, units, session_info, save_path):
             continue
 
         lick_modulation['unit_id'].append(unit['unit_id'])
-        lick_modulation['session_id'].append(str(unit['session_id']))
+        lick_modulation['session_id'].append(str(session_info.id))
         lick_modulation['project'].append(str(session_info.project))
         # lick_modulation['structure'].append(unit['structure'])
 
@@ -426,7 +426,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path):
     for uu,unit in units.iterrows():
 
         stim_context_modulation['unit_id'].append(unit['unit_id'])
-        stim_context_modulation['session_id'].append(str(unit['session_id']))
+        stim_context_modulation['session_id'].append(str(session_info.id))
         stim_context_modulation['project'].append(str(session_info.project))
 
         #find baseline frs across all trials
@@ -668,9 +668,11 @@ def compute_stim_context_modulation(trials, units, session_info, save_path):
             evoked_fr_metric=(same_context_evoked_frs-other_context_evoked_frs)/(same_context_evoked_frs+other_context_evoked_frs)
             stim_context_modulation[ss+'_evoked_context_modulation_index'].append(evoked_fr_metric)
 
-
-    unit_metric_merge=units.reset_index(drop=True).merge(pd.DataFrame(stim_context_modulation),on=['unit_id','session_id'])
-    unit_metric_merge=unit_metric_merge.drop(columns=['spike_times'])
+    if 'session_id' in units.columns:
+        unit_metric_merge=units.reset_index(drop=True).merge(pd.DataFrame(stim_context_modulation),on=['unit_id','session_id'])
+    else:
+        unit_metric_merge=units.reset_index(drop=True).merge(pd.DataFrame(stim_context_modulation),on=['unit_id'])
+    unit_metric_merge.drop(columns=['spike_times','waveform_sd','waveform_mean'], inplace=True, errors='ignore')
     unit_metric_merge.to_pickle(os.path.join(save_path,session_info.id+'_stim_context_modulation.pkl'))
 
 
