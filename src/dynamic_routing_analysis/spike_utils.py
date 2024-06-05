@@ -81,6 +81,7 @@ def make_timebins_table(trials, bin_size):
         'stim_start':np.zeros(len(bin_centers),dtype=bool),
         'stim_stop':np.zeros(len(bin_centers),dtype=bool),
         'reward':np.zeros(len(bin_centers),dtype=bool),
+        'response':np.zeros(len(bin_centers),dtype=bool),
         'is_vis_context':np.zeros(len(bin_centers),dtype=bool),
         'is_aud_context':np.zeros(len(bin_centers),dtype=bool),
         'is_vis_stim':np.zeros(len(bin_centers),dtype=bool),
@@ -91,6 +92,7 @@ def make_timebins_table(trials, bin_size):
         'is_vis_nontarget':np.zeros(len(bin_centers),dtype=bool),
         'is_aud_nontarget':np.zeros(len(bin_centers),dtype=bool),
         'is_context_switch':np.zeros(len(bin_centers),dtype=bool),
+        'trial_index':np.full(len(bin_centers),np.nan),
     }
 
     #set context
@@ -124,6 +126,13 @@ def make_timebins_table(trials, bin_size):
         timebins_table['reward'][(timebins_table['bin_start']>=reward_trial['reward_time']) & 
                                 (timebins_table['bin_start']<reward_trial['reward_time']+bin_size)]=True
         
+    #set response
+    response_trials=trials[:].query('is_response')
+
+    for rr,response_trial in response_trials.iterrows():
+        timebins_table['response'][(timebins_table['bin_start']>=response_trial['response_time']) & 
+                                 (timebins_table['bin_start']<response_trial['response_time']+bin_size)]=True
+        
         
     #set stimuli
     for tt,trial in trials[:].iterrows():
@@ -148,11 +157,14 @@ def make_timebins_table(trials, bin_size):
         elif trial['is_catch']:
             timebins_table['is_catch'][(timebins_table['bin_start']>=trial['stim_start_time']) & 
                                         (timebins_table['bin_start']<trial['stim_start_time']+bin_size)]=True
-            
+        
         timebins_table['stim_start'][(timebins_table['bin_start']>=trial['stim_start_time']) &
                                     (timebins_table['bin_start']<trial['stim_start_time']+bin_size)]=True
         timebins_table['stim_stop'][(timebins_table['bin_start']>=trial['stim_stop_time']) &
                                     (timebins_table['bin_start']<trial['stim_stop_time']+bin_size)]=True
+        
+        timebins_table['trial_index'][(timebins_table['bin_start']>=trial['start_time']) &
+                                    (timebins_table['bin_start']<trial['stop_time'])]=tt
 
 
     return pd.DataFrame.from_dict(timebins_table),bins
