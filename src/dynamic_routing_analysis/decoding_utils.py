@@ -26,7 +26,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         clf=RandomForestClassifier(class_weight='balanced')
     elif decoder_type=='LogisticRegression':
         from sklearn.linear_model import LogisticRegression
-        clf=LogisticRegression(class_weight='balanced')
+        clf=LogisticRegression(max_iter=5000,class_weight='balanced')
 
     output={}
 
