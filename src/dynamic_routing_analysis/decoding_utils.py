@@ -813,9 +813,9 @@ def decode_context_with_linear_shift(session,params):
 
     # predict=params['predict']
     # trnum=params['trnum']
-    # n_units=params['n_units']
+    n_units_input=params['n_units']
     # u_min=params['u_min']
-    # n_repeats=params['n_repeats']
+    n_repeats=params['n_repeats']
     spikes_binsize=params['spikes_binsize']
     spikes_time_before=params['spikes_time_before']
     spikes_time_after=params['spikes_time_after']
@@ -830,6 +830,7 @@ def decode_context_with_linear_shift(session,params):
     # all_areas=params['all_areas']
     labels_as_index=params['labels_as_index']
     decoder_type=params['decoder_type']
+    use_coefs=params['use_coefs']
     # generate_labels=params['generate_labels']
     session_id=str(session.id)
 
@@ -866,6 +867,10 @@ def decode_context_with_linear_shift(session,params):
         
         #make trial data array for baseline activity
         trial_da = spike_utils.make_neuron_time_trials_tensor(units, trials, spikes_time_before, spikes_time_after, spikes_binsize)
+
+        # if use_coefs:
+        #     load coef dataframe
+        #     query for this session
 
     elif input_data_type=='facemap':
         # mean_trial_behav_SVD,mean_trial_behav_motion = load_facemap_data(session,session_info,trials,vid_angle)
@@ -928,6 +933,9 @@ def decode_context_with_linear_shift(session,params):
     decoder_results[session_id]['decoder_time_before'] = decoder_time_before
     decoder_results[session_id]['decoder_time_after'] = decoder_time_after
     decoder_results[session_id]['input_data_type'] = input_data_type
+    decoder_results[session_id]['n_units'] = n_units
+    decoder_results[session_id]['n_repeats'] = n_repeats
+
     if input_data_type=='facemap':
         decoder_results[session_id]['vid_angle'] = vid_angle
     decoder_results[session_id]['trials'] = trials
@@ -946,6 +954,10 @@ def decode_context_with_linear_shift(session,params):
     for aa in areas:
         #make shifted trial data array
         if input_data_type=='spikes':
+            # if use_coefs:
+            #     find top n_units_input by area rank
+                # if area==all, use session rank to choose units
+            #else:
             if aa == 'all':
                 area_units=units
             else:
@@ -954,6 +966,8 @@ def decode_context_with_linear_shift(session,params):
             n_units=len(area_units)
             if n_units<n_unit_threshold:
                 continue
+
+            area_unit_ids=area_units['unit_id'].values
         
         decoder_results[session_id]['results'][aa]={}
         decoder_results[session_id]['results'][aa]['shift']={}
@@ -970,49 +984,72 @@ def decode_context_with_linear_shift(session,params):
             decoder_results[session_id]['results'][aa]['ccf_dv_mean']=area_units['ccf_dv'].mean()
             decoder_results[session_id]['results'][aa]['ccf_ml_mean']=area_units['ccf_ml'].mean()
 
-        #loop through shifts
-
-        for sh,shift in enumerate(shifts):
-            
-            labels=middle_4_block_trials['context_name'].values
+        #loop through repeats
+        for rr in range(n_repeats):
+            if rr>1:
+                decoder_results[session_id]['results'][aa]['shift'][rr]={}
 
             if input_data_type=='spikes':
-                shifted_trial_da = trial_da.sel(trials=middle_4_blocks+shift,unit_id=area_units['unit_id'].values).mean(dim='time').values
-                input_data=shifted_trial_da.T
+                if n_units_input=='all':
+                    sel_units=area_unit_ids
+                # elif use_coefs:
 
+                else:
+                    sel_units=np.random.choice(area_unit_ids,n_units_input,replace=False)
             elif input_data_type=='facemap':
-                trials_used=middle_4_blocks+shift
-                shift_exists=[]
-                for tt in trials_used:
-                    if tt<mean_trial_behav_SVD[aa].shape[1]:
-                        shift_exists.append(True)
-                    else:
-                        shift_exists.append(False)
-                shift_exists=np.array(shift_exists)
-                trials_used=trials_used[shift_exists]
+                if n_units_input=='all':
+                    sel_units=np.arange(0,keep_n_SVDs)
+                # elif use_coefs:
 
-                SVD=mean_trial_behav_SVD[aa][:,trials_used]
-                input_data=SVD.T
+                else:
+                    sel_units=np.random.choice(np.arange(0,keep_n_SVDs),n_units_input,replace=False)
 
-                if np.sum(np.isnan(input_data))>0:
-                    incl_inds=~np.isnan(input_data).any(axis=1)
-                    input_data=input_data[incl_inds,:]
-                    labels=labels[incl_inds]
+            decoder_results[session_id]['results'][aa]['shift'][rr]['sel_units']=sel_units
 
-            # decoder_results[session_id]['results'][aa]['shift'][sh]=linearSVC_decoder(
-            #         input_data=input_data,
-            #         labels=labels,
-            #         crossval='5_fold',
-            #         crossval_index=None,
-            #         labels_as_index=True
-            #     )
-            decoder_results[session_id]['results'][aa]['shift'][sh] = decoder_helper(
-                input_data=input_data,
-                labels=labels,
-                decoder_type=decoder_type,
-                crossval=crossval,
-                crossval_index=None,
-                labels_as_index=labels_as_index)
+            #loop through shifts
+            for sh,shift in enumerate(shifts):
+                
+                labels=middle_4_block_trials['context_name'].values
+
+                if input_data_type=='spikes':
+                    shifted_trial_da = trial_da.sel(trials=middle_4_blocks+shift,unit_id=sel_units).mean(dim='time').values
+                    input_data=shifted_trial_da.T
+
+                elif input_data_type=='facemap':
+                    trials_used=middle_4_blocks+shift
+                    shift_exists=[]
+                    for tt in trials_used:
+                        if tt<mean_trial_behav_SVD[aa].shape[1]:
+                            shift_exists.append(True)
+                        else:
+                            shift_exists.append(False)
+                    shift_exists=np.array(shift_exists)
+                    trials_used=trials_used[shift_exists]
+
+                    SVD=mean_trial_behav_SVD[aa][:,trials_used]
+                    input_data=SVD.T
+
+                    if np.sum(np.isnan(input_data))>0:
+                        incl_inds=~np.isnan(input_data).any(axis=1)
+                        input_data=input_data[incl_inds,:]
+                        labels=labels[incl_inds]
+
+                if rr==1:
+                    decoder_results[session_id]['results'][aa]['shift'][sh]=linearSVC_decoder(
+                            input_data=input_data,
+                            labels=labels,
+                            crossval='5_fold',
+                            crossval_index=None,
+                            labels_as_index=True
+                        )
+                elif rr>1:
+                    decoder_results[session_id]['results'][aa]['shift'][rr][sh] = decoder_helper(
+                        input_data=input_data,
+                        labels=labels,
+                        decoder_type=decoder_type,
+                        crossval=crossval,
+                        crossval_index=None,
+                        labels_as_index=labels_as_index)
             
         print(f'finished {session_id} {aa}')
     #save results
