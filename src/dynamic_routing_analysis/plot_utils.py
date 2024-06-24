@@ -361,6 +361,10 @@ def plot_context_offset_by_unit_id(sel_unit,save_path=None,show_metric=None):
 
         stim_trials=trials[:].query('stim_name==@stim').reset_index()
 
+        colors=np.full(len(stim_trials),'k                 ')
+        colors[stim_trials.query('is_vis_context').index]='tab:green'
+        colors[stim_trials.query('is_aud_context').index]='tab:blue'
+
         #aud context trials
         aud_context_trials=stim_trials.query('is_aud_context').index.values
 
@@ -387,7 +391,8 @@ def plot_context_offset_by_unit_id(sel_unit,save_path=None,show_metric=None):
             else:
                 spikes=spikes[trial_spike_inds]
 
-            ax[st].vlines(spikes,ymin=it,ymax=it+1,linewidth=0.75,color='k')
+            # ax[st].vlines(spikes,ymin=it,ymax=it+1,linewidth=0.75,color='k')
+            ax[st].vlines(spikes,ymin=it,ymax=it+1,linewidth=0.75,color=colors[it])
 
             
 
