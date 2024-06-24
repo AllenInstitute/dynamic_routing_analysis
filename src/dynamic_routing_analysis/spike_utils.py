@@ -251,7 +251,7 @@ def get_structure_probe(units):
     return structure_probe
 
 
-def compute_lick_modulation(trials, units, session_info, save_path):
+def compute_lick_modulation(trials, units, session_info, save_path=None):
 
     lick_modulation={
         'unit_id':[],
@@ -326,10 +326,13 @@ def compute_lick_modulation(trials, units, session_info, save_path):
         lick_modulation['lick_modulation_roc_auc'].append(lick_roc_auc)
 
     lick_modulation_df=pd.DataFrame(lick_modulation)
-    lick_modulation_df.to_pickle(os.path.join(save_path,session_info.id+'_lick_modulation.pkl'))
+    if save_path==None:
+        return lick_modulation_df
+    else:
+        lick_modulation_df.to_pickle(os.path.join(save_path,session_info.id+'_lick_modulation.pkl'))
 
 
-def compute_stim_context_modulation(trials, units, session_info, save_path):
+def compute_stim_context_modulation(trials, units, session_info, save_path=None):
 
     stim_context_modulation = {
         'unit_id':[],
@@ -685,7 +688,10 @@ def compute_stim_context_modulation(trials, units, session_info, save_path):
     else:
         unit_metric_merge=units.reset_index(drop=True).merge(pd.DataFrame(stim_context_modulation),on=['unit_id'])
     unit_metric_merge.drop(columns=['spike_times','waveform_sd','waveform_mean'], inplace=True, errors='ignore')
-    unit_metric_merge.to_pickle(os.path.join(save_path,session_info.id+'_stim_context_modulation.pkl'))
+    if save_path==None:
+        return unit_metric_merge
+    else:
+        unit_metric_merge.to_pickle(os.path.join(save_path,session_info.id+'_stim_context_modulation.pkl'))
 
 
 #calculate metrics for channel alignment
