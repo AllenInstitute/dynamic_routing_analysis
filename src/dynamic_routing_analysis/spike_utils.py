@@ -35,8 +35,8 @@ def makePSTH(spike_times, event_times, time_before, time_after, bin_size):
 
 def make_neuron_time_trials_tensor(units, trials, time_before, time_after, bin_size, event_name='stim_start_time'):
     
-    #units: units to include in tensor
-    #trials: trials to include in tensor
+    #units: dataframe of units to include in tensor - must contain spike_times, unit_id columns
+    #trials: dataframe of trials to include in tensor - must contain event_name column
     #time_before: time before event to include in PSTH
     #time_after: time after event to include in PSTH
     #bin_size: size of each bin in seconds
@@ -66,6 +66,10 @@ def make_neuron_time_trials_tensor(units, trials, time_before, time_after, bin_s
 
 
 def make_timebins_table(trials, bin_size):
+    #makes a dataframe of timebins across a session along with relevant events
+    #trials: dataframe of trials to create timebins table
+    #bin_size: size of each bin in seconds
+    #returns: timebins dataframe, bins
 
     start_time = trials[:]['start_time'].iloc[0]
     end_time = trials[:]['stop_time'].iloc[-1]
@@ -176,6 +180,7 @@ def make_neuron_timebins_matrix(units, trials, bin_size, generate_context_labels
     #units: units table to include in matrix
     #trials: trials table to create timebins table
     #bin_size: size of each bin in seconds
+    #generate_context_labels: whether to generate context labels for each trial (i.e. if no context label present)
     
     # generate 10-minute blocks of context labels
     if generate_context_labels:
@@ -228,6 +233,9 @@ def make_neuron_timebins_matrix(units, trials, bin_size, generate_context_labels
 
 def get_structure_probe(units):
 
+    #appends probe to structure name if multiple probes in same structure i.e. "MOs_probeA"
+    #returns new dataframe with structure_probe and unit_id columns 
+
     unique_areas=units[:]['structure'].unique()
 
     structure_probe=pd.DataFrame({
@@ -252,6 +260,13 @@ def get_structure_probe(units):
 
 
 def compute_lick_modulation(trials, units, session_info, save_path=None):
+
+    #computes lick modulation index, zscore, p-value, sign, and ROC AUC for each unit
+    #saves or returns dataframe with lick modulation metrics and unit_id, session_id, and project
+    #trials: dataframe of trials
+    #units: dataframe of units
+    #session_info: session_info object i.e. from npc_lims.get_session_info()
+    #save_path: path to save lick modulation dataframe - if None, returns dataframe
 
     lick_modulation={
         'unit_id':[],
@@ -333,6 +348,13 @@ def compute_lick_modulation(trials, units, session_info, save_path=None):
 
 
 def compute_stim_context_modulation(trials, units, session_info, save_path=None):
+
+    #computes stimulus and context modulation indices, zscores, p-values, signs, and ROC AUCs for each unit
+    #saves or returns new unit dataframe with modulation metrics and without spikes and waveforms
+    #trials: dataframe of trials
+    #units: dataframe of units
+    #session_info: session_info object i.e. from npc_lims.get_session_info()
+    #save_path: path to save stim_context_modulation dataframe - if None, returns unit dataframe
 
     stim_context_modulation = {
         'unit_id':[],
@@ -695,10 +717,10 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None)
 
 
 #calculate metrics for channel alignment
-
 def compute_metrics_for_alignment(trials, units, session_info, save_path):
 
-
+    #computes metrics for alignment of units to annotations
+    #saves metrics dataframe for each probe
 
     alignment_metrics = {
         'unit_id':[],
