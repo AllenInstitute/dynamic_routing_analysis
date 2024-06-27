@@ -1,12 +1,46 @@
 import glob
 import os
 
+import npc_lims
 import npc_sessions
 import numpy as np
 
 
-def load_facemap_data(session,session_info,trials,vid_angle,keep_n_SVDs=500,use_s3=True):
+def load_trials_or_units(session, table_name):
+    # convenience function to load trials or units from cache if available, 
+    # otherwise from npc_sessions
+    if table_name == 'trials':
+        try:
+            table=pd.read_parquet(
+                    npc_lims.get_cache_path('trials',session.id,version='any')
+                )
+            print(session.id,'cached trials loaded')
+        except:
+            print(session.id,'cached trials not found, loading with npc_sessions')
+            try:
+                table = session.trials[:]
+            except:
+                print(session.id,'loading trials failed')
+                return None
+    elif table_name == 'units':
+        try:
+            table=pd.read_parquet(
+                    npc_lims.get_cache_path('units',session.id,version='any')
+                )
+            print(session.id,'cached units loaded')
+        except:
+            print(session.id,'cached units not found, loading with npc_sessions')
+            try:
+                table = session.units[:]
+            except:
+                print(session.id,'loading units failed')
+                return None
+    return table
 
+
+
+def load_facemap_data(session,session_info,trials,vid_angle,keep_n_SVDs=500,use_s3=True):
+    #function to load facemap data from s3 or local cache
     vid_angle_npc_names={
             'behavior':'side',
             'face':'front',
