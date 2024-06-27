@@ -15,6 +15,8 @@ from dynamic_routing_analysis import data_utils, spike_utils
 
 # 'linearSVC' or 'LDA' or 'RandomForest'
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',crossval_index=None,labels_as_index=False):
+    #helper function to decode labels from input data using different decoder models
+
     if decoder_type=='linearSVC':
         from sklearn.svm import LinearSVC
         clf=LinearSVC(max_iter=5000,dual='auto',class_weight='balanced')
@@ -209,6 +211,8 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     
 
 def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,labels_as_index=False):
+    #original function to decode labels from input data using linearSVC, no longer used
+    
     from sklearn import svm
     output={}
 
@@ -382,6 +386,7 @@ def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,la
 
 
 def decode_context_from_units(session,params):
+    #function to decode context from units - does not include linear shift
 
     predict=params['predict']
     trnum=params['trnum']
@@ -673,8 +678,7 @@ def decode_context_from_units(session,params):
 
 
 def decode_context_from_units_all_timebins(session,params):
-
-
+    #function to decode context from all timebins across a session - does not include linear shift
     trnum=params['trnum']
     n_units=params['n_units']
     u_min=params['u_min']
@@ -799,7 +803,10 @@ def decode_context_from_units_all_timebins(session,params):
 
     svc_results={}
 
-##TODO: FINISH!
+##TODO: 
+# incorporate additional parameters
+# add option to decode from timebins
+# add option to use inputs with top decoding weights (use_coefs)
 def decode_context_with_linear_shift(session,params):
     
     decoder_results={}
@@ -1058,3 +1065,209 @@ def decode_context_with_linear_shift(session,params):
 
     print(f'finished {session_id}')
     # print(f'time elapsed: {time.time()-start_time}')
+
+
+def concat_decoder_results(files,savepath=None,return_table=True):
+
+    use_half_shifts=False
+    n_repeats=25
+
+    all_bal_acc={}
+    linear_shift_dict={
+        'session_id':[],
+        'project':[],
+        'area':[],
+        'true_accuracy':[],
+        'null_accuracy_mean':[],
+        'null_accuracy_median':[],
+        'null_accuracy_std':[],
+        'p_value':[],
+        'ccf_ap_mean':[],
+        'ccf_dv_mean':[],
+        'ccf_ml_mean':[],
+        'n_units':[],
+        'probe':[],
+        'cross_modal_dprime':[],
+        'n_good_blocks':[],
+    }
+
+    #loop through sessions
+    for file in files:
+        decoder_results=pickle.load(open(file,'rb'))
+        session_id=list(decoder_results.keys())[0]
+        session_info=npc_lims.get_session_info(session_id)
+        try:
+            performance=pd.read_parquet(
+                        npc_lims.get_cache_path('performance',session_info.id,version='any')
+                    )
+        except:
+            continue
+
+        if session_info.is_annotated==False:
+            continue
+
+        all_bal_acc[session_id]={}
+
+        shifts=decoder_results[session_id]['shifts']
+        #extract results according to the trial shift
+        half_neg_shift=np.round(shifts.min()/2)
+        half_pos_shift=np.round(shifts.max()/2)
+        # half_shifts=np.arange(-half_neg_shift,half_pos_shift+1)
+        half_neg_shift_ind=np.where(shifts==half_neg_shift)[0][0]
+        half_pos_shift_ind=np.where(shifts==half_pos_shift)[0][0]
+        half_shift_inds=np.arange(half_neg_shift_ind,half_pos_shift_ind+1)
+
+        all_bal_acc[session_id]['shifts']=shifts
+        all_bal_acc[session_id]['half_shift_inds']=half_shift_inds
+        if use_half_shifts:
+            half_shifts=shifts[half_shift_inds]
+        else:
+            half_shifts=shifts
+
+        half_shift_inds=np.arange(len(half_shifts))
+        
+        areas=decoder_results[session_id]['areas']
+
+        #save balanced accuracy by shift
+        for aa in areas:
+            if aa in decoder_results[session_id]['results']:
+                all_bal_acc[session_id][aa]=[]
+                for rr in range(n_repeats):
+                    temp_bal_acc=[]
+                    for sh in half_shift_inds:
+                        if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
+                            temp_bal_acc.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['balanced_accuracy'])
+                    all_bal_acc[session_id][aa].append(np.array(temp_bal_acc))
+                all_bal_acc[session_id][aa]=np.vstack(all_bal_acc[session_id][aa])
+                all_bal_acc[session_id][aa]=np.nanmean(all_bal_acc[session_id][aa],axis=0)
+
+                if type(aa)==str:
+                    if '_probe' in aa:
+                        area_name=aa.split('_probe')[0]
+                        probe_name=aa.split('_probe')[1]
+                    else:
+                        area_name=aa
+                        probe_name=''
+                else:
+                    area_name=aa
+                
+                true_acc_ind=np.where(half_shifts==1)[0][0]
+                null_acc_ind=np.where(half_shifts!=1)[0]
+                true_accuracy=all_bal_acc[session_id][aa][true_acc_ind]
+                null_accuracy_mean=np.mean(all_bal_acc[session_id][aa][null_acc_ind])
+                null_accuracy_median=np.median(all_bal_acc[session_id][aa][null_acc_ind])
+                null_accuracy_std=np.std(all_bal_acc[session_id][aa][null_acc_ind])
+                p_value=np.mean(all_bal_acc[session_id][aa][null_acc_ind]>=true_accuracy)
+
+                #make big dict/dataframe for this:
+                #save true decoding, mean/median null decoding, and p value for each area/probe
+                linear_shift_dict['session_id'].append(session_id)
+                linear_shift_dict['project'].append(session_info.project)
+                linear_shift_dict['area'].append(area_name)
+                linear_shift_dict['true_accuracy'].append(true_accuracy)
+                linear_shift_dict['null_accuracy_mean'].append(null_accuracy_mean)
+                linear_shift_dict['null_accuracy_median'].append(null_accuracy_median)
+                linear_shift_dict['null_accuracy_std'].append(null_accuracy_std)
+                linear_shift_dict['p_value'].append(p_value)
+
+                linear_shift_dict['cross_modal_dprime'].append(performance['cross_modal_dprime'].mean())
+                linear_shift_dict['n_good_blocks'].append(np.sum(performance['cross_modal_dprime']>=1.0))
+
+                # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
+                if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
+                    linear_shift_dict['ccf_ap_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ap_mean'])
+                    linear_shift_dict['ccf_dv_mean'].append(decoder_results[session_id]['results'][aa]['ccf_dv_mean'])
+                    linear_shift_dict['ccf_ml_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ml_mean'])
+                    linear_shift_dict['n_units'].append(decoder_results[session_id]['results'][aa]['n_units'])
+                    linear_shift_dict['probe'].append(probe_name)
+                else:
+                    linear_shift_dict['ccf_ap_mean'].append(np.nan)
+                    linear_shift_dict['ccf_dv_mean'].append(np.nan)
+                    linear_shift_dict['ccf_ml_mean'].append(np.nan)
+                    linear_shift_dict['n_units'].append(np.nan)
+                    linear_shift_dict['probe'].append(np.nan)
+
+    
+    linear_shift_df=pd.DataFrame(linear_shift_dict)
+    if savepath is not None:
+        linear_shift_df.to_csv(savepath)
+    if return_table:
+        return linear_shift_df
+
+
+def compute_significant_decoding_by_area(all_decoder_results):
+    #compare DR and Templeton:
+    p_threshold=0.05
+
+    DR_linear_shift_df=all_decoder_results.query('project=="DynamicRouting" and cross_modal_dprime>=1.0')
+    #fraction significant
+    frac_sig_DR={
+        'area':[],
+        'frac_sig_DR':[],
+        'n_expts_DR':[],
+    }
+    for area in DR_linear_shift_df['area'].unique():
+        frac_sig_DR['area'].append(area)
+        frac_sig_DR['frac_sig_DR'].append(np.mean(DR_linear_shift_df.query('area==@area')['p_value']<p_threshold))
+        frac_sig_DR['n_expts_DR'].append(len(DR_linear_shift_df.query('area==@area')))
+    frac_sig_DR_df=pd.DataFrame(frac_sig_DR)
+    #diff from null
+    diff_from_null_DR={
+        'area':[],
+        'diff_from_null_mean_DR':[],
+        'diff_from_null_median_DR':[],
+        'true_accuracy_DR':[],
+        'null_median_DR':[],
+        'n_expts_DR':[],
+    }
+    for area in DR_linear_shift_df['area'].unique():
+        diff_from_null_DR['area'].append(area)
+        diff_from_null_DR['diff_from_null_mean_DR'].append((DR_linear_shift_df.query('area==@area')['true_accuracy']-
+                                                    DR_linear_shift_df.query('area==@area')['null_accuracy_mean']).mean())
+        diff_from_null_DR['diff_from_null_median_DR'].append((DR_linear_shift_df.query('area==@area')['true_accuracy']-
+                                                        DR_linear_shift_df.query('area==@area')['null_accuracy_median']).median())
+        diff_from_null_DR['true_accuracy_DR'].append(DR_linear_shift_df.query('area==@area')['true_accuracy'].median())
+        diff_from_null_DR['null_median_DR'].append(DR_linear_shift_df.query('area==@area')['null_accuracy_median'].median())
+        diff_from_null_DR['n_expts_DR'].append(len(DR_linear_shift_df.query('area==@area')))
+
+    diff_from_null_DR_df=pd.DataFrame(diff_from_null_DR)
+    diff_from_null_DR_df
+
+
+    Templeton_linear_shift_df=all_decoder_results.query('project.str.contains("Templeton")')
+    #fraction significant
+    frac_sig_Templ={
+        'area':[],
+        'frac_sig_Templ':[],
+        'n_expts_Templ':[],
+    }
+    for area in Templeton_linear_shift_df['area'].unique():
+        frac_sig_Templ['area'].append(area)
+        frac_sig_Templ['frac_sig_Templ'].append(np.mean(Templeton_linear_shift_df.query('area==@area')['p_value']<p_threshold))
+        frac_sig_Templ['n_expts_Templ'].append(len(Templeton_linear_shift_df.query('area==@area')))
+    frac_sig_Templ_df=pd.DataFrame(frac_sig_Templ)
+    #diff from null
+    diff_from_null_Templ={
+        'area':[],
+        'diff_from_null_mean_Templ':[],
+        'diff_from_null_median_Templ':[],
+        'true_accuracy_Templ':[],
+        'null_median_Templ':[],
+        'n_expts_Templ':[],
+    }
+    for area in Templeton_linear_shift_df['area'].unique():
+        diff_from_null_Templ['area'].append(area)
+        diff_from_null_Templ['diff_from_null_mean_Templ'].append((Templeton_linear_shift_df.query('area==@area')['true_accuracy']-
+                                                    Templeton_linear_shift_df.query('area==@area')['null_accuracy_mean']).mean())
+        diff_from_null_Templ['diff_from_null_median_Templ'].append((Templeton_linear_shift_df.query('area==@area')['true_accuracy']-
+                                                        Templeton_linear_shift_df.query('area==@area')['null_accuracy_median']).median())
+        diff_from_null_Templ['true_accuracy_Templ'].append(Templeton_linear_shift_df.query('area==@area')['true_accuracy'].median())
+        diff_from_null_Templ['null_median_Templ'].append(Templeton_linear_shift_df.query('area==@area')['null_accuracy_median'].median())
+        diff_from_null_Templ['n_expts_Templ'].append(len(Templeton_linear_shift_df.query('area==@area')))
+    diff_from_null_Templ_df=pd.DataFrame(diff_from_null_Templ)
+
+
+    all_frac_sig_df=pd.merge(frac_sig_DR_df,frac_sig_Templ_df,on='area',how='outer')
+    all_diff_from_null_df=pd.merge(diff_from_null_DR_df,diff_from_null_Templ_df,on='area',how='outer')
+
+    return all_frac_sig_df,all_diff_from_null_df

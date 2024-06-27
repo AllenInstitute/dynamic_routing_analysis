@@ -1,4 +1,5 @@
 import os
+import pickle
 
 import matplotlib.pyplot as plt
 import npc_lims
@@ -804,3 +805,53 @@ def plot_context_mod_stim_resp_pie_chart(adj_pvals,sel_project,savepath=None):
                     orientation='portrait', format='png',
                     transparent=True, bbox_inches='tight', pad_inches=0.1,
                     metadata=None) 
+        
+
+def plot_single_session_decoding_results(path):
+
+    use_half_shifts=False
+
+    decoder_results=pickle.load(open(path,'rb'))
+    session_id=list(decoder_results.keys())[0]
+
+    shifts=decoder_results[session_id]['shifts']
+    areas=decoder_results[session_id]['areas']
+    n_repeats=25
+
+    half_neg_shift=np.round(shifts.min()/2)
+    half_pos_shift=np.round(shifts.max()/2)
+
+    half_neg_shift_ind=np.where(shifts==half_neg_shift)[0][0]
+    half_pos_shift_ind=np.where(shifts==half_pos_shift)[0][0]
+    half_shift_inds=np.arange(half_neg_shift_ind,half_pos_shift_ind+1)
+
+    if use_half_shifts==False:
+        half_shift_inds=np.arange(len(shifts))
+
+    bal_acc={}
+    for aa in areas:
+        if aa in decoder_results[session_id]['results']:
+            bal_acc[aa]=[]
+            for rr in range(n_repeats):
+                temp_bal_acc=[]
+                for sh in half_shift_inds:
+                    if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
+                        temp_bal_acc.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['balanced_accuracy'])
+                bal_acc[aa].append(np.array(temp_bal_acc))
+            bal_acc[aa]=np.vstack(bal_acc[aa])
+
+    for aa in areas:
+        if aa in decoder_results[session_id]['results']:
+            mean_acc=np.nanmean(bal_acc[aa],axis=0)
+            
+            true_acc=mean_acc[shifts[half_shift_inds]==1]
+            pval=np.round(np.nanmean(mean_acc>=true_acc),decimals=4)
+            
+            fig,ax=plt.subplots(1,1)
+            ax.axhline(true_acc,color='k',linestyle='--',alpha=0.5)
+            ax.axvline(1,color='k',linestyle='--',alpha=0.5)
+            ax.plot(shifts[half_shift_inds],bal_acc[aa].T,alpha=0.5,color='gray')
+            ax.plot(shifts[half_shift_inds],mean_acc,color='k',linewidth=2)
+            ax.set_xlabel('trial shift')
+            ax.set_ylabel('balanced accuracy')
+            ax.set_title(str(aa)+' p='+str(pval))
