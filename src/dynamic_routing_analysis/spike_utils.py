@@ -7,6 +7,7 @@ import pandas as pd
 import scipy.stats as st
 import xarray as xr
 from sklearn.metrics import roc_auc_score
+from statsmodels.stats.multitest import fdrcorrection
 
 #functions for making 3d trial-aligned tensor
 
@@ -996,3 +997,611 @@ def compute_metrics_for_alignment(trials, units, session_info, save_path):
         probe_units=alignment_metrics.query('probe==@probe')
         probe_units.to_csv(os.path.join(save_path,session_info.id+'_day_'+str(session_info.experiment_day)+'_'+probe+'_stim_modulation.csv'),index=False)
 
+def get_all_performance():
+    from npc_sessions import DynamicRoutingSession
+
+    ephys_sessions = ephys_sessions=tuple(s for s in npc_lims.get_session_info(is_ephys=True))
+    performance_dict={}
+
+    for session_info in ephys_sessions[:]:
+        
+        try:
+            try:
+                performance = pd.read_parquet(
+                                    npc_lims.get_cache_path('performance',session_info.id,version='any')
+                                )
+            except:
+                session=DynamicRoutingSession(session_info.id)
+                performance = session.performance[:]
+        except:
+            print(session_info.id,'failed to load performance, skipping session')
+            continue
+
+        performance_dict[session_info.id]=performance
+
+    return performance_dict
+
+
+def concat_single_unit_metrics_across_sessions(stim_context_loadpath,lick_loadpath,savepath,performance_loadpath=None):
+
+    all_files = os.listdir(stim_context_loadpath)
+    all_files = [f for f in all_files if f.endswith('stim_context_modulation.pkl')]
+    for ff in all_files:
+        if ff==all_files[0]:
+            all_stim_context_data=pd.read_pickle(os.path.join(stim_context_loadpath,ff))
+        else:
+            all_stim_context_data=pd.concat([all_stim_context_data,pd.read_pickle(os.path.join(stim_context_loadpath,ff))],axis=0)
+    #drop waveforms if they exist
+    all_stim_context_data.drop(columns=['waveform_sd','waveform_mean'], inplace=True, errors='ignore')
+
+    # load and concat all the lick-mod dataframes
+    all_lick_files = os.listdir(lick_loadpath)
+    all_lick_files = [f for f in all_lick_files if f.endswith('lick_modulation.pkl')]
+    for ff in all_lick_files:
+        if ff==all_lick_files[0]:
+            all_lick_data=pd.read_pickle(os.path.join(lick_loadpath,ff))
+        else:
+            all_lick_data=pd.concat([all_lick_data,pd.read_pickle(os.path.join(lick_loadpath,ff))],axis=0)
+
+    #concat stim & context with lick dataframe
+    all_data=all_stim_context_data.merge(all_lick_data, on=['unit_id','project','session_id'], how='left')
+
+    #get behavioral performance to append to table
+    if performance_loadpath is not None:
+        all_performance=pd.read_pickle(performance_loadpath)
+    else:
+        all_performance=get_all_performance()
+
+    for ss in list(all_performance.keys()):
+        if ss+'' in all_data['session_id'].values:
+            all_data.loc[all_data['session_id']==ss+'', 'cross_modal_dprime']=all_performance[ss]['cross_modal_dprime'].mean()
+            all_data.loc[all_data['session_id']==ss+'', 'n_good_blocks']=np.sum(all_performance[ss]['cross_modal_dprime']>=1.0)
+        elif ss in all_data['session_id'].values:
+            all_data.loc[all_data['session_id']==ss, 'cross_modal_dprime']=all_performance[ss]['cross_modal_dprime'].mean()
+            all_data.loc[all_data['session_id']==ss, 'n_good_blocks']=np.sum(all_performance[ss]['cross_modal_dprime']>=1.0)
+
+    all_data.to_pickle(os.path.join(savepath,"all_data_plus_performance.pkl"))
+
+
+def calculate_single_unit_metric_adjusted_pvals(sel_units,sel_project):
+
+    adj_pvals=pd.DataFrame({
+        'unit_id':sel_units['unit_id'].values,
+        'session_id':sel_units['session_id'].values,
+        'structure':sel_units['structure'].values,
+        'location':sel_units['location'].values,
+        'peak_to_valley':sel_units['peak_to_valley'].values,
+        'vis1':fdrcorrection(sel_units['vis1_stimulus_modulation_p_value'])[1],
+        'vis2':fdrcorrection(sel_units['vis2_stimulus_modulation_p_value'])[1],
+        'sound1':fdrcorrection(sel_units['sound1_stimulus_modulation_p_value'])[1],
+        'sound2':fdrcorrection(sel_units['sound2_stimulus_modulation_p_value'])[1],
+        'catch':fdrcorrection(sel_units['catch_stimulus_modulation_p_value'])[1],
+        'vis1_late':fdrcorrection(sel_units['vis1_stimulus_late_modulation_p_value'])[1],
+        'vis2_late':fdrcorrection(sel_units['vis2_stimulus_late_modulation_p_value'])[1],
+        'sound1_late':fdrcorrection(sel_units['sound1_stimulus_late_modulation_p_value'])[1],
+        'sound2_late':fdrcorrection(sel_units['sound2_stimulus_late_modulation_p_value'])[1],
+        'catch_late':fdrcorrection(sel_units['catch_stimulus_late_modulation_p_value'])[1],
+        'context':fdrcorrection(sel_units['baseline_context_modulation_p_value'])[1],
+        'context_linear_shift':sel_units[['linear_shift_baseline_context_p_value_higher',
+                                        'linear_shift_baseline_context_p_value_lower']].min(axis=1),
+        'context_linear_shift_diff_from_null':((sel_units['linear_shift_baseline_context_true_value']-
+                                            sel_units['linear_shift_baseline_context_null_median'])/
+                                                sel_units['linear_shift_baseline_context_null_std']),
+
+        'vis1_latency':sel_units['vis1_stim_latency'],
+        'vis2_latency':sel_units['vis2_stim_latency'],
+        'sound1_latency':sel_units['sound1_stim_latency'],
+        'sound2_latency':sel_units['sound2_stim_latency'],
+        'catch_latency':sel_units['catch_stim_latency'],
+
+        'vis1_roc_auc':sel_units['vis1_stimulus_modulation_roc_auc'],
+        'vis2_roc_auc':sel_units['vis2_stimulus_modulation_roc_auc'],
+        'sound1_roc_auc':sel_units['sound1_stimulus_modulation_roc_auc'],
+        'sound2_roc_auc':sel_units['sound2_stimulus_modulation_roc_auc'],
+        'context_roc_auc':sel_units['baseline_context_roc_auc'],
+
+        # 'lick_vis':fdrcorrection(sel_units['vis_lick_modulation_p_value'])[1],
+        # 'lick_aud':fdrcorrection(sel_units['aud_lick_modulation_p_value'])[1],
+        'lick':fdrcorrection(sel_units['lick_modulation_p_value'])[1],
+        'lick_roc_auc':sel_units['lick_modulation_roc_auc'],
+
+        'context_sign':sel_units['baseline_context_modulation_sign'],
+
+        'vis1_context':fdrcorrection(sel_units['vis1_context_modulation_p_value'])[1],
+        'vis2_context':fdrcorrection(sel_units['vis2_context_modulation_p_value'])[1],
+        'sound1_context':fdrcorrection(sel_units['sound1_context_modulation_p_value'])[1],
+        'sound2_context':fdrcorrection(sel_units['sound2_context_modulation_p_value'])[1],
+        'catch_context':fdrcorrection(sel_units['catch_context_modulation_p_value'])[1],
+
+        'vis1_context_roc_auc':sel_units['vis1_context_modulation_roc_auc'],
+        'vis2_context_roc_auc':sel_units['vis2_context_modulation_roc_auc'],
+        'sound1_context_roc_auc':sel_units['sound1_context_modulation_roc_auc'],
+        'sound2_context_roc_auc':sel_units['sound2_context_modulation_roc_auc'],
+        'catch_context_roc_auc':sel_units['catch_context_modulation_roc_auc'],
+
+        # 'vis1_context_sign':sel_units['vis1_context_modulation_zscore'],
+        # 'vis2_context_sign':sel_units['vis2_context_modulation_zscore'],
+        # 'sound1_context_sign':sel_units['sound1_context_modulation_zscore'],
+        # 'sound2_context_sign':sel_units['sound2_context_modulation_zscore'],
+        'vis1_context_sign':sel_units['vis1_context_modulation_sign'],
+        'vis2_context_sign':sel_units['vis2_context_modulation_sign'],
+        'sound1_context_sign':sel_units['sound1_context_modulation_sign'],
+        'sound2_context_sign':sel_units['sound2_context_modulation_sign'],
+
+        'vis1_context_evoked':fdrcorrection(sel_units['vis1_evoked_context_modulation_p_value'])[1],
+        'vis2_context_evoked':fdrcorrection(sel_units['vis2_evoked_context_modulation_p_value'])[1],
+        'sound1_context_evoked':fdrcorrection(sel_units['sound1_evoked_context_modulation_p_value'])[1],
+        'sound2_context_evoked':fdrcorrection(sel_units['sound2_evoked_context_modulation_p_value'])[1],
+        'catch_context_evoked':fdrcorrection(sel_units['catch_evoked_context_modulation_p_value'])[1],
+    })
+
+    if 'Templeton' in sel_project:
+        adj_pvals['lick']=np.ones(len(adj_pvals))
+
+    adj_pvals['any_stim']=adj_pvals[['vis1','vis2','sound1','sound2']].min(axis=1)
+
+    return adj_pvals
+
+
+
+def calculate_stimulus_modulation_by_area(sel_units,sel_project,plot_figures=False,savepath=None):
+    # stimulus responsiveness by area
+
+    area_number_responsive_to_stim={
+            'area':[],
+            'vis1':[],
+            'vis2':[],
+            'sound1':[],
+            'sound2':[],
+            'both_vis':[],
+            'both_sound':[],
+            'mixed':[],
+            'none':[],
+            'vis1_pos':[],
+            'vis2_pos':[],
+            'sound1_pos':[],
+            'sound2_pos':[],
+            'both_vis_pos':[],
+            'both_sound_pos':[],
+            'mixed_pos':[],
+            'vis1_neg':[],
+            'vis2_neg':[],
+            'sound1_neg':[],
+            'sound2_neg':[],
+            'both_vis_neg':[],
+            'both_sound_neg':[],
+            'mixed_neg':[],
+            'total_n':[],
+            'n_sessions':[],
+            'n_sessions_w_20_units':[],
+            'n_sessions_w_15_units':[],
+            'n_sessions_w_10_units':[],
+    }
+
+    for sel_area in sel_units['structure'].unique():
+
+            area_units=sel_units.query('structure==@sel_area')
+
+            n_sessions=len(area_units['session_id'].unique())
+
+            for n_units in [20,15,10]:
+                    n_sessions_w_units=area_units.groupby('session_id').filter(lambda x: len(x)>=n_units)['session_id'].unique()
+                    area_number_responsive_to_stim['n_sessions_w_'+str(n_units)+'_units'].append(len(n_sessions_w_units))
+
+            adj_pvals=pd.DataFrame({
+            'unit_id':area_units['unit_id'],
+            'vis1':fdrcorrection(area_units['vis1_stimulus_modulation_p_value'])[1],
+            'vis2':fdrcorrection(area_units['vis2_stimulus_modulation_p_value'])[1],
+            'sound1':fdrcorrection(area_units['sound1_stimulus_modulation_p_value'])[1],
+            'sound2':fdrcorrection(area_units['sound2_stimulus_modulation_p_value'])[1],
+            'vis1_sign':area_units['vis1_stimulus_modulation_sign'],
+            'vis2_sign':area_units['vis2_stimulus_modulation_sign'],
+            'sound1_sign':area_units['sound1_stimulus_modulation_sign'],
+            'sound2_sign':area_units['sound2_stimulus_modulation_sign'],
+            })
+
+            #stimulus modulation across all units
+            #each stim only
+            vis1_stim_resp=adj_pvals.query('vis1<0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05')
+            vis2_stim_resp=adj_pvals.query('vis2<0.05 and vis1>=0.05 and sound1>=0.05 and sound2>=0.05')
+            sound1_stim_resp=adj_pvals.query('sound1<0.05 and sound2>=0.05 and vis1>=0.05 and vis2>=0.05')
+            sound2_stim_resp=adj_pvals.query('sound2<0.05 and sound1>=0.05 and vis1>=0.05 and vis2>=0.05')
+
+            #both vis
+            both_vis_stim_resp=adj_pvals.query('vis1<0.05 and vis2<0.05 and sound1>=0.05 and sound2>=0.05')
+            #both aud
+            both_sound_stim_resp=adj_pvals.query('sound1<0.05 and sound2<0.05 and vis1>=0.05 and vis2>=0.05')
+
+            #at least one vis and one aud
+            mixed_stim_resp=adj_pvals.query('((vis1<0.05 or vis2<0.05) and (sound1<0.05 and sound2<0.05))')
+
+            #none
+            no_stim_resp=adj_pvals.query('vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05')
+
+            area_number_responsive_to_stim['area'].append(sel_area)
+            area_number_responsive_to_stim['vis1'].append(len(vis1_stim_resp))
+            area_number_responsive_to_stim['vis2'].append(len(vis2_stim_resp))
+            area_number_responsive_to_stim['sound1'].append(len(sound1_stim_resp))
+            area_number_responsive_to_stim['sound2'].append(len(sound2_stim_resp))
+            area_number_responsive_to_stim['both_vis'].append(len(both_vis_stim_resp))
+            area_number_responsive_to_stim['both_sound'].append(len(both_sound_stim_resp))
+            area_number_responsive_to_stim['mixed'].append(len(mixed_stim_resp))
+            area_number_responsive_to_stim['none'].append(len(no_stim_resp))
+            area_number_responsive_to_stim['total_n'].append(len(area_units))
+            area_number_responsive_to_stim['n_sessions'].append(n_sessions)
+
+            #positive vs. negative modulation
+            #positive modulation
+            vis1_pos_stim_resp=adj_pvals.query('vis1<0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05 and vis1_sign>0')
+            vis2_pos_stim_resp=adj_pvals.query('vis2<0.05 and vis1>=0.05 and sound1>=0.05 and sound2>=0.05 and vis2_sign>0')
+            sound1_pos_stim_resp=adj_pvals.query('sound1<0.05 and sound2>=0.05 and vis1>=0.05 and vis2>=0.05 and sound1_sign>0')
+            sound2_pos_stim_resp=adj_pvals.query('sound2<0.05 and sound1>=0.05 and vis1>=0.05 and vis2>=0.05 and sound2_sign>0')
+
+            #both vis
+            both_vis_pos_stim_resp=adj_pvals.query('vis1<0.05 and vis2<0.05 and sound1>=0.05 and sound2>=0.05 and vis1_sign>0 and vis2_sign>0')
+            #both aud
+            both_sound_pos_stim_resp=adj_pvals.query('sound1<0.05 and sound2<0.05 and vis1>=0.05 and vis2>=0.05 and sound1_sign>0 and sound2_sign>0')
+
+            #at least one vis and one aud
+            mixed_pos_stim_resp=adj_pvals.query('(((vis1<0.05 and vis1_sign>0) or (vis2<0.05 and vis2_sign>0)) and ((sound1<0.05 and sound1_sign>0) and (sound2<0.05 and sound2_sign>0)))')
+
+            #negative modulation
+            vis1_neg_stim_resp=adj_pvals.query('vis1<0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05 and vis1_sign<0')
+            vis2_neg_stim_resp=adj_pvals.query('vis2<0.05 and vis1>=0.05 and sound1>=0.05 and sound2>=0.05 and vis2_sign<0')
+            sound1_neg_stim_resp=adj_pvals.query('sound1<0.05 and sound2>=0.05 and vis1>=0.05 and vis2>=0.05 and sound1_sign<0')
+            sound2_neg_stim_resp=adj_pvals.query('sound2<0.05 and sound1>=0.05 and vis1>=0.05 and vis2>=0.05 and sound2_sign<0')
+
+            #both vis
+            both_vis_neg_stim_resp=adj_pvals.query('vis1<0.05 and vis2<0.05 and sound1>=0.05 and sound2>=0.05 and vis1_sign<0 and vis2_sign<0')
+            #both aud
+            both_sound_neg_stim_resp=adj_pvals.query('sound1<0.05 and sound2<0.05 and vis1>=0.05 and vis2>=0.05 and sound1_sign<0 and sound2_sign<0')
+
+            #at least one vis and one aud
+            mixed_neg_stim_resp=adj_pvals.query('(((vis1<0.05 and vis1_sign<0) or (vis2<0.05 and vis2_sign<0)) and ((sound1<0.05 and sound1_sign<0) and (sound2<0.05 and sound2_sign<0)))')
+
+            area_number_responsive_to_stim['vis1_pos'].append(len(vis1_pos_stim_resp))
+            area_number_responsive_to_stim['vis2_pos'].append(len(vis2_pos_stim_resp))
+            area_number_responsive_to_stim['sound1_pos'].append(len(sound1_pos_stim_resp))
+            area_number_responsive_to_stim['sound2_pos'].append(len(sound2_pos_stim_resp))
+            area_number_responsive_to_stim['both_vis_pos'].append(len(both_vis_pos_stim_resp))
+            area_number_responsive_to_stim['both_sound_pos'].append(len(both_sound_pos_stim_resp))
+            area_number_responsive_to_stim['mixed_pos'].append(len(mixed_pos_stim_resp))
+
+            area_number_responsive_to_stim['vis1_neg'].append(len(vis1_neg_stim_resp))
+            area_number_responsive_to_stim['vis2_neg'].append(len(vis2_neg_stim_resp))
+            area_number_responsive_to_stim['sound1_neg'].append(len(sound1_neg_stim_resp))
+            area_number_responsive_to_stim['sound2_neg'].append(len(sound2_neg_stim_resp))
+            area_number_responsive_to_stim['both_vis_neg'].append(len(both_vis_neg_stim_resp))
+            area_number_responsive_to_stim['both_sound_neg'].append(len(both_sound_neg_stim_resp))
+            area_number_responsive_to_stim['mixed_neg'].append(len(mixed_neg_stim_resp))
+
+            labels=['vis1 only','vis2 only','both vis',
+                    'sound1 only','sound2 only','both sound',
+                    'mixed','none']
+            
+            sizes=[len(vis1_stim_resp),len(vis2_stim_resp),len(both_vis_stim_resp),
+                    len(sound1_stim_resp),len(sound2_stim_resp),len(both_sound_stim_resp),
+                    len(mixed_stim_resp),len(no_stim_resp)]
+            
+            if np.sum(sizes)>0 and plot_figures:
+                    fig,ax=plt.subplots()
+                    ax.pie(sizes,labels=labels,autopct='%1.1f%%')
+                    ax.set_title('area='+sel_area+'; n_units='+str(len(area_units))+'; n_sessions='+str(n_sessions))
+                    fig.suptitle('stimulus responsive units')
+                    fig.tight_layout()
+
+    area_number_responsive_to_stim=pd.DataFrame(area_number_responsive_to_stim)
+
+    area_fraction_responsive_to_stim=area_number_responsive_to_stim.copy()
+
+    for rr,row in area_fraction_responsive_to_stim.iterrows():
+        if row['total_n']>0:
+            area_fraction_responsive_to_stim.iloc[rr,1:-5]=row.iloc[1:-5]/row['total_n']
+
+    if savepath is not None:
+        if 'Templeton' in sel_project:
+            temp_savepath=os.path.join(savepath,"stimulus_responsiveness_by_area_Templeton.csv")
+        else:
+            temp_savepath=os.path.join(savepath,"stimulus_responsiveness_by_area_DR.csv")
+        area_fraction_responsive_to_stim.to_csv(temp_savepath)
+
+    return area_fraction_responsive_to_stim
+
+
+
+def compute_context_stim_lick_modulation_by_area(sel_units,sel_project,plot_figures=False,savepath=None):
+
+# context modulation vs. stimulus modulation vs. lick modulation
+
+    area_number_context_mod={
+            'area':[],
+            'any_stim':[],
+            'only_stim':[],
+            'any_context':[],
+            'only_context':[],
+            'any_context_linear_shift':[],
+            'only_context_linear_shift':[],
+            'any_lick':[],
+            'only_lick':[],
+            'stim_and_context':[],
+            'lick_and_stim':[],
+            'lick_and_context':[],
+            'lick_and_stim_and_context':[],
+            'none':[],
+            'any_context_pos':[],
+            'any_context_neg':[],
+            'any_lick_pos':[],
+            'any_lick_neg':[],
+            'any_stim_pos':[],
+            'any_stim_neg':[],
+            'total_n':[],
+            'n_sessions':[],
+            'n_sessions_w_20_units':[],
+            'n_sessions_w_15_units':[],
+            'n_sessions_w_10_units':[],
+    }
+
+    for sel_area in sel_units['structure'].unique():
+
+            area_units=sel_units.query('structure==@sel_area')
+            
+            n_sessions=len(area_units['session_id'].unique())
+
+            for n_units in [20,15,10]:
+                    n_sessions_w_units=area_units.groupby('session_id').filter(lambda x: len(x)>=n_units)['session_id'].unique()
+                    area_number_context_mod['n_sessions_w_'+str(n_units)+'_units'].append(len(n_sessions_w_units))
+
+            adj_pvals=pd.DataFrame({
+            'unit_id':area_units['unit_id'],
+            'vis1':fdrcorrection(area_units['vis1_stimulus_modulation_p_value'])[1],
+            'vis2':fdrcorrection(area_units['vis2_stimulus_modulation_p_value'])[1],
+            'sound1':fdrcorrection(area_units['sound1_stimulus_modulation_p_value'])[1],
+            'sound2':fdrcorrection(area_units['sound2_stimulus_modulation_p_value'])[1],
+            'context':fdrcorrection(area_units['baseline_context_modulation_p_value'])[1],
+            'lick':fdrcorrection(area_units['lick_modulation_p_value'])[1],
+            'vis1_sign':area_units['vis1_stimulus_modulation_sign'],
+            'vis2_sign':area_units['vis2_stimulus_modulation_sign'],
+            'sound1_sign':area_units['sound1_stimulus_modulation_sign'],
+            'sound2_sign':area_units['sound2_stimulus_modulation_sign'],
+            'context_sign':area_units['baseline_context_modulation_sign'],
+            'lick_sign':area_units['lick_modulation_sign'],
+            'context_linear_shift':area_units[['linear_shift_baseline_context_p_value_higher',
+                                            'linear_shift_baseline_context_p_value_lower']].min(axis=1),
+            })
+
+            #lick modulation only
+            only_lick_resp=adj_pvals.query('lick<0.05 and context>=0.05 and vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05')
+            #any lick modulation
+            any_lick_resp=adj_pvals.query('lick<0.05')
+            #lick and context
+            lick_and_context_resp=adj_pvals.query('context<0.05 and lick<0.05 and vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05')
+            #lick and stimulus
+            lick_and_stim_resp=adj_pvals.query('lick<0.05 and (vis1<0.05 or vis2<0.05 or sound1<0.05 or sound2<0.05) and context>=0.05')
+            #all three
+            all_resp=adj_pvals.query('context<0.05 and lick<0.05 and (vis1<0.05 or vis2<0.05 or sound1<0.05 or sound2<0.05)')
+            
+            #stimulus modulation only
+            only_stim_resp=adj_pvals.query('(vis1<0.05 or vis2<0.05 or sound1<0.05 or sound2<0.05) and context>=0.05 and lick>=0.05')
+            #any stim modulation
+            any_stim_resp=adj_pvals.query('vis1<0.05 or vis2<0.05 or sound1<0.05 or sound2<0.05')
+        
+            #context modulation only
+            only_context_resp=adj_pvals.query('context<0.05 and vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05 and lick>=0.05')
+            #any context modulation
+            any_context_resp=adj_pvals.query('context<0.05')
+
+            #linear-shifted conext modulation
+            only_context_linear_shift_resp=adj_pvals.query('context_linear_shift<0.05 and vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05 and lick>=0.05')
+            #any context modulation
+            any_context_linear_shift_resp=adj_pvals.query('context_linear_shift<0.05')
+
+            #stim and context modulation
+            stim_and_context_resp=adj_pvals.query('context<0.05 and (vis1<0.05 or vis2<0.05 or sound1<0.05 or sound2<0.05) and lick>=0.05')
+            #none
+            no_resp=adj_pvals.query('context>=0.05 and vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05 and lick>=0.05')
+            
+            #pos vs. neg modulation
+            #context
+            any_context_pos=adj_pvals.query('context<0.05 and context_sign>0')
+            any_context_neg=adj_pvals.query('context<0.05 and context_sign<0')
+            #lick
+            any_lick_pos=adj_pvals.query('lick<0.05 and lick_sign>0')
+            any_lick_neg=adj_pvals.query('lick<0.05 and lick_sign<0')
+            #stim
+            any_stim_pos=adj_pvals.query('(vis1<0.05 and vis1_sign>0) or (vis2<0.05 and vis2_sign>0) or (sound1<0.05 and sound1_sign>0) or (sound2<0.05 and sound2_sign>0)')
+            any_stim_neg=adj_pvals.query('(vis1<0.05 and vis1_sign<0) or (vis2<0.05 and vis2_sign<0) or (sound1<0.05 and sound1_sign<0) or (sound2<0.05 and sound2_sign<0)')
+
+            area_number_context_mod['area'].append(sel_area)
+            area_number_context_mod['only_stim'].append(len(only_stim_resp))
+            area_number_context_mod['any_stim'].append(len(any_stim_resp))
+            area_number_context_mod['only_context'].append(len(only_context_resp))
+            area_number_context_mod['any_context'].append(len(any_context_resp))
+            area_number_context_mod['any_context_linear_shift'].append(len(any_context_linear_shift_resp))
+            area_number_context_mod['only_context_linear_shift'].append(len(only_context_linear_shift_resp))
+            area_number_context_mod['only_lick'].append(len(only_lick_resp))
+            area_number_context_mod['any_lick'].append(len(any_lick_resp))
+            area_number_context_mod['stim_and_context'].append(len(stim_and_context_resp))
+            area_number_context_mod['lick_and_stim'].append(len(lick_and_stim_resp))
+            area_number_context_mod['lick_and_context'].append(len(lick_and_context_resp))
+            area_number_context_mod['lick_and_stim_and_context'].append(len(all_resp))
+            area_number_context_mod['none'].append(len(no_resp))
+            area_number_context_mod['total_n'].append(len(area_units))
+            area_number_context_mod['n_sessions'].append(n_sessions)
+
+            area_number_context_mod['any_context_pos'].append(len(any_context_pos))
+            area_number_context_mod['any_context_neg'].append(len(any_context_neg))
+            area_number_context_mod['any_lick_pos'].append(len(any_lick_pos))
+            area_number_context_mod['any_lick_neg'].append(len(any_lick_neg))
+            area_number_context_mod['any_stim_pos'].append(len(any_stim_pos))
+            area_number_context_mod['any_stim_neg'].append(len(any_stim_neg))
+
+            # labels=['stimulus only','stimulus and context','context only','neither']
+            # sizes=[len(any_stim_resp),len(stim_and_context_resp),len(context_resp),
+            #         len(neither_stim_nor_context_resp)]
+            
+            labels=['stimulus only','stimulus and context','context only',
+                    'context and lick','lick only', 'lick & stimulus & context',
+                    'lick and stimulus',  'none']
+            sizes=[len(only_stim_resp),len(stim_and_context_resp),len(only_context_resp),
+                    len(lick_and_context_resp),len(only_lick_resp),len(all_resp),
+                    len(lick_and_stim_resp), len(no_resp)]
+            
+            if np.sum(sizes)>0 and plot_figures:
+                    fig,ax=plt.subplots()
+                    ax.pie(sizes,labels=labels,autopct='%1.1f%%',
+                    colors=['tab:blue', 'tab:orange', 'tab:green',
+                            'tab:red' , 'tab:purple', 'tab:brown', 
+                            'tab:pink', 'grey'])
+                    ax.set_title('area='+sel_area+'; n_units='+str(len(area_units))+'; n_sessions='+str(n_sessions))
+
+                    fig.tight_layout()
+
+    area_number_context_mod=pd.DataFrame(area_number_context_mod)
+
+    area_fraction_context_mod=area_number_context_mod.copy()
+
+    for rr,row in area_fraction_context_mod.iterrows():
+        if row['total_n']>0:
+            area_fraction_context_mod.iloc[rr,1:-5]=row.iloc[1:-5]/row['total_n']
+
+    if savepath is not None:
+        if 'Templeton' in sel_project:
+            temp_savepath=os.path.join(savepath,'area_fraction_context_stim_lick_mod_Templeton.csv')
+        else:
+            temp_savepath=os.path.join(savepath,'area_fraction_context_stim_lick_mod_DR.csv')
+        area_fraction_context_mod.to_csv(temp_savepath)
+
+    return area_fraction_context_mod
+
+
+def calculate_context_mod_stim_resp_by_area(sel_units,sel_project,plot_figures=False,savepath=None):
+    
+        # context mod of stimulus responsiveness by area
+
+        area_number_context_stim_mod={
+                'area':[],
+                'vis1':[],
+                'vis2':[],
+                'sound1':[],
+                'sound2':[],
+                'both_vis':[],
+                'both_sound':[],
+                'mixed':[],
+                'none':[],
+                'vis1_evoked':[],
+                'vis2_evoked':[],
+                'sound1_evoked':[],
+                'sound2_evoked':[],
+                'both_vis_evoked':[],
+                'both_sound_evoked':[],
+                'mixed_evoked':[],
+                'none_evoked':[],
+                'total_n':[],
+                'n_sessions':[],
+                'n_stim_responsive':[],
+        }
+
+        for sel_area in sel_units['structure'].unique():
+
+                area_units=sel_units.query('structure==@sel_area')
+
+                n_sessions=len(area_units['session_id'].unique())
+
+                adj_pvals=pd.DataFrame({
+                        'unit_id':area_units['unit_id'],
+                        'vis1':fdrcorrection(area_units['vis1_stimulus_modulation_p_value'])[1],
+                        'vis2':fdrcorrection(area_units['vis2_stimulus_modulation_p_value'])[1],
+                        'sound1':fdrcorrection(area_units['sound1_stimulus_modulation_p_value'])[1],
+                        'sound2':fdrcorrection(area_units['sound2_stimulus_modulation_p_value'])[1],
+                        'vis1_context':fdrcorrection(area_units['vis1_context_modulation_p_value'])[1],
+                        'vis2_context':fdrcorrection(area_units['vis2_context_modulation_p_value'])[1],
+                        'sound1_context':fdrcorrection(area_units['sound1_context_modulation_p_value'])[1],
+                        'sound2_context':fdrcorrection(area_units['sound2_context_modulation_p_value'])[1],
+                        'vis1_evoked_context':fdrcorrection(area_units['vis1_evoked_context_modulation_p_value'])[1],
+                        'vis2_evoked_context':fdrcorrection(area_units['vis2_evoked_context_modulation_p_value'])[1],
+                        'sound1_evoked_context':fdrcorrection(area_units['sound1_evoked_context_modulation_p_value'])[1],
+                        'sound2_evoked_context':fdrcorrection(area_units['sound2_evoked_context_modulation_p_value'])[1],
+                })
+                
+                adj_pvals['any_stim']=adj_pvals[['vis1','vis2','sound1','sound2']].min(axis=1)
+                
+                #stimulus context modulation
+                vis1_context_stim_mod=adj_pvals.query('vis1_context<0.05 and vis2_context>=0.05 and sound1_context>=0.05 and sound2_context>=0.05 and any_stim<0.05')
+                vis2_context_stim_mod=adj_pvals.query('vis2_context<0.05 and vis1_context>=0.05 and sound1_context>=0.05 and sound2_context>=0.05 and any_stim<0.05')
+                sound1_context_stim_mod=adj_pvals.query('sound1_context<0.05 and sound2_context>=0.05 and vis1_context>=0.05 and vis2_context>=0.05 and any_stim<0.05')
+                sound2_context_stim_mod=adj_pvals.query('sound2_context<0.05 and sound1_context>=0.05 and vis1_context>=0.05 and vis2_context>=0.05 and any_stim<0.05')
+
+                both_vis_context_stim_mod=adj_pvals.query('vis1_context<0.05 and vis2_context<0.05 and sound1_context>=0.05 and sound2_context>=0.05 and any_stim<0.05')
+                both_aud_context_stim_mod=adj_pvals.query('sound1_context<0.05 and sound2_context<0.05 and vis1_context>=0.05 and vis2_context>=0.05 and any_stim<0.05')
+                multi_modal_context_stim_mod=adj_pvals.query('((vis1_context<0.05 or vis2_context<0.05) and (sound1_context<0.05 or sound2_context<0.05)) and any_stim<0.05')
+
+                no_context_stim_mod=adj_pvals.query('vis1_context>=0.05 and vis2_context>=0.05 and sound1_context>=0.05 and sound2_context>=0.05 and any_stim<0.05')
+                
+                #evoked stimulus context modulation
+                vis1_context_evoked_stim_mod=adj_pvals.query('vis1_evoked_context<0.05 and vis2_evoked_context>=0.05 and sound1_evoked_context>=0.05 and sound2_evoked_context>=0.05 and any_stim<0.05')
+                vis2_context_evoked_stim_mod=adj_pvals.query('vis2_evoked_context<0.05 and vis1_evoked_context>=0.05 and sound1_evoked_context>=0.05 and sound2_evoked_context>=0.05 and any_stim<0.05')
+                sound1_context_evoked_stim_mod=adj_pvals.query('sound1_evoked_context<0.05 and sound2_evoked_context>=0.05 and vis1_evoked_context>=0.05 and vis2_evoked_context>=0.05 and any_stim<0.05')
+                sound2_context_evoked_stim_mod=adj_pvals.query('sound2_evoked_context<0.05 and sound1_evoked_context>=0.05 and vis1_evoked_context>=0.05 and vis2_evoked_context>=0.05 and any_stim<0.05')
+
+                both_vis_context_evoked_stim_mod=adj_pvals.query('vis1_evoked_context<0.05 and vis2_evoked_context<0.05 and sound1_evoked_context>=0.05 and sound2_evoked_context>=0.05 and any_stim<0.05')
+                both_aud_context_evoked_stim_mod=adj_pvals.query('sound1_evoked_context<0.05 and sound2_evoked_context<0.05 and vis1_evoked_context>=0.05 and vis2_evoked_context>=0.05 and any_stim<0.05')
+                multi_modal_context_evoked_stim_mod=adj_pvals.query('((vis1_evoked_context<0.05 or vis2_evoked_context<0.05) and (sound1_evoked_context<0.05 or sound2_evoked_context<0.05)) and any_stim<0.05')
+
+                no_context_evoked_stim_mod=adj_pvals.query('vis1_evoked_context>=0.05 and vis2_evoked_context>=0.05 and sound1_evoked_context>=0.05 and sound2_evoked_context>=0.05 and any_stim<0.05')
+
+                n_stim_resp_units=np.sum(adj_pvals['any_stim']<0.05)
+
+                area_number_context_stim_mod['area'].append(sel_area)
+                area_number_context_stim_mod['vis1'].append(len(vis1_context_stim_mod))
+                area_number_context_stim_mod['vis2'].append(len(vis2_context_stim_mod))
+                area_number_context_stim_mod['sound1'].append(len(sound1_context_stim_mod))
+                area_number_context_stim_mod['sound2'].append(len(sound2_context_stim_mod))
+                area_number_context_stim_mod['both_vis'].append(len(both_vis_context_stim_mod))
+                area_number_context_stim_mod['both_sound'].append(len(both_aud_context_stim_mod))
+                area_number_context_stim_mod['mixed'].append(len(multi_modal_context_stim_mod))
+                area_number_context_stim_mod['none'].append(len(no_context_stim_mod))
+                area_number_context_stim_mod['vis1_evoked'].append(len(vis1_context_evoked_stim_mod))
+                area_number_context_stim_mod['vis2_evoked'].append(len(vis2_context_evoked_stim_mod))
+                area_number_context_stim_mod['sound1_evoked'].append(len(sound1_context_evoked_stim_mod))
+                area_number_context_stim_mod['sound2_evoked'].append(len(sound2_context_evoked_stim_mod))
+                area_number_context_stim_mod['both_vis_evoked'].append(len(both_vis_context_evoked_stim_mod))
+                area_number_context_stim_mod['both_sound_evoked'].append(len(both_aud_context_evoked_stim_mod))
+                area_number_context_stim_mod['mixed_evoked'].append(len(multi_modal_context_evoked_stim_mod))
+                area_number_context_stim_mod['none_evoked'].append(len(no_context_evoked_stim_mod))
+                area_number_context_stim_mod['total_n'].append(len(adj_pvals))
+                area_number_context_stim_mod['n_stim_responsive'].append(n_stim_resp_units)
+                area_number_context_stim_mod['n_sessions'].append(n_sessions)
+
+                labels=['vis1 only','vis2 only','both vis',
+                        'sound1 only','sound2 only','both sound',
+                        'mixed','none']
+                
+                sizes=[len(vis1_context_stim_mod),len(vis2_context_stim_mod),len(both_vis_context_stim_mod),
+                        len(sound1_context_stim_mod),len(sound2_context_stim_mod),len(both_aud_context_stim_mod),
+                        len(multi_modal_context_stim_mod),len(no_context_stim_mod)]
+                
+                if np.sum(sizes)>0 and plot_figures:
+                        fig,ax=plt.subplots()
+                        ax.pie(sizes,labels=labels,autopct='%1.1f%%')
+                        ax.set_title('area='+sel_area+'; n_stim_resp_units='+str(n_stim_resp_units)+'; n_total_units='+str(len(adj_pvals))+'; n_sessions='+str(n_sessions))
+                        fig.suptitle('context modulation of stimulus response')
+                        fig.tight_layout()
+
+
+        area_number_context_stim_mod=pd.DataFrame(area_number_context_stim_mod)
+
+        area_fraction_context_stim_mod=area_number_context_stim_mod.copy()
+
+        for rr,row in area_fraction_context_stim_mod.iterrows():
+                if row['n_stim_responsive']>0:
+                        area_fraction_context_stim_mod.iloc[rr,1:-4]=row.iloc[1:-4]/row['n_stim_responsive']
+        if savepath is not None:
+                if 'Templeton' in sel_project:
+                        temp_savepath=os.path.join(savepath,'area_fraction_context_stim_mod_Templeton.csv')
+
+                else:
+                        temp_savepath=os.path.join(savepath,'area_fraction_context_stim_mod_DR.csv')
+
+                area_fraction_context_stim_mod.to_csv(temp_savepath)
+
+        return area_fraction_context_stim_mod
