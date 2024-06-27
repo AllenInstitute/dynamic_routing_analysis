@@ -615,3 +615,192 @@ def plot_unit_response_by_task_performance_stim_aligned(sel_unit, save_path=None
                     metadata=None)
         plt.close()
 
+def plot_stimulus_modulation_pie_chart(adj_pvals,sel_project,savepath=None):
+    #stimulus modulation across all units
+    #each stim only
+    vis1_stim_resp=adj_pvals.query('vis1<0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05')
+    vis2_stim_resp=adj_pvals.query('vis2<0.05 and vis1>=0.05 and sound1>=0.05 and sound2>=0.05')
+    sound1_stim_resp=adj_pvals.query('sound1<0.05 and sound2>=0.05 and vis1>=0.05 and vis2>=0.05')
+    sound2_stim_resp=adj_pvals.query('sound2<0.05 and sound1>=0.05 and vis1>=0.05 and vis2>=0.05')
+
+    #both vis
+    both_vis_stim_resp=adj_pvals.query('vis1<0.05 and vis2<0.05 and sound1>=0.05 and sound2>=0.05')
+    #both aud
+    both_sound_stim_resp=adj_pvals.query('sound1<0.05 and sound2<0.05 and vis1>=0.05 and vis2>=0.05')
+
+    #at least one vis and one aud
+    mixed_stim_resp=adj_pvals.query('((vis1<0.05 or vis2<0.05) and (sound1<0.05 and sound2<0.05))')
+
+    #any stim
+    # any_stim_resp=adj_pvals.query('vis1<0.05 or vis2<0.05 or sound1<0.05 or sound2<0.05')
+    any_stim_resp=adj_pvals.query('any_stim<0.05')
+    stim_and_context=adj_pvals.query('any_stim<0.05 and context<0.05')
+
+    #catch
+    catch_stim_resp=adj_pvals.query('catch<0.05')
+
+    #none
+    no_stim_resp=adj_pvals.query('vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05 and catch>=0.05')
+
+    #stimulus responses
+    labels=['vis1 only','vis2 only','both vis',
+            'sound1 only','sound2 only','both sound',
+            'mixed','none','catch']
+    sizes=[len(vis1_stim_resp),len(vis2_stim_resp),len(both_vis_stim_resp),
+            len(sound1_stim_resp),len(sound2_stim_resp),len(both_sound_stim_resp),
+            len(mixed_stim_resp),len(no_stim_resp),len(catch_stim_resp)]
+
+    fig,ax=plt.subplots()
+    ax.pie(sizes,labels=labels,autopct='%1.1f%%')
+    ax.set_title('n = '+str(len(adj_pvals))+' units')
+    fig.suptitle('stimulus responsiveness')
+    fig.tight_layout()
+
+    if savepath is not None:
+        if 'Templeton' in sel_project:
+            temp_savepath=os.path.join(savepath,"stimulus_responsiveness_Templeton.png")
+        else:
+            temp_savepath=os.path.join(savepath,"stimulus_responsiveness_DR.png")   
+
+        fig.savefig(temp_savepath,
+                    dpi=300, facecolor='w', edgecolor='w',
+                    orientation='portrait', format='png',
+                    transparent=True, bbox_inches='tight', pad_inches=0.1,
+                    metadata=None)  
+        
+
+
+def plot_context_stim_lick_modulation_pie_chart(adj_pvals,sel_project,savepath=None):
+
+    #lick modulation only
+    lick_resp=adj_pvals.query('lick<0.05 and context>=0.05 and vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05')
+
+    #lick and context
+    lick_and_context_resp=adj_pvals.query('context<0.05 and lick<0.05 and vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05')
+
+    #lick and stimulus
+    lick_and_stim_resp=adj_pvals.query('lick<0.05 and (vis1<0.05 or vis2<0.05 or sound1<0.05 or sound2<0.05) and context>=0.05')
+
+    #all three
+    all_resp=adj_pvals.query('context<0.05 and lick<0.05 and (vis1<0.05 or vis2<0.05 or sound1<0.05 or sound2<0.05)')
+
+    #stimulus modulation only
+    only_stim_resp=adj_pvals.query('(vis1<0.05 or vis2<0.05 or sound1<0.05 or sound2<0.05) and context>=0.05 and lick>=0.05')
+
+    #context modulation only
+    context_resp=adj_pvals.query('context<0.05 and vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05 and lick>=0.05')
+
+    #stim and context modulation
+    stim_and_context_resp=adj_pvals.query('context<0.05 and (vis1<0.05 or vis2<0.05 or sound1<0.05 or sound2<0.05) and lick>=0.05')
+
+    neither_stim_nor_context_resp=adj_pvals.query('context>=0.05 and vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05 and lick>=0.05')  
+
+
+    labels=['stimulus only','stimulus and context','context only',
+            'context and lick','lick only', 'lick & stimulus & context',
+            'lick and stimulus',  'none']
+    sizes=[len(only_stim_resp),len(stim_and_context_resp),len(context_resp),
+            len(lick_and_context_resp),len(lick_resp),len(all_resp),
+            len(lick_and_stim_resp), len(neither_stim_nor_context_resp)]
+
+    fig,ax=plt.subplots()
+    ax.pie(sizes,labels=labels,autopct='%1.1f%%',
+        colors=['tab:blue', 'tab:orange', 'tab:green',
+                'tab:red' , 'tab:purple', 'tab:brown', 
+                'tab:pink', 'grey'])
+    ax.set_title('n = '+str(len(adj_pvals))+' units')
+    fig.suptitle('context, lick, and stim modulation')
+    fig.tight_layout()
+
+    if savepath is not None:
+        if 'Templeton' in sel_project:
+            temp_savepath=os.path.join(savepath,"context_stim_lick_Templeton.png")
+        else:
+            temp_savepath=os.path.join(savepath,"context_stim_lick_DR.png")   
+
+        fig.savefig(temp_savepath,
+                    dpi=300, facecolor='w', edgecolor='w',
+                    orientation='portrait', format='png',
+                    transparent=True, bbox_inches='tight', pad_inches=0.1,
+                    metadata=None)  
+        
+
+def plot_context_mod_stim_resp_pie_chart(adj_pvals,sel_project,savepath=None):
+
+    #stimulus context modulation
+    vis1_context_stim_mod=adj_pvals.query('vis1_context<0.05 and vis2_context>=0.05 and sound1_context>=0.05 and sound2_context>=0.05 and any_stim<0.05')
+    vis2_context_stim_mod=adj_pvals.query('vis2_context<0.05 and vis1_context>=0.05 and sound1_context>=0.05 and sound2_context>=0.05 and any_stim<0.05')
+    sound1_context_stim_mod=adj_pvals.query('sound1_context<0.05 and sound2_context>=0.05 and vis1_context>=0.05 and vis2_context>=0.05 and any_stim<0.05')
+    sound2_context_stim_mod=adj_pvals.query('sound2_context<0.05 and sound1_context>=0.05 and vis1_context>=0.05 and vis2_context>=0.05 and any_stim<0.05')
+
+    both_vis_context_stim_mod=adj_pvals.query('vis1_context<0.05 and vis2_context<0.05 and sound1_context>=0.05 and sound2_context>=0.05 and any_stim<0.05')
+    both_aud_context_stim_mod=adj_pvals.query('sound1_context<0.05 and sound2_context<0.05 and vis1_context>=0.05 and vis2_context>=0.05 and any_stim<0.05')
+    multi_modal_context_stim_mod=adj_pvals.query('((vis1_context<0.05 or vis2_context<0.05) and (sound1_context<0.05 or sound2_context<0.05)) and any_stim<0.05')
+
+    no_context_stim_mod=adj_pvals.query('vis1_context>=0.05 and vis2_context>=0.05 and sound1_context>=0.05 and sound2_context>=0.05 and any_stim<0.05')
+
+    #evoked stimulus context modulation
+    vis1_context_evoked_stim_mod=adj_pvals.query('vis1_context_evoked<0.05 and vis2_context_evoked>=0.05 and sound1_context_evoked>=0.05 and sound2_context_evoked>=0.05 and any_stim<0.05')
+    vis2_context_evoked_stim_mod=adj_pvals.query('vis2_context_evoked<0.05 and vis1_context_evoked>=0.05 and sound1_context_evoked>=0.05 and sound2_context_evoked>=0.05 and any_stim<0.05')
+    sound1_context_evoked_stim_mod=adj_pvals.query('sound1_context_evoked<0.05 and sound2_context_evoked>=0.05 and vis1_context_evoked>=0.05 and vis2_context_evoked>=0.05 and any_stim<0.05')
+    sound2_context_evoked_stim_mod=adj_pvals.query('sound2_context_evoked<0.05 and sound1_context_evoked>=0.05 and vis1_context_evoked>=0.05 and vis2_context_evoked>=0.05 and any_stim<0.05')
+
+    both_vis_context_evoked_stim_mod=adj_pvals.query('vis1_context_evoked<0.05 and vis2_context_evoked<0.05 and sound1_context_evoked>=0.05 and sound2_context_evoked>=0.05 and any_stim<0.05')
+    both_aud_context_evoked_stim_mod=adj_pvals.query('sound1_context_evoked<0.05 and sound2_context_evoked<0.05 and vis1_context_evoked>=0.05 and vis2_context_evoked>=0.05 and any_stim<0.05')
+    multi_modal_context_evoked_stim_mod=adj_pvals.query('((vis1_context_evoked<0.05 or vis2_context_evoked<0.05) and (sound1_context_evoked<0.05 or sound2_context_evoked<0.05)) and any_stim<0.05')
+
+    no_context_evoked_stim_mod=adj_pvals.query('vis1_context_evoked>=0.05 and vis2_context_evoked>=0.05 and sound1_context_evoked>=0.05 and sound2_context_evoked>=0.05 and any_stim<0.05')
+
+    labels=['vis1 only','vis2 only','both vis',
+            'sound1 only','sound2 only','both sound',
+            'mixed','none']
+    sizes=[len(vis1_context_stim_mod),len(vis2_context_stim_mod),len(both_vis_context_stim_mod),
+            len(sound1_context_stim_mod),len(sound2_context_stim_mod),len(both_aud_context_stim_mod),
+            len(multi_modal_context_stim_mod),len(no_context_stim_mod)]
+
+    fig,ax=plt.subplots()
+    ax.pie(sizes,labels=labels,autopct='%1.1f%%')
+    ax.set_title('n = '+str(len(adj_pvals))+' units')
+    # ax.set_title('n = '+str(len(stim_and_context))+' units')
+
+    fig.suptitle('context modulation of stimulus response')
+    fig.tight_layout()
+
+    if savepath is not None:
+        if 'Templeton' in sel_project:
+            temp_savepath=os.path.join(savepath,"context_mod_stim_resp_Templeton.png")
+        else:
+            temp_savepath=os.path.join(savepath,"context_mod_stim_resp_DR.png")   
+
+        fig.savefig(temp_savepath,
+                    dpi=300, facecolor='w', edgecolor='w',
+                    orientation='portrait', format='png',
+                    transparent=True, bbox_inches='tight', pad_inches=0.1,
+                    metadata=None) 
+        
+    #evoked
+    labels=['vis1 only','vis2 only','both vis',
+            'sound1 only','sound2 only','both sound',
+            'mixed','none']
+    sizes=[len(vis1_context_evoked_stim_mod),len(vis2_context_evoked_stim_mod),len(both_vis_context_evoked_stim_mod),
+            len(sound1_context_evoked_stim_mod),len(sound2_context_evoked_stim_mod),len(both_aud_context_evoked_stim_mod),
+            len(multi_modal_context_evoked_stim_mod),len(no_context_evoked_stim_mod)]
+
+    fig,ax=plt.subplots()
+    ax.pie(sizes,labels=labels,autopct='%1.1f%%')
+    ax.set_title('n = '+str(len(adj_pvals))+' units')
+
+    fig.suptitle('context modulation of evoked stimulus response')
+    fig.tight_layout()
+
+    if savepath is not None:
+        if 'Templeton' in sel_project:
+            temp_savepath=os.path.join(savepath,"evoked_context_mod_stim_resp_Templeton.png")
+        else:
+            temp_savepath=os.path.join(savepath,"evoked_context_mod_stim_resp_DR.png")   
+
+        fig.savefig(temp_savepath,
+                    dpi=300, facecolor='w', edgecolor='w',
+                    orientation='portrait', format='png',
+                    transparent=True, bbox_inches='tight', pad_inches=0.1,
+                    metadata=None) 
