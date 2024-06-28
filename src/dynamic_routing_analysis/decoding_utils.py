@@ -1271,3 +1271,355 @@ def compute_significant_decoding_by_area(all_decoder_results):
     all_diff_from_null_df=pd.merge(diff_from_null_DR_df,diff_from_null_Templ_df,on='area',how='outer')
 
     return all_frac_sig_df,all_diff_from_null_df
+
+
+def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
+    #load sessions as we go
+
+    #one big loop
+    use_half_shifts=False
+    n_repeats=25
+
+    decoder_confidence_versus_response_type={
+        'session':[],
+        'area':[],
+        'project':[],
+        'vis_context_dprime':[],
+        'vis_hit_confidence':[],
+        'vis_fa_confidence':[],
+        'vis_cr_confidence':[],
+        'aud_context_dprime':[],
+        'aud_hit_confidence':[],
+        'aud_fa_confidence':[],
+        'aud_cr_confidence':[],
+        'overall_dprime':[],
+        'n_good_blocks':[],
+        'correct_confidence':[],
+        'incorrect_confidence':[],
+        'cr_all_confidence':[],
+        'fa_all_condfidence':[],
+    }
+
+    decoder_confidence_dprime_by_block={
+        'session':[],
+        'area':[],
+        'project':[],
+        'block':[],
+        'cross_modal_dprime':[],
+        'confidence':[]
+    }
+
+    decoder_confidence_by_switch={
+        'session':[],
+        'area':[],
+        'project':[],
+        'switch_trial':[],
+        'block':[],
+        'dprime_before':[],
+        'dprime_after':[],
+        'confidence':[]
+    }
+
+    decoder_confidence_versus_trials_since_rewarded_target={
+        'session':[],
+        'area':[],
+        'project':[],
+        'trials_since_rewarded_target':[],
+        'time_since_rewarded_target':[],
+        'confidence':[],
+    }
+
+    decoder_confidence_before_after_target={
+        'session':[],
+        'area':[],
+        'project':[],
+        'cross_modal_dprime':[],
+        'rewarded_target':[],
+        'rewarded_target_plus_one':[],
+        'non_rewarded_target':[],
+        'non_rewarded_target_plus_one':[],
+        'non_response_non_rewarded_target':[],
+        'non_response_non_rewarded_target_plus_one':[],
+        'non_response_non_target_trials':[],
+        'non_response_non_target_trials_plus_one':[],
+    }
+
+    # all_sessions=list(decoder_results.keys())
+
+    start_time=time.time()
+
+    ##loop through sessions##
+    for file in files:
+        try:
+            session_start_time=time.time()
+            decoder_results=pickle.load(open(file,'rb'))
+            session_id=list(decoder_results.keys())[0]
+            session_info=npc_lims.get_session_info(session_id)
+            session_id_str=str(session_id)
+            #load session
+            try:
+                trials=pd.read_parquet(
+                        npc_lims.get_cache_path('trials',session_id,version='any')
+                        )
+                performance=pd.read_parquet(
+                        npc_lims.get_cache_path('performance',session_id,version='any')
+                        )
+            except:
+                print('skipping session:',session_id)
+                continue
+
+            #add trials/time since last rewarded target to trials table
+            trials_since_rewarded_target=[]
+            time_since_rewarded_target=[]
+            last_rewarded_time=np.nan
+            last_rewarded_trial=np.nan
+
+            for tt,trial in trials.iterrows():
+                # print(tt)
+                trials_since_rewarded_target.append(tt-last_rewarded_trial)
+                time_since_rewarded_target.append(trial['start_time']-last_rewarded_time)
+                if trial['is_rewarded'] and trial['is_target'] and trial['is_response']:
+                    last_rewarded_time=trial['reward_time']
+                    last_rewarded_trial=tt
+            trials['trials_since_rewarded_target']=trials_since_rewarded_target
+            trials['time_since_rewarded_target']=time_since_rewarded_target
+            
+            #select the middle 4 blocks
+            trials_middle=trials.iloc[decoder_results[session_id]['middle_4_blocks']]
+            trials_middle=trials_middle.reset_index()
+            trials_middle['id']=trials_middle.index.values
+            
+
+            areas=list(decoder_results[session_id]['results'].keys())
+
+            ##loop through areas##
+            for aa in areas:
+                if type(aa)==str and 'probe' in aa:
+                    area_name=aa.split('_')[0]
+                else:
+                    area_name=aa
+                #make corrected decoder confidence
+                shifts=decoder_results[session_id]['shifts']
+                areas=decoder_results[session_id]['areas']
+                half_neg_shift=np.round(shifts.min()/2)
+                half_pos_shift=np.round(shifts.max()/2)
+                half_neg_shift_ind=np.where(shifts==half_neg_shift)[0][0]
+                half_pos_shift_ind=np.where(shifts==half_pos_shift)[0][0]
+                half_shift_inds=np.arange(half_neg_shift_ind,half_pos_shift_ind+1)
+                if use_half_shifts==False:
+                    half_shift_inds=np.arange(len(shifts))
+
+                decision_function_shifts=[]
+                    
+                for sh in half_shift_inds:
+                    temp_shifts=[]
+                    for rr in range(n_repeats):
+                        temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['decision_function'])
+                    decision_function_shifts.append(np.nanmean(np.vstack(temp_shifts),axis=0))
+
+                # true_label=decoder_results[session_id]['results'][aa]['shift'][np.where(shifts==0)[0][0]]['true_label']
+                try:
+                    decision_function_shifts=np.vstack(decision_function_shifts)
+                except:
+                    print(session_id,'failed to stack decision functions; skipping')
+                    continue
+                
+                # #normalize all decision function values to the stdev of all the nulls
+                # decision_function_shifts=decision_function_shifts/np.nanstd(decision_function_shifts[:])
+
+                corrected_decision_function=decision_function_shifts[shifts[half_shift_inds]==0,:].flatten()-np.median(decision_function_shifts,axis=0)
+
+                #option to normalize after
+                # corrected_decision_function=corrected_decision_function/np.std(corrected_decision_function)
+
+                #find average confidence per hit, fa, cr
+                vis_HIT_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==True and is_target==True and is_vis_context==True and \
+                                                                                    is_response==True and is_reward_scheduled==False)').index.values])
+                aud_HIT_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==True and is_target==True and is_vis_context==False and \
+                                                                                    is_response==True and is_reward_scheduled==False)').index.values])
+                vis_CR_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==True and is_target==True and is_vis_context==True and \
+                                                                                    is_response==False and is_reward_scheduled==False)').index.values])
+                aud_CR_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==True and is_target==True and is_vis_context==False and \
+                                                                                    is_response==False and is_reward_scheduled==False)').index.values])
+                vis_FA_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==False and is_target==True and is_vis_context==True and \
+                                                                                    is_response==True and is_reward_scheduled==False)').index.values])
+                aud_FA_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==False and is_target==True and is_vis_context==False and \
+                                                                                    is_response==True and is_reward_scheduled==False)').index.values])
+
+                correct_mean=np.mean(np.hstack([corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==True').index.values],
+                                                -corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==False').index.values]]))
+                incorrect_mean=np.mean(np.hstack([corrected_decision_function[trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False and is_vis_context==True').index.values],
+                                                -corrected_decision_function[trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False and is_vis_context==False').index.values]]))
+
+                CR_all_mean=np.mean(np.hstack([corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==True and is_response==False').index.values],
+                                                -corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==False and is_response==False').index.values]]))
+                FA_all_mean=np.mean(np.hstack([corrected_decision_function[trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False and is_vis_context==True and is_response==True').index.values],
+                                                -corrected_decision_function[trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False and is_vis_context==False and is_response==True').index.values]]))
+
+                #append to table
+                decoder_confidence_versus_response_type['session'].append(session_id)
+                decoder_confidence_versus_response_type['area'].append(area_name)
+                decoder_confidence_versus_response_type['project'].append(session_info.project)
+                if performance.query('rewarded_modality=="vis"').empty:
+                    decoder_confidence_versus_response_type['vis_context_dprime'].append(np.nan)
+                else:
+                    decoder_confidence_versus_response_type['vis_context_dprime'].append(performance.query('rewarded_modality=="vis"')['cross_modal_dprime'].values[0])
+                decoder_confidence_versus_response_type['vis_hit_confidence'].append(vis_HIT_mean)
+                decoder_confidence_versus_response_type['vis_fa_confidence'].append(vis_FA_mean)
+                decoder_confidence_versus_response_type['vis_cr_confidence'].append(vis_CR_mean)
+                if performance.query('rewarded_modality=="aud"').empty:
+                    decoder_confidence_versus_response_type['aud_context_dprime'].append(np.nan)
+                else:
+                    decoder_confidence_versus_response_type['aud_context_dprime'].append(performance.query('rewarded_modality=="aud"')['cross_modal_dprime'].values[0])
+                decoder_confidence_versus_response_type['aud_hit_confidence'].append(aud_HIT_mean)
+                decoder_confidence_versus_response_type['aud_fa_confidence'].append(aud_FA_mean)
+                decoder_confidence_versus_response_type['aud_cr_confidence'].append(aud_CR_mean)
+
+                decoder_confidence_versus_response_type['overall_dprime'].append(performance['cross_modal_dprime'].mean())
+                decoder_confidence_versus_response_type['n_good_blocks'].append(performance.query('cross_modal_dprime>=1.0')['cross_modal_dprime'].count())
+                decoder_confidence_versus_response_type['correct_confidence'].append(correct_mean)
+                decoder_confidence_versus_response_type['incorrect_confidence'].append(incorrect_mean)
+                decoder_confidence_versus_response_type['cr_all_confidence'].append(CR_all_mean)
+                decoder_confidence_versus_response_type['fa_all_condfidence'].append(FA_all_mean)
+
+
+                #find decoder confidence according to time/trials since last rewarded target
+                #3 arrays - time since last rewarded target, trials since last rewarded target, decoder confidence
+                trials_since_rewarded_target=trials_middle.query('is_reward_scheduled==False')['trials_since_rewarded_target'].values
+                time_since_rewarded_target=trials_middle.query('is_reward_scheduled==False')['time_since_rewarded_target'].values
+                confidence=corrected_decision_function[trials_middle.query('is_reward_scheduled==False').index.values]
+                for tt,trial in trials_middle.query('is_reward_scheduled==False').reset_index().iterrows():
+                    #reverse sign if other modality
+                    if trial['is_aud_context']:
+                        confidence[tt]=-confidence[tt]
+
+                #append to table per session and area
+                decoder_confidence_versus_trials_since_rewarded_target['session'].append(session_id)
+                decoder_confidence_versus_trials_since_rewarded_target['area'].append(area_name)
+                decoder_confidence_versus_trials_since_rewarded_target['project'].append(session_info.project)
+                decoder_confidence_versus_trials_since_rewarded_target['trials_since_rewarded_target'].append(trials_since_rewarded_target)
+                decoder_confidence_versus_trials_since_rewarded_target['time_since_rewarded_target'].append(time_since_rewarded_target)
+                decoder_confidence_versus_trials_since_rewarded_target['confidence'].append(confidence)
+
+                ##loop through blocks##
+                blocks=trials_middle['block_index'].unique()
+                for bb in blocks:
+                    block_trials=trials_middle.query('block_index==@bb and is_reward_scheduled==False')
+                    #find average confidence and dprime for the block
+                    if block_trials['is_vis_context'].values[0]:
+                        multiplier=1
+                    elif block_trials['is_aud_context'].values[0]:
+                        multiplier=-1
+                    
+                    block_dprime=performance.query('block_index==@bb')['cross_modal_dprime'].values[0]
+                    block_mean=np.nanmean(corrected_decision_function[block_trials.index.values])*multiplier
+
+                    #append to table
+                    decoder_confidence_dprime_by_block['session'].append(session_id)
+                    decoder_confidence_dprime_by_block['area'].append(area_name)
+                    decoder_confidence_dprime_by_block['project'].append(session_info.project)
+                    decoder_confidence_dprime_by_block['block'].append(bb)
+                    decoder_confidence_dprime_by_block['cross_modal_dprime'].append(block_dprime)
+                    decoder_confidence_dprime_by_block['confidence'].append(block_mean)
+
+                #get confidence around the block switch
+                switch_trials=trials_middle.query('is_context_switch')
+                ##loop through switches##
+                for st,switch_trial in switch_trials.iloc[1:].iterrows():
+                    if switch_trial['is_vis_context']:
+                        multiplier=1
+                    elif switch_trial['is_aud_context']:
+                        multiplier=-1
+                    switch_trial_block_index=switch_trial['block_index']
+                    #append to table
+                    decoder_confidence_by_switch['session'].append(session_id)
+                    decoder_confidence_by_switch['area'].append(area_name)
+                    decoder_confidence_by_switch['project'].append(session_info.project)
+                    decoder_confidence_by_switch['switch_trial'].append(switch_trial['id'])
+                    decoder_confidence_by_switch['block'].append(switch_trial_block_index)
+                    decoder_confidence_by_switch['dprime_before'].append(performance.query('block_index==(@switch_trial_block_index-1)')['cross_modal_dprime'].values[0])
+                    decoder_confidence_by_switch['dprime_after'].append(performance.query('block_index==(@switch_trial_block_index)')['cross_modal_dprime'].values[0])
+                    decoder_confidence_by_switch['confidence'].append(corrected_decision_function[switch_trial['id']-20:switch_trial['id']+30]*multiplier)
+
+                #decoder confidence before/after rewarded target, response to non-rewarded target, non-response to non-rewarded target
+                sign_corrected_decision_function=corrected_decision_function.copy()
+                for tt,trial in trials_middle.iterrows():
+                    if trial['is_aud_context']:
+                        sign_corrected_decision_function[tt]=-sign_corrected_decision_function[tt]
+                #find trial and trial+1 of rewarded targets
+                rewarded_target_trials=trials_middle.query('is_rewarded==True and is_target==True and is_response==True and is_reward_scheduled==False').index.values
+                rewarded_target_trials_plus_one=rewarded_target_trials+1
+                if rewarded_target_trials_plus_one[-1]>=len(corrected_decision_function):
+                    rewarded_target_trials=rewarded_target_trials[:-1]
+                    rewarded_target_trials_plus_one=rewarded_target_trials_plus_one[:-1]
+
+                #find trials and trials+1 of non-rewarded targets
+                non_rewarded_target_trials=trials_middle.query('is_rewarded==False and is_target==True and is_response==True').index.values
+                non_rewarded_target_trials_plus_one=non_rewarded_target_trials+1
+                if len(non_rewarded_target_trials_plus_one)>0:
+                    if non_rewarded_target_trials_plus_one[-1]>=len(corrected_decision_function):
+                        non_rewarded_target_trials=non_rewarded_target_trials[:-1]
+                        non_rewarded_target_trials_plus_one=non_rewarded_target_trials_plus_one[:-1]
+
+                #find trials and trials+1 of non-response to non-rewarded targets
+                non_response_non_rewarded_target_trials=trials_middle.query('is_rewarded==False and is_target==True and is_response==False').index.values
+                non_response_non_rewarded_target_trials_plus_one=non_response_non_rewarded_target_trials+1
+                if len(non_response_non_rewarded_target_trials_plus_one)>0:
+                    if non_response_non_rewarded_target_trials_plus_one[-1]>=len(corrected_decision_function):
+                        non_response_non_rewarded_target_trials=non_response_non_rewarded_target_trials[:-1]
+                        non_response_non_rewarded_target_trials_plus_one=non_response_non_rewarded_target_trials_plus_one[:-1]
+
+                non_response_non_target_trials=trials_middle.query('is_rewarded==False and is_target==False and is_response==False').index.values
+                non_response_non_target_trials_plus_one=non_response_non_target_trials+1
+                if len(non_response_non_target_trials_plus_one)>0:
+                    if non_response_non_target_trials_plus_one[-1]>=len(corrected_decision_function):
+                        non_response_non_target_trials=non_response_non_target_trials[:-1]
+                        non_response_non_target_trials_plus_one=non_response_non_target_trials_plus_one[:-1]
+
+                #append to table
+                decoder_confidence_before_after_target['session'].append(session_id)
+                decoder_confidence_before_after_target['area'].append(area_name)
+                decoder_confidence_before_after_target['project'].append(session_info.project)
+                decoder_confidence_before_after_target['cross_modal_dprime'].append(performance['cross_modal_dprime'].mean())
+                decoder_confidence_before_after_target['rewarded_target'].append(sign_corrected_decision_function[rewarded_target_trials])
+                decoder_confidence_before_after_target['rewarded_target_plus_one'].append(sign_corrected_decision_function[rewarded_target_trials_plus_one])
+                if len(non_rewarded_target_trials)>0:
+                    decoder_confidence_before_after_target['non_rewarded_target'].append(sign_corrected_decision_function[non_rewarded_target_trials])
+                    decoder_confidence_before_after_target['non_rewarded_target_plus_one'].append(sign_corrected_decision_function[non_rewarded_target_trials_plus_one])
+                else:
+                    decoder_confidence_before_after_target['non_rewarded_target'].append(np.nan)
+                    decoder_confidence_before_after_target['non_rewarded_target_plus_one'].append(np.nan)
+                if len(non_response_non_rewarded_target_trials)>0:
+                    decoder_confidence_before_after_target['non_response_non_rewarded_target'].append(sign_corrected_decision_function[non_response_non_rewarded_target_trials])
+                    decoder_confidence_before_after_target['non_response_non_rewarded_target_plus_one'].append(sign_corrected_decision_function[non_response_non_rewarded_target_trials_plus_one])        
+                else:
+                    decoder_confidence_before_after_target['non_response_non_rewarded_target'].append(np.nan)
+                    decoder_confidence_before_after_target['non_response_non_rewarded_target_plus_one'].append(np.nan)
+                decoder_confidence_before_after_target['non_response_non_target_trials'].append(sign_corrected_decision_function[non_response_non_target_trials])
+                decoder_confidence_before_after_target['non_response_non_target_trials_plus_one'].append(sign_corrected_decision_function[non_response_non_target_trials_plus_one])
+        except:
+            print('failed to load session:',session_id)
+            continue
+        
+        total_time=time.time()-start_time
+        session_time=time.time()-session_start_time
+        print('finished session:',session_id)
+        print('session time: ',session_time,' seconds;  total time:',total_time,' seconds')
+
+    decoder_confidence_versus_response_type=pd.DataFrame(decoder_confidence_versus_response_type)
+    decoder_confidence_dprime_by_block=pd.DataFrame(decoder_confidence_dprime_by_block)
+    decoder_confidence_by_switch=pd.DataFrame(decoder_confidence_by_switch)
+    decoder_confidence_versus_trials_since_rewarded_target=pd.DataFrame(decoder_confidence_versus_trials_since_rewarded_target)
+    decoder_confidence_before_after_target=pd.DataFrame(decoder_confidence_before_after_target)
+
+    if savepath is not None:
+        if not os.path.exists(savepath):
+            os.makedirs(savepath)
+        decoder_confidence_versus_response_type.to_csv(os.path.join(savepath,'decoder_confidence_versus_response_type.csv'),index=False)
+        decoder_confidence_dprime_by_block.to_csv(os.path.join(savepath,'decoder_confidence_dprime_by_block.csv'),index=False)
+        decoder_confidence_by_switch.to_csv(os.path.join(savepath,'decoder_confidence_by_switch.csv'),index=False)
+        decoder_confidence_versus_trials_since_rewarded_target.to_csv(os.path.join(savepath,'decoder_confidence_versus_trials_since_rewarded_target.csv'),index=False)
+        decoder_confidence_before_after_target.to_csv(os.path.join(savepath,'decoder_confidence_before_after_target.csv'),index=False)
+
+    if return_table:
+        return decoder_confidence_versus_response_type,decoder_confidence_dprime_by_block,decoder_confidence_by_switch,decoder_confidence_versus_trials_since_rewarded_target,decoder_confidence_before_after_target
