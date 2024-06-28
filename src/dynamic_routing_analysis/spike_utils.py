@@ -1133,6 +1133,10 @@ def calculate_single_unit_metric_adjusted_pvals(sel_units,sel_project):
         'sound1_context_evoked':fdrcorrection(sel_units['sound1_evoked_context_modulation_p_value'])[1],
         'sound2_context_evoked':fdrcorrection(sel_units['sound2_evoked_context_modulation_p_value'])[1],
         'catch_context_evoked':fdrcorrection(sel_units['catch_evoked_context_modulation_p_value'])[1],
+
+        'ccf_ap':sel_units['ccf_ap'],
+        'ccf_dv':sel_units['ccf_dv'],
+        'ccf_ml':sel_units['ccf_ml'],
     })
 
     if 'Templeton' in sel_project:
