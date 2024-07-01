@@ -6,8 +6,12 @@
    ```bash
    conda create -n dr_analysis python=3.11.5
    ```
-4. natigate to the folder where you cloned the repo
-5. install dependencies from requirements.txt file
+4. navigate to the folder where you cloned the repo
+5. activate your new environment
+   ```bash
+   conda activate dr_analysis
+   ```
+6. install dependencies from requirements.txt file
    ```bash
    pip install -r requirements.txt
    ```
