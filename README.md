@@ -11,9 +11,17 @@
    ```bash
    conda activate dr_analysis
    ```
-6. install dependencies from requirements.txt file
+6. Optional: if you want to plot on the CCF, install allensdk (not necessary for other analyses; workaround to override some of allensdk's deps with dynamic_routing_analysis deps)
+   ```bash
+   pip install allensdk
+   ```
+7. install remaining dependencies from requirements.txt file
    ```bash
    pip install -r requirements.txt
+   ```
+8. install dynamic_routing_analysis in editable mode
+   ```bash
+   pip install -e .
    ```
 
 
