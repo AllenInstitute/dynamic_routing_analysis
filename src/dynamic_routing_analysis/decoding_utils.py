@@ -837,7 +837,7 @@ def decode_context_with_linear_shift(session,params):
     # all_areas=params['all_areas']
     labels_as_index=params['labels_as_index']
     decoder_type=params['decoder_type']
-    use_coefs=params['use_coefs']
+    # use_coefs=params['use_coefs']
     # generate_labels=params['generate_labels']
     session_id=str(session.id)
 
