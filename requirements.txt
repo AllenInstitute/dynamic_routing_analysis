@@ -49,7 +49,6 @@ defusedxml==0.7.1
 deltalake==0.10.1
 dictdiffer==0.9.0
 dnspython==2.4.2
--e git+https://github.com/AllenInstitute/dynamic_routing_analysis@1ba8f413f48c63cef74d6797318b44c0f8794577#egg=dynamic_routing_analysis
 DynamicRoutingTask
 email-validator==2.0.0.post2
 entrypoints==0.4
