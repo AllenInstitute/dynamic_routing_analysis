@@ -1,5 +1,13 @@
 # **dynamic_routing_analysis**
 
+## installation
+1. clone the dynamic_routing_analysis repo
+2. create a new environment with python=3.11.5
+   '''conda create -m dr_analysis python=3.11.5'''
+3. natigate to the folder where you cloned the repo
+4. install dependencies from requirements.txt file
+   '''pip install -r requirements.txt'''
+
 
 ## contributing
 
