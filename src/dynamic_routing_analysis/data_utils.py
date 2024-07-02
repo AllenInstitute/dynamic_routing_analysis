@@ -4,6 +4,7 @@ import os
 import npc_lims
 import npc_sessions
 import numpy as np
+import pandas as pd
 
 
 def load_trials_or_units(session, table_name):

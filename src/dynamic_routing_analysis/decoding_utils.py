@@ -1096,6 +1096,7 @@ def concat_decoder_results(files,savepath=None,return_table=True):
         decoder_results=pickle.load(open(file,'rb'))
         session_id=list(decoder_results.keys())[0]
         session_info=npc_lims.get_session_info(session_id)
+        print('loading session: '+session_id)
         try:
             performance=pd.read_parquet(
                         npc_lims.get_cache_path('performance',session_info.id,version='any')
