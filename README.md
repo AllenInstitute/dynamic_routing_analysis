@@ -1,5 +1,29 @@
 # **dynamic_routing_analysis**
 
+## installation
+1. clone the dynamic_routing_analysis repo
+2. create a new environment with python=3.11.5
+   ```bash
+   conda create -n dr_analysis python=3.11.5
+   ```
+4. navigate to the folder where you cloned the repo
+5. activate your new environment
+   ```bash
+   conda activate dr_analysis
+   ```
+6. Optional: if you want to plot on the CCF, install allensdk (not necessary for other analyses; workaround to override some of allensdk's deps with dynamic_routing_analysis deps)
+   ```bash
+   pip install allensdk
+   ```
+7. install remaining dependencies from requirements.txt file
+   ```bash
+   pip install -r requirements.txt
+   ```
+8. install dynamic_routing_analysis in editable mode
+   ```bash
+   pip install -e .
+   ```
+
 
 ## contributing
 
