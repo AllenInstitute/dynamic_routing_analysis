@@ -826,9 +826,10 @@ def decode_context_with_linear_shift(session,params):
     spikes_binsize=params['spikes_binsize']
     spikes_time_before=params['spikes_time_before']
     spikes_time_after=params['spikes_time_after']
-    decoder_binsize=params['decoder_binsize']
-    decoder_time_before=params['decoder_time_before']
-    decoder_time_after=params['decoder_time_after']
+
+    # decoder_binsize=params['decoder_binsize']
+    # decoder_time_before=params['decoder_time_before']
+    # decoder_time_after=params['decoder_time_after']
     # balance_labels=params['balance_labels']
     savepath=params['savepath']
     filename=params['filename']
@@ -936,9 +937,9 @@ def decode_context_with_linear_shift(session,params):
     decoder_results[session_id]['spikes_binsize'] = spikes_binsize
     decoder_results[session_id]['spikes_time_before'] = spikes_time_before
     decoder_results[session_id]['spikes_time_after'] = spikes_time_after
-    decoder_results[session_id]['decoder_binsize'] = decoder_binsize
-    decoder_results[session_id]['decoder_time_before'] = decoder_time_before
-    decoder_results[session_id]['decoder_time_after'] = decoder_time_after
+    # decoder_results[session_id]['decoder_binsize'] = decoder_binsize
+    # decoder_results[session_id]['decoder_time_before'] = decoder_time_before
+    # decoder_results[session_id]['decoder_time_after'] = decoder_time_after
     decoder_results[session_id]['input_data_type'] = input_data_type
     decoder_results[session_id]['n_units'] = n_units_input
     decoder_results[session_id]['n_repeats'] = n_repeats
@@ -1196,7 +1197,11 @@ def concat_decoder_results(files,savepath=None,return_table=True):
     
     linear_shift_df=pd.DataFrame(linear_shift_dict)
     if savepath is not None:
-        linear_shift_df.to_csv(savepath)
+        try:
+            linear_shift_df.to_csv(savepath)
+        except Exception as e:
+            print(e)
+            print('error saving linear shift df')
     if return_table:
         return linear_shift_df
 
