@@ -940,7 +940,7 @@ def decode_context_with_linear_shift(session,params):
     decoder_results[session_id]['decoder_time_before'] = decoder_time_before
     decoder_results[session_id]['decoder_time_after'] = decoder_time_after
     decoder_results[session_id]['input_data_type'] = input_data_type
-    decoder_results[session_id]['n_units'] = n_units
+    decoder_results[session_id]['n_units'] = n_units_input
     decoder_results[session_id]['n_repeats'] = n_repeats
 
     if input_data_type=='facemap':
@@ -993,7 +993,7 @@ def decode_context_with_linear_shift(session,params):
 
         #loop through repeats
         for rr in range(n_repeats):
-            if rr>1:
+            if n_repeats>1:
                 decoder_results[session_id]['results'][aa]['shift'][rr]={}
 
             if input_data_type=='spikes':
@@ -1093,100 +1093,105 @@ def concat_decoder_results(files,savepath=None,return_table=True):
 
     #loop through sessions
     for file in files:
-        decoder_results=pickle.load(open(file,'rb'))
-        session_id=list(decoder_results.keys())[0]
-        session_info=npc_lims.get_session_info(session_id)
-        print('loading session: '+session_id)
         try:
-            performance=pd.read_parquet(
-                        npc_lims.get_cache_path('performance',session_info.id,version='any')
-                    )
-        except:
-            continue
+            decoder_results=pickle.load(open(file,'rb'))
+            session_id=list(decoder_results.keys())[0]
+            session_info=npc_lims.get_session_info(session_id)
+            print('loading session: '+session_id)
+            try:
+                performance=pd.read_parquet(
+                            npc_lims.get_cache_path('performance',session_info.id,version='any')
+                        )
+            except:
+                continue
 
-        if session_info.is_annotated==False:
-            continue
+            if session_info.is_annotated==False:
+                continue
 
-        all_bal_acc[session_id]={}
+            all_bal_acc[session_id]={}
 
-        shifts=decoder_results[session_id]['shifts']
-        #extract results according to the trial shift
-        half_neg_shift=np.round(shifts.min()/2)
-        half_pos_shift=np.round(shifts.max()/2)
-        # half_shifts=np.arange(-half_neg_shift,half_pos_shift+1)
-        half_neg_shift_ind=np.where(shifts==half_neg_shift)[0][0]
-        half_pos_shift_ind=np.where(shifts==half_pos_shift)[0][0]
-        half_shift_inds=np.arange(half_neg_shift_ind,half_pos_shift_ind+1)
+            shifts=decoder_results[session_id]['shifts']
+            #extract results according to the trial shift
+            half_neg_shift=np.round(shifts.min()/2)
+            half_pos_shift=np.round(shifts.max()/2)
+            # half_shifts=np.arange(-half_neg_shift,half_pos_shift+1)
+            half_neg_shift_ind=np.where(shifts==half_neg_shift)[0][0]
+            half_pos_shift_ind=np.where(shifts==half_pos_shift)[0][0]
+            half_shift_inds=np.arange(half_neg_shift_ind,half_pos_shift_ind+1)
 
-        all_bal_acc[session_id]['shifts']=shifts
-        all_bal_acc[session_id]['half_shift_inds']=half_shift_inds
-        if use_half_shifts:
-            half_shifts=shifts[half_shift_inds]
-        else:
-            half_shifts=shifts
+            all_bal_acc[session_id]['shifts']=shifts
+            all_bal_acc[session_id]['half_shift_inds']=half_shift_inds
+            if use_half_shifts:
+                half_shifts=shifts[half_shift_inds]
+            else:
+                half_shifts=shifts
 
-        half_shift_inds=np.arange(len(half_shifts))
-        
-        areas=decoder_results[session_id]['areas']
+            half_shift_inds=np.arange(len(half_shifts))
+            
+            areas=decoder_results[session_id]['areas']
 
-        #save balanced accuracy by shift
-        for aa in areas:
-            if aa in decoder_results[session_id]['results']:
-                all_bal_acc[session_id][aa]=[]
-                for rr in range(n_repeats):
-                    temp_bal_acc=[]
-                    for sh in half_shift_inds:
-                        if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
-                            temp_bal_acc.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['balanced_accuracy'])
-                    all_bal_acc[session_id][aa].append(np.array(temp_bal_acc))
-                all_bal_acc[session_id][aa]=np.vstack(all_bal_acc[session_id][aa])
-                all_bal_acc[session_id][aa]=np.nanmean(all_bal_acc[session_id][aa],axis=0)
+            #save balanced accuracy by shift
+            for aa in areas:
+                if aa in decoder_results[session_id]['results']:
+                    all_bal_acc[session_id][aa]=[]
+                    for rr in range(n_repeats):
+                        temp_bal_acc=[]
+                        for sh in half_shift_inds:
+                            if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
+                                temp_bal_acc.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['balanced_accuracy'])
+                        all_bal_acc[session_id][aa].append(np.array(temp_bal_acc))
+                    all_bal_acc[session_id][aa]=np.vstack(all_bal_acc[session_id][aa])
+                    all_bal_acc[session_id][aa]=np.nanmean(all_bal_acc[session_id][aa],axis=0)
 
-                if type(aa)==str:
-                    if '_probe' in aa:
-                        area_name=aa.split('_probe')[0]
-                        probe_name=aa.split('_probe')[1]
+                    if type(aa)==str:
+                        if '_probe' in aa:
+                            area_name=aa.split('_probe')[0]
+                            probe_name=aa.split('_probe')[1]
+                        else:
+                            area_name=aa
+                            probe_name=''
                     else:
                         area_name=aa
-                        probe_name=''
-                else:
-                    area_name=aa
-                
-                true_acc_ind=np.where(half_shifts==1)[0][0]
-                null_acc_ind=np.where(half_shifts!=1)[0]
-                true_accuracy=all_bal_acc[session_id][aa][true_acc_ind]
-                null_accuracy_mean=np.mean(all_bal_acc[session_id][aa][null_acc_ind])
-                null_accuracy_median=np.median(all_bal_acc[session_id][aa][null_acc_ind])
-                null_accuracy_std=np.std(all_bal_acc[session_id][aa][null_acc_ind])
-                p_value=np.mean(all_bal_acc[session_id][aa][null_acc_ind]>=true_accuracy)
+                    
+                    true_acc_ind=np.where(half_shifts==1)[0][0]
+                    null_acc_ind=np.where(half_shifts!=1)[0]
+                    true_accuracy=all_bal_acc[session_id][aa][true_acc_ind]
+                    null_accuracy_mean=np.mean(all_bal_acc[session_id][aa][null_acc_ind])
+                    null_accuracy_median=np.median(all_bal_acc[session_id][aa][null_acc_ind])
+                    null_accuracy_std=np.std(all_bal_acc[session_id][aa][null_acc_ind])
+                    p_value=np.mean(all_bal_acc[session_id][aa][null_acc_ind]>=true_accuracy)
 
-                #make big dict/dataframe for this:
-                #save true decoding, mean/median null decoding, and p value for each area/probe
-                linear_shift_dict['session_id'].append(session_id)
-                linear_shift_dict['project'].append(session_info.project)
-                linear_shift_dict['area'].append(area_name)
-                linear_shift_dict['true_accuracy'].append(true_accuracy)
-                linear_shift_dict['null_accuracy_mean'].append(null_accuracy_mean)
-                linear_shift_dict['null_accuracy_median'].append(null_accuracy_median)
-                linear_shift_dict['null_accuracy_std'].append(null_accuracy_std)
-                linear_shift_dict['p_value'].append(p_value)
+                    #make big dict/dataframe for this:
+                    #save true decoding, mean/median null decoding, and p value for each area/probe
+                    linear_shift_dict['session_id'].append(session_id)
+                    linear_shift_dict['project'].append(session_info.project)
+                    linear_shift_dict['area'].append(area_name)
+                    linear_shift_dict['true_accuracy'].append(true_accuracy)
+                    linear_shift_dict['null_accuracy_mean'].append(null_accuracy_mean)
+                    linear_shift_dict['null_accuracy_median'].append(null_accuracy_median)
+                    linear_shift_dict['null_accuracy_std'].append(null_accuracy_std)
+                    linear_shift_dict['p_value'].append(p_value)
 
-                linear_shift_dict['cross_modal_dprime'].append(performance['cross_modal_dprime'].mean())
-                linear_shift_dict['n_good_blocks'].append(np.sum(performance['cross_modal_dprime']>=1.0))
+                    linear_shift_dict['cross_modal_dprime'].append(performance['cross_modal_dprime'].mean())
+                    linear_shift_dict['n_good_blocks'].append(np.sum(performance['cross_modal_dprime']>=1.0))
 
-                # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
-                if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
-                    linear_shift_dict['ccf_ap_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ap_mean'])
-                    linear_shift_dict['ccf_dv_mean'].append(decoder_results[session_id]['results'][aa]['ccf_dv_mean'])
-                    linear_shift_dict['ccf_ml_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ml_mean'])
-                    linear_shift_dict['n_units'].append(decoder_results[session_id]['results'][aa]['n_units'])
-                    linear_shift_dict['probe'].append(probe_name)
-                else:
-                    linear_shift_dict['ccf_ap_mean'].append(np.nan)
-                    linear_shift_dict['ccf_dv_mean'].append(np.nan)
-                    linear_shift_dict['ccf_ml_mean'].append(np.nan)
-                    linear_shift_dict['n_units'].append(np.nan)
-                    linear_shift_dict['probe'].append(np.nan)
+                    # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
+                    if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
+                        linear_shift_dict['ccf_ap_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ap_mean'])
+                        linear_shift_dict['ccf_dv_mean'].append(decoder_results[session_id]['results'][aa]['ccf_dv_mean'])
+                        linear_shift_dict['ccf_ml_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ml_mean'])
+                        linear_shift_dict['n_units'].append(decoder_results[session_id]['results'][aa]['n_units'])
+                        linear_shift_dict['probe'].append(probe_name)
+                    else:
+                        linear_shift_dict['ccf_ap_mean'].append(np.nan)
+                        linear_shift_dict['ccf_dv_mean'].append(np.nan)
+                        linear_shift_dict['ccf_ml_mean'].append(np.nan)
+                        linear_shift_dict['n_units'].append(np.nan)
+                        linear_shift_dict['probe'].append(np.nan)
+        except Exception as e:
+            print(e)
+            print('error with session: '+session_id)
+            continue
 
     
     linear_shift_df=pd.DataFrame(linear_shift_dict)
@@ -1299,6 +1304,10 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
         'incorrect_confidence':[],
         'cr_all_confidence':[],
         'fa_all_condfidence':[],
+        'ccf_ap_mean':[],
+        'ccf_dv_mean':[],
+        'ccf_ml_mean':[],
+        'n_units':[],
     }
 
     decoder_confidence_dprime_by_block={
@@ -1307,7 +1316,11 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
         'project':[],
         'block':[],
         'cross_modal_dprime':[],
-        'confidence':[]
+        'confidence':[],
+        'ccf_ap_mean':[],
+        'ccf_dv_mean':[],
+        'ccf_ml_mean':[],
+        'n_units':[],
     }
 
     decoder_confidence_by_switch={
@@ -1318,7 +1331,11 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
         'block':[],
         'dprime_before':[],
         'dprime_after':[],
-        'confidence':[]
+        'confidence':[],
+        'ccf_ap_mean':[],
+        'ccf_dv_mean':[],
+        'ccf_ml_mean':[],
+        'n_units':[],
     }
 
     decoder_confidence_versus_trials_since_rewarded_target={
@@ -1328,6 +1345,10 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
         'trials_since_rewarded_target':[],
         'time_since_rewarded_target':[],
         'confidence':[],
+        'ccf_ap_mean':[],
+        'ccf_dv_mean':[],
+        'ccf_ml_mean':[],
+        'n_units':[],
     }
 
     decoder_confidence_before_after_target={
@@ -1343,6 +1364,10 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
         'non_response_non_rewarded_target_plus_one':[],
         'non_response_non_target_trials':[],
         'non_response_non_target_trials_plus_one':[],
+        'ccf_ap_mean':[],
+        'ccf_dv_mean':[],
+        'ccf_ml_mean':[],
+        'n_units':[],
     }
 
     # all_sessions=list(decoder_results.keys())
@@ -1483,6 +1508,17 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
                 decoder_confidence_versus_response_type['cr_all_confidence'].append(CR_all_mean)
                 decoder_confidence_versus_response_type['fa_all_condfidence'].append(FA_all_mean)
 
+                # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
+                if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
+                    decoder_confidence_versus_response_type['ccf_ap_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ap_mean'])
+                    decoder_confidence_versus_response_type['ccf_dv_mean'].append(decoder_results[session_id]['results'][aa]['ccf_dv_mean'])
+                    decoder_confidence_versus_response_type['ccf_ml_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ml_mean'])
+                    decoder_confidence_versus_response_type['n_units'].append(decoder_results[session_id]['results'][aa]['n_units'])
+                else:
+                    decoder_confidence_versus_response_type['ccf_ap_mean'].append(np.nan)
+                    decoder_confidence_versus_response_type['ccf_dv_mean'].append(np.nan)
+                    decoder_confidence_versus_response_type['ccf_ml_mean'].append(np.nan)
+                    decoder_confidence_versus_response_type['n_units'].append(np.nan)
 
                 #find decoder confidence according to time/trials since last rewarded target
                 #3 arrays - time since last rewarded target, trials since last rewarded target, decoder confidence
@@ -1501,6 +1537,18 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
                 decoder_confidence_versus_trials_since_rewarded_target['trials_since_rewarded_target'].append(trials_since_rewarded_target)
                 decoder_confidence_versus_trials_since_rewarded_target['time_since_rewarded_target'].append(time_since_rewarded_target)
                 decoder_confidence_versus_trials_since_rewarded_target['confidence'].append(confidence)
+
+                # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
+                if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
+                    decoder_confidence_versus_trials_since_rewarded_target['ccf_ap_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ap_mean'])
+                    decoder_confidence_versus_trials_since_rewarded_target['ccf_dv_mean'].append(decoder_results[session_id]['results'][aa]['ccf_dv_mean'])
+                    decoder_confidence_versus_trials_since_rewarded_target['ccf_ml_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ml_mean'])
+                    decoder_confidence_versus_trials_since_rewarded_target['n_units'].append(decoder_results[session_id]['results'][aa]['n_units'])
+                else:
+                    decoder_confidence_versus_trials_since_rewarded_target['ccf_ap_mean'].append(np.nan)
+                    decoder_confidence_versus_trials_since_rewarded_target['ccf_dv_mean'].append(np.nan)
+                    decoder_confidence_versus_trials_since_rewarded_target['ccf_ml_mean'].append(np.nan)
+                    decoder_confidence_versus_trials_since_rewarded_target['n_units'].append(np.nan)
 
                 ##loop through blocks##
                 blocks=trials_middle['block_index'].unique()
@@ -1523,6 +1571,18 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
                     decoder_confidence_dprime_by_block['cross_modal_dprime'].append(block_dprime)
                     decoder_confidence_dprime_by_block['confidence'].append(block_mean)
 
+                    # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
+                    if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
+                        decoder_confidence_dprime_by_block['ccf_ap_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ap_mean'])
+                        decoder_confidence_dprime_by_block['ccf_dv_mean'].append(decoder_results[session_id]['results'][aa]['ccf_dv_mean'])
+                        decoder_confidence_dprime_by_block['ccf_ml_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ml_mean'])
+                        decoder_confidence_dprime_by_block['n_units'].append(decoder_results[session_id]['results'][aa]['n_units'])
+                    else:
+                        decoder_confidence_dprime_by_block['ccf_ap_mean'].append(np.nan)
+                        decoder_confidence_dprime_by_block['ccf_dv_mean'].append(np.nan)
+                        decoder_confidence_dprime_by_block['ccf_ml_mean'].append(np.nan)
+                        decoder_confidence_dprime_by_block['n_units'].append(np.nan)
+
                 #get confidence around the block switch
                 switch_trials=trials_middle.query('is_context_switch')
                 ##loop through switches##
@@ -1541,6 +1601,18 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
                     decoder_confidence_by_switch['dprime_before'].append(performance.query('block_index==(@switch_trial_block_index-1)')['cross_modal_dprime'].values[0])
                     decoder_confidence_by_switch['dprime_after'].append(performance.query('block_index==(@switch_trial_block_index)')['cross_modal_dprime'].values[0])
                     decoder_confidence_by_switch['confidence'].append(corrected_decision_function[switch_trial['id']-20:switch_trial['id']+30]*multiplier)
+
+                    # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
+                    if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
+                        decoder_confidence_by_switch['ccf_ap_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ap_mean'])
+                        decoder_confidence_by_switch['ccf_dv_mean'].append(decoder_results[session_id]['results'][aa]['ccf_dv_mean'])
+                        decoder_confidence_by_switch['ccf_ml_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ml_mean'])
+                        decoder_confidence_by_switch['n_units'].append(decoder_results[session_id]['results'][aa]['n_units'])
+                    else:
+                        decoder_confidence_by_switch['ccf_ap_mean'].append(np.nan)
+                        decoder_confidence_by_switch['ccf_dv_mean'].append(np.nan)
+                        decoder_confidence_by_switch['ccf_ml_mean'].append(np.nan)
+                        decoder_confidence_by_switch['n_units'].append(np.nan)
 
                 #decoder confidence before/after rewarded target, response to non-rewarded target, non-response to non-rewarded target
                 sign_corrected_decision_function=corrected_decision_function.copy()
@@ -1598,6 +1670,19 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
                     decoder_confidence_before_after_target['non_response_non_rewarded_target_plus_one'].append(np.nan)
                 decoder_confidence_before_after_target['non_response_non_target_trials'].append(sign_corrected_decision_function[non_response_non_target_trials])
                 decoder_confidence_before_after_target['non_response_non_target_trials_plus_one'].append(sign_corrected_decision_function[non_response_non_target_trials_plus_one])
+
+                # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
+                if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
+                    decoder_confidence_before_after_target['ccf_ap_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ap_mean'])
+                    decoder_confidence_before_after_target['ccf_dv_mean'].append(decoder_results[session_id]['results'][aa]['ccf_dv_mean'])
+                    decoder_confidence_before_after_target['ccf_ml_mean'].append(decoder_results[session_id]['results'][aa]['ccf_ml_mean'])
+                    decoder_confidence_before_after_target['n_units'].append(decoder_results[session_id]['results'][aa]['n_units'])
+                else:
+                    decoder_confidence_before_after_target['ccf_ap_mean'].append(np.nan)
+                    decoder_confidence_before_after_target['ccf_dv_mean'].append(np.nan)
+                    decoder_confidence_before_after_target['ccf_ml_mean'].append(np.nan)
+                    decoder_confidence_before_after_target['n_units'].append(np.nan)
+
         except:
             print('failed to load session:',session_id)
             continue
