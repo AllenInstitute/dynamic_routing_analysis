@@ -16,6 +16,10 @@ dependencies = [
     "s3fs>=2023.6.0",
     "universal-pathlib>=0.0.24",
     "npc-lims>=0.1.0",
+    "npc-sessions>=0.0.226",
+    "xarray>=2024.6.0",
+    "scikit-learn>=1.5.1",
+    "statsmodels>=0.14.2",
 ]
 requires-python = ">=3.9"
 readme = "README.md"
