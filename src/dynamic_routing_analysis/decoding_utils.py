@@ -1140,7 +1140,8 @@ def concat_decoder_results(files,savepath=None,return_table=True):
                         for sh in half_shift_inds:
                             if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
                                 temp_bal_acc.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['balanced_accuracy'])
-                        all_bal_acc[session_id][aa].append(np.array(temp_bal_acc))
+                        if len(temp_bal_acc)>0:
+                            all_bal_acc[session_id][aa].append(np.array(temp_bal_acc))
                     all_bal_acc[session_id][aa]=np.vstack(all_bal_acc[session_id][aa])
                     all_bal_acc[session_id][aa]=np.nanmean(all_bal_acc[session_id][aa],axis=0)
 
