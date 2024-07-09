@@ -5,6 +5,7 @@ import time
 import npc_lims
 import numpy as np
 import pandas as pd
+import upath
 import xarray as xr
 from sklearn.metrics import balanced_accuracy_score, classification_report
 from sklearn.model_selection import StratifiedKFold
@@ -208,7 +209,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     output['labels']=labels
 
     return output
-    
+
 
 def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,labels_as_index=False):
     #original function to decode labels from input data using linearSVC, no longer used
@@ -386,7 +387,7 @@ def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,la
 
 
 def decode_context_from_units(session,params):
-    #function to decode context from units - does not include linear shift
+    # function to decode context from units - does not include linear shift
 
     predict=params['predict']
     trnum=params['trnum']
@@ -409,11 +410,11 @@ def decode_context_from_units(session,params):
     decoder_type=params['decoder_type']
     generate_labels=params['generate_labels']
     session_id=str(session.id)
-    
+
     time_bins=np.arange(-decoder_time_before,decoder_time_after,decoder_binsize)
 
     svc_results={}
-    
+
     # make unit xarrays
     # time_before = 0.2
     # time_after = 0.5
@@ -432,12 +433,12 @@ def decode_context_from_units(session,params):
         area_counts=structure_probe['structure_probe'].value_counts()
     else:
         area_counts=units['structure'].value_counts()
-    
+
     # predict=['stim_ids','block_ids','trial_response']
     # predict=['block_ids']
 
-    #save metadata about this session & decoder params
-    # svc_results['metadata']=session.metadata 
+    # save metadata about this session & decoder params
+    # svc_results['metadata']=session.metadata
     svc_results['predict']=predict
     svc_results['trial_numbers']=trnum
     svc_results['unit_numbers']=n_units
@@ -457,24 +458,24 @@ def decode_context_from_units(session,params):
     svc_results['decoder_type']=decoder_type
     svc_results['generate_labels']=generate_labels
     svc_results['session_id']=session_id
-    
-    #loop through different labels to predict
+
+    # loop through different labels to predict
     for p in predict:
         svc_results[p]={}
-    
-        #choose what variable to predict
+
+        # choose what variable to predict
         if p=='stim_ids':
-            #exclude any trials that had opto stimulation
+            # exclude any trials that had opto stimulation
             if 'opto_power' in trials[:].columns:
                 trial_sel = trials[:].query('opto_power.isnull() and stim_name != "catch"').index
             else:
                 trial_sel = trials[:].query('stim_name != "catch"').index
-                
+
             # grab the stimulus ids
             pred_var = trials[:]['stim_name'][trial_sel].values
-    
+
         elif p=='block_ids':
-            #exclude any trials that had opto stimulation
+            # exclude any trials that had opto stimulation
             if crossval=='blockwise':
                 if 'opto_power' in trials[:].columns:
                     trial_sel = trials[:].query('opto_power.isnull()').index# and trial_index_in_block>=5').index
@@ -485,7 +486,7 @@ def decode_context_from_units(session,params):
                     trial_sel = trials[:].query('opto_power.isnull()').index# and trial_index_in_block>=5').index
                 else:
                     trial_sel = trials[:].index
-                
+
             # or, use block IDs
             if generate_labels == False:
                 pred_var = trials[:]['context_name'][trial_sel].values
@@ -504,18 +505,18 @@ def decode_context_from_units(session,params):
                 pred_var=fake_context[trial_sel]
 
         elif p=='trial_response':
-            #exclude any trials that had opto stimulation
+            # exclude any trials that had opto stimulation
             if 'opto_power' in trials[:].columns:
                 trial_sel = trials[:].query('opto_power.isnull()').index
             else:
                 trial_sel = trials[:].index
-                
-            #or, use whether mouse responded
+
+            # or, use whether mouse responded
             pred_var = trials[:]['is_response'][trial_sel].values
 
         elif p=='cr_vs_fa':
             trials=trials.query('(is_correct_reject and is_target) or (is_false_alarm and is_target)')
-            #exclude any trials that had opto stimulation
+            # exclude any trials that had opto stimulation
             if 'opto_power' in trials[:].columns:
                 trial_sel = trials[:].query('opto_power.isnull()').index
             else:
@@ -533,13 +534,13 @@ def decode_context_from_units(session,params):
         elif p=='mouse_response_context':
             trials=trials.query('(is_correct_reject and is_target) or (is_false_alarm and is_target)')
 
-            #exclude any trials that had opto stimulation
+            # exclude any trials that had opto stimulation
             if 'opto_power' in trials[:].columns:
                 trial_sel = trials[:].query('opto_power.isnull()').index
             else:
                 trial_sel = trials[:].index
-                
-            #add new labels to trials = visual_context_like_behavior, auditory_context_like_behavior
+
+            # add new labels to trials = visual_context_like_behavior, auditory_context_like_behavior
             behavior_type=[]
             for ii in range(len(trials)):
                 if ((trials.iloc[ii]['is_vis_context'] and trials.iloc[ii]['is_aud_target'] and not trials.iloc[ii]['is_response']) or
@@ -551,14 +552,13 @@ def decode_context_from_units(session,params):
             trials['behavior_type']=behavior_type
             pred_var=trials['behavior_type'][trial_sel].values
 
-
         if (crossval=='blockwise') | ('forecast' in crossval):
             if generate_labels == False:
                 crossval_index=trials[:]['block_index'][trial_sel].values
             else:
                 crossval_index=fake_block_index
 
-            #correct for the first trial of each block actually being the previous context (if using prestim time window)
+            # correct for the first trial of each block actually being the previous context (if using prestim time window)
             # context_switch_trials=trials[:].query('is_context_switch').index
             # for ct in context_switch_trials:
             #     crossval_index[ct]=crossval_index[ct]-1
@@ -571,8 +571,8 @@ def decode_context_from_units(session,params):
             area_sel = ['all']
         else:
             area_sel = ['all']+list(area_counts[area_counts>=u_min].index)
-        
-        #loop through areas
+
+        # loop through areas
         for aa in area_sel:
             if aa=='all':
                 unit_sel = units[:]['unit_id'].values
@@ -582,16 +582,16 @@ def decode_context_from_units(session,params):
                 unit_sel = units[:].query('structure==@aa')['unit_id'].values
             svc_results[p][aa]={}
             svc_results[p][aa]['n_units']=len(unit_sel)
-            
-            #loop through time bins
+
+            # loop through time bins
             for tt,t_start in enumerate(time_bins[:-1]):
                 svc_results[p][aa][tt]={}
                 for u_idx,u_num in enumerate(n_units):
                     svc_results[p][aa][tt][u_idx]={}
-                    
-                    #loop through repeats
+
+                    # loop through repeats
                     for nn in range(0,n_repeats):
-                        
+
                         if u_num=='all':
                             unit_subset = unit_sel #np.random.choice(unit_sel,len(unit_sel),replace=False)
                             if nn>0:
@@ -601,7 +601,7 @@ def decode_context_from_units(session,params):
                         else:
                             continue
 
-                        #option to balance number of labels for training
+                        # option to balance number of labels for training
                         if balance_labels:
                             subset_ind=[]
                             conds = np.unique(pred_var)
@@ -623,11 +623,10 @@ def decode_context_from_units(session,params):
                         else:
                             subset_ind=np.arange(0,len(trial_sel))
 
-
                         sel_data = trial_da.sel(time=slice(t_start,time_bins[tt+1]),
                                                 trials=trial_sel[subset_ind],
                                                 unit_id=unit_subset).mean(dim='time').values
-                        
+
                         if (crossval=='blockwise') | ('forecast' in crossval):
                             crossval_index_subset=crossval_index[subset_ind]
                         else:
@@ -647,7 +646,7 @@ def decode_context_from_units(session,params):
                                 crossval=crossval,
                                 crossval_index=crossval_index_subset,
                                 labels_as_index=labels_as_index)
-                            
+
                         elif decoder_type=='random_forest':
                             svc_results[p][aa][tt][u_idx][nn]=random_forest_decoder(
                                 input_data=sel_data.T,
@@ -667,13 +666,12 @@ def decode_context_from_units(session,params):
                         svc_results[p][aa][tt][u_idx][nn]['unit_sel_idx']=unit_subset
 
             print(aa+' done')
-            
+
     print(session.id+' done')
-    
 
-    with open(os.path.join(savepath,session.id+'_'+filename), 'wb') as handle:
-        pickle.dump(svc_results, handle, protocol=pickle.HIGHEST_PROTOCOL) 
-
+    (upath.UPath(savepath) / f"{session.id}_{filename}").write_bytes(
+        pickle.dumps(svc_results, protocol=pickle.HIGHEST_PROTOCOL)
+    )
     svc_results={}
 
 
@@ -797,13 +795,13 @@ def decode_context_from_units_all_timebins(session,params):
             
     print(session.id+' done')
     
-
-    with open(os.path.join(savepath,session.id+'_'+filename), 'wb') as handle:
-        pickle.dump(svc_results, handle, protocol=pickle.HIGHEST_PROTOCOL) 
+    (upath.UPath(savepath) / f"{session.id}_{filename}").write_bytes(
+        pickle.dumps(svc_results, protocol=pickle.HIGHEST_PROTOCOL) 
+    )
 
     svc_results={}
 
-##TODO: 
+##TODO:
 # incorporate additional parameters
 # add option to decode from timebins
 # add option to use inputs with top decoding weights (use_coefs)
@@ -1061,9 +1059,9 @@ def decode_context_with_linear_shift(session,params):
             
         print(f'finished {session_id} {aa}')
     #save results
-    with open(os.path.join(savepath,session.id+'_'+filename), 'wb') as handle:
-        pickle.dump(decoder_results, handle, protocol=pickle.HIGHEST_PROTOCOL) 
-
+    (upath.UPath(savepath) / f"{session.id}_{filename}").write_bytes(
+        pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
+    )
     print(f'finished {session_id}')
     # print(f'time elapsed: {time.time()-start_time}')
 
