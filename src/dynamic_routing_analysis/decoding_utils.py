@@ -1040,7 +1040,7 @@ def decode_context_with_linear_shift(session,params):
                         input_data=input_data[incl_inds,:]
                         labels=labels[incl_inds]
 
-                if rr==1:
+                if n_repeats==1:
                     decoder_results[session_id]['results'][aa]['shift'][sh]=linearSVC_decoder(
                             input_data=input_data,
                             labels=labels,
@@ -1048,7 +1048,7 @@ def decode_context_with_linear_shift(session,params):
                             crossval_index=None,
                             labels_as_index=True
                         )
-                elif rr>1:
+                elif n_repeats>1:
                     decoder_results[session_id]['results'][aa]['shift'][rr][sh] = decoder_helper(
                         input_data=input_data,
                         labels=labels,
@@ -1197,7 +1197,7 @@ def concat_decoder_results(files,savepath=None,return_table=True):
     linear_shift_df=pd.DataFrame(linear_shift_dict)
     if savepath is not None:
         try:
-            linear_shift_df.to_csv(savepath)
+            linear_shift_df.to_csv(os.path.join(savepath,'all_unit_linear_shift_use_more_trials.csv'))
         except Exception as e:
             print(e)
             print('error saving linear shift df')
@@ -1209,7 +1209,7 @@ def compute_significant_decoding_by_area(all_decoder_results):
     #compare DR and Templeton:
     p_threshold=0.05
 
-    DR_linear_shift_df=all_decoder_results.query('project=="DynamicRouting" and cross_modal_dprime>=1.0')
+    DR_linear_shift_df=all_decoder_results.query('project=="DynamicRouting" and n_good_blocks>=4')
     #fraction significant
     frac_sig_DR={
         'area':[],
@@ -1444,7 +1444,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
                 for sh in half_shift_inds:
                     temp_shifts=[]
                     for rr in range(n_repeats):
-                        temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['decision_function'])
+                        if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
+                            temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['decision_function'])
                     decision_function_shifts.append(np.nanmean(np.vstack(temp_shifts),axis=0))
 
                 # true_label=decoder_results[session_id]['results'][aa]['shift'][np.where(shifts==0)[0][0]]['true_label']
