@@ -163,3 +163,4 @@ cython_debug/
 
 # used in code ocean capsule:
 install.sh 
+results/
