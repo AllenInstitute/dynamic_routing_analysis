@@ -245,11 +245,11 @@ def get_structure_probe(units):
     })
 
     for aa in unique_areas:
-        unique_probes=units[:].query('structure==@aa')['group_name'].unique()
+        unique_probes=units[:].query('structure==@aa')['electrode_group_name'].unique()
 
         if len(unique_probes)>1:
             for up in unique_probes:
-                unit_ids=units[:].query('structure==@aa and group_name==@up')['unit_id'].values
+                unit_ids=units[:].query('structure==@aa and electrode_group_name==@up')['unit_id'].values
                 structure_probe.loc[structure_probe['unit_id'].isin(unit_ids),'structure_probe']=aa+'_'+up
         elif len(unique_probes)==1:
             unit_ids=units[:].query('structure==@aa')['unit_id'].values

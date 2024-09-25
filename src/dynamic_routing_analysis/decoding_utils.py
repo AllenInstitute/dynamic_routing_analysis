@@ -437,10 +437,10 @@ def decode_context_from_units(session,params):
     # time_after = 0.5
 
     trials=pd.read_parquet(
-        npc_lims.get_cache_path('trials',session.id,version='0.0.214')
+        npc_lims.get_cache_path('trials',session.id,version='latest')
     )
     units=pd.read_parquet(
-        npc_lims.get_cache_path('units',session.id,version='0.0.214')
+        npc_lims.get_cache_path('units',session.id,version='latest')
     )
 
     trial_da = spike_utils.make_neuron_time_trials_tensor(units, trials, spikes_time_before, spikes_time_after, spikes_binsize)
@@ -867,7 +867,7 @@ def decode_context_with_linear_shift(session,params):
     #load trials and units
     try:
         trials=pd.read_parquet(
-            npc_lims.get_cache_path('trials',session_id,version='0.0.214')
+            npc_lims.get_cache_path('trials',session_id)
         )
     except:
         print('no cached trials table, using npc_sessions')
@@ -880,7 +880,7 @@ def decode_context_with_linear_shift(session,params):
         #make data array
         try:
             units=pd.read_parquet(
-                npc_lims.get_cache_path('units',session_id,version='0.0.214')
+                npc_lims.get_cache_path('units',session_id)
             )
         except:
             print('no cached units table, using npc_sessions')
@@ -964,6 +964,17 @@ def decode_context_with_linear_shift(session,params):
     decoder_results[session_id]['n_units'] = n_units_input
     decoder_results[session_id]['n_repeats'] = n_repeats
 
+    decoder_results[session_id]['session_info'] = session_info
+    #keep track of which cache path was used
+    try:
+        decoder_results[session_id]['trial_cache_path'] = npc_lims.get_cache_path('trials',session_id)
+    except:
+        decoder_results[session_id]['trial_cache_path'] = ''
+    try:
+        decoder_results[session_id]['unit_cache_path'] = npc_lims.get_cache_path('units',session_id)
+    except:
+        decoder_results[session_id]['unit_cache_path'] = ''
+
     if input_data_type=='facemap':
         decoder_results[session_id]['vid_angle'] = vid_angle_facemotion
         
@@ -1016,75 +1027,81 @@ def decode_context_with_linear_shift(session,params):
             decoder_results[session_id]['results'][aa]['ccf_ml_mean']=area_units['ccf_ml'].mean()
 
         #loop through repeats
-        for rr in range(n_repeats):
-            if n_repeats>1:
-                decoder_results[session_id]['results'][aa]['shift'][rr]={}
-
-            if input_data_type=='spikes':
-                if n_units_input=='all':
-                    sel_units=area_unit_ids
-                # elif use_coefs:
-
-                else:
-                    sel_units=np.random.choice(area_unit_ids,n_units_input,replace=False)
-            elif input_data_type=='facemap':
-                if n_units_input=='all':
-                    sel_units=np.arange(0,keep_n_SVDs)
-                # elif use_coefs:
-
-                else:
-                    sel_units=np.random.choice(np.arange(0,keep_n_SVDs),n_units_input,replace=False)
-
-            elif input_data_type=='LP':
-                
-                sel_units=np.arange(0, len(LP_parts_to_keep))
-
-            decoder_results[session_id]['results'][aa]['shift'][rr]['sel_units']=sel_units
-
-            #loop through shifts
-            for sh,shift in enumerate(shifts):
-                
-                labels=middle_4_block_trials['context_name'].values
+        for nunits in n_units_input:
+            decoder_results[session_id]['results'][aa]['shift'][nunits]={}
+            for rr in range(n_repeats):
+                if n_repeats>1:
+                    decoder_results[session_id]['results'][aa]['shift'][nunits][rr]={}
 
                 if input_data_type=='spikes':
-                    shifted_trial_da = trial_da.sel(trials=middle_4_blocks+shift,unit_id=sel_units).mean(dim='time').values
-                    input_data=shifted_trial_da.T
+                    if nunits=='all':
+                        sel_units=area_unit_ids
+                    # elif use_coefs:
 
-                elif input_data_type=='facemap' or input_data_type == 'LP':
-                    trials_used=middle_4_blocks+shift
-                    shift_exists=[]
-                    for tt in trials_used:
-                        if tt<mean_trial_behav_SVD[aa].shape[1]:
-                            shift_exists.append(True)
-                        else:
-                            shift_exists.append(False)
-                    shift_exists=np.array(shift_exists)
-                    trials_used=trials_used[shift_exists]
+                    else:
+                        sel_units=np.random.choice(area_unit_ids,nunits,replace=False)
+                elif input_data_type=='facemap':
+                    if nunits=='all':
+                        sel_units=np.arange(0,keep_n_SVDs)
+                    # elif use_coefs:
 
-                    SVD=mean_trial_behav_SVD[aa][:,trials_used]
-                    input_data=SVD.T
+                    else:
+                        sel_units=np.random.choice(np.arange(0,keep_n_SVDs),nunits,replace=False)
 
-                    if np.sum(np.isnan(input_data))>0:
-                        incl_inds=~np.isnan(input_data).any(axis=1)
-                        input_data=input_data[incl_inds,:]
-                        labels=labels[incl_inds]
+                elif input_data_type=='LP':
+                    
+                    sel_units=np.arange(0, len(LP_parts_to_keep))
 
-                if n_repeats==1:
-                    decoder_results[session_id]['results'][aa]['shift'][sh]=linearSVC_decoder(
-                            input_data=input_data,
-                            labels=labels,
-                            crossval='5_fold',
-                            crossval_index=None,
-                            labels_as_index=True
-                        )
-                elif n_repeats>1:
-                    decoder_results[session_id]['results'][aa]['shift'][rr][sh] = decoder_helper(
+                decoder_results[session_id]['results'][aa]['shift'][rr]['sel_units']=sel_units
+
+                #loop through shifts
+                for sh,shift in enumerate(shifts):
+                    
+                    labels=middle_4_block_trials['context_name'].values
+
+                    if input_data_type=='spikes':
+                        shifted_trial_da = trial_da.sel(trials=middle_4_blocks+shift,unit_id=sel_units).mean(dim='time').values
+                        input_data=shifted_trial_da.T
+
+                    elif input_data_type=='facemap' or input_data_type == 'LP':
+                        trials_used=middle_4_blocks+shift
+                        shift_exists=[]
+                        for tt in trials_used:
+                            if tt<mean_trial_behav_SVD[aa].shape[1]:
+                                shift_exists.append(True)
+                            else:
+                                shift_exists.append(False)
+                        shift_exists=np.array(shift_exists)
+                        trials_used=trials_used[shift_exists]
+
+                        SVD=mean_trial_behav_SVD[aa][:,trials_used]
+                        input_data=SVD.T
+
+                        if np.sum(np.isnan(input_data))>0:
+                            incl_inds=~np.isnan(input_data).any(axis=1)
+                            input_data=input_data[incl_inds,:]
+                            labels=labels[incl_inds]
+
+                    # if n_repeats==1: #was for backwards compatibility, can remove
+                    #     decoder_results[session_id]['results'][aa]['shift'][nunits][sh]=linearSVC_decoder(
+                    #             input_data=input_data,
+                    #             labels=labels,
+                    #             crossval='5_fold',
+                    #             crossval_index=None,
+                    #             labels_as_index=True
+                    #         )
+                    # elif n_repeats>1:
+
+                    decoder_results[session_id]['results'][aa]['shift'][nunits][rr][sh] = decoder_helper(
                         input_data=input_data,
                         labels=labels,
                         decoder_type=decoder_type,
                         crossval=crossval,
                         crossval_index=None,
                         labels_as_index=labels_as_index)
+                        
+                if nunits=='all':
+                    break
             
         print(f'finished {session_id} {aa}')
     #save results
@@ -1101,15 +1118,12 @@ def concat_decoder_results(files,savepath=None,return_table=True):
     n_repeats=25
 
     all_bal_acc={}
+
     linear_shift_dict={
         'session_id':[],
         'project':[],
         'area':[],
-        'true_accuracy':[],
-        'null_accuracy_mean':[],
-        'null_accuracy_median':[],
-        'null_accuracy_std':[],
-        'p_value':[],
+        
         'ccf_ap_mean':[],
         'ccf_dv_mean':[],
         'ccf_ml_mean':[],
@@ -1119,9 +1133,22 @@ def concat_decoder_results(files,savepath=None,return_table=True):
         'n_good_blocks':[],
     }
 
+    #assume first file has same nunits as all others
+    decoder_results=pickle.load(open(files[0],'rb'))
+    session_id=list(decoder_results.keys())[0]
+    nunits_global=decoder_results[session_id]['n_units']
+
+    for nu in nunits_global:
+        linear_shift_dict['true_accuracy_'+str(nu)]=[]
+        linear_shift_dict['null_accuracy_mean_'+str(nu)]=[]
+        linear_shift_dict['null_accuracy_median_'+str(nu)]=[]
+        linear_shift_dict['null_accuracy_std_'+str(nu)]=[]
+        linear_shift_dict['p_value_'+str(nu)]=[]
+
+
     #loop through sessions
     for file in files:
-        try:
+        # try:
             decoder_results=pickle.load(open(file,'rb'))
             session_id=list(decoder_results.keys())[0]
             session_info=npc_lims.get_session_info(session_id)
@@ -1137,6 +1164,11 @@ def concat_decoder_results(files,savepath=None,return_table=True):
                 continue
 
             all_bal_acc[session_id]={}
+
+            nunits=decoder_results[session_id]['n_units']
+            if nunits!=nunits_global:
+                print('WARNING, session '+session_id+' has different n_units; skipping')
+                continue
 
             shifts=decoder_results[session_id]['shifts']
             #extract results according to the trial shift
@@ -1161,16 +1193,22 @@ def concat_decoder_results(files,savepath=None,return_table=True):
             #save balanced accuracy by shift
             for aa in areas:
                 if aa in decoder_results[session_id]['results']:
-                    all_bal_acc[session_id][aa]=[]
-                    for rr in range(n_repeats):
-                        temp_bal_acc=[]
-                        for sh in half_shift_inds:
-                            if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
-                                temp_bal_acc.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['balanced_accuracy_test'])
-                        if len(temp_bal_acc)>0:
-                            all_bal_acc[session_id][aa].append(np.array(temp_bal_acc))
-                    all_bal_acc[session_id][aa]=np.vstack(all_bal_acc[session_id][aa])
-                    all_bal_acc[session_id][aa]=np.nanmean(all_bal_acc[session_id][aa],axis=0)
+                    all_bal_acc[session_id][aa]={}
+                    ### ADD LOOP FOR NUNITS ###
+                    for nu in nunits:
+                        all_bal_acc[session_id][aa][nu]=[]
+                        for rr in range(n_repeats):
+                            if rr in decoder_results[session_id]['results'][aa]['shift'][nu].keys():
+                                temp_bal_acc=[]
+                            else:
+                                continue
+                            for sh in half_shift_inds:
+                                if sh in list(decoder_results[session_id]['results'][aa]['shift'][nu][rr].keys()):
+                                    temp_bal_acc.append(decoder_results[session_id]['results'][aa]['shift'][nu][rr][sh]['balanced_accuracy_test'])
+                            if len(temp_bal_acc)>0:
+                                all_bal_acc[session_id][aa][nu].append(np.array(temp_bal_acc))
+                        all_bal_acc[session_id][aa][nu]=np.vstack(all_bal_acc[session_id][aa][nu])
+                        all_bal_acc[session_id][aa][nu]=np.nanmean(all_bal_acc[session_id][aa][nu],axis=0)
 
                     if type(aa)==str:
                         if '_probe' in aa:
@@ -1182,25 +1220,28 @@ def concat_decoder_results(files,savepath=None,return_table=True):
                     else:
                         area_name=aa
                     
-                    true_acc_ind=np.where(half_shifts==1)[0][0]
-                    null_acc_ind=np.where(half_shifts!=1)[0]
-                    true_accuracy=all_bal_acc[session_id][aa][true_acc_ind]
-                    null_accuracy_mean=np.mean(all_bal_acc[session_id][aa][null_acc_ind])
-                    null_accuracy_median=np.median(all_bal_acc[session_id][aa][null_acc_ind])
-                    null_accuracy_std=np.std(all_bal_acc[session_id][aa][null_acc_ind])
-                    p_value=np.mean(all_bal_acc[session_id][aa][null_acc_ind]>=true_accuracy)
+                    ### LOOP THROUGH NUNITS TO APPEND TO DICT ###
+                    
+                    for nu in nunits:
+                        true_acc_ind=np.where(half_shifts==1)[0][0]
+                        null_acc_ind=np.where(half_shifts!=1)[0]
+                        true_accuracy=all_bal_acc[session_id][aa][nu][true_acc_ind]
+                        null_accuracy_mean=np.mean(all_bal_acc[session_id][aa][nu][null_acc_ind])
+                        null_accuracy_median=np.median(all_bal_acc[session_id][aa][nu][null_acc_ind])
+                        null_accuracy_std=np.std(all_bal_acc[session_id][aa][nu][null_acc_ind])
+                        p_value=np.mean(all_bal_acc[session_id][aa][nu][null_acc_ind]>=true_accuracy)
+
+                        linear_shift_dict['true_accuracy_'+str(nu)].append(true_accuracy)
+                        linear_shift_dict['null_accuracy_mean_'+str(nu)].append(null_accuracy_mean)
+                        linear_shift_dict['null_accuracy_median_'+str(nu)].append(null_accuracy_median)
+                        linear_shift_dict['null_accuracy_std_'+str(nu)].append(null_accuracy_std)
+                        linear_shift_dict['p_value_'+str(nu)].append(p_value)
 
                     #make big dict/dataframe for this:
                     #save true decoding, mean/median null decoding, and p value for each area/probe
                     linear_shift_dict['session_id'].append(session_id)
                     linear_shift_dict['project'].append(session_info.project)
                     linear_shift_dict['area'].append(area_name)
-                    linear_shift_dict['true_accuracy'].append(true_accuracy)
-                    linear_shift_dict['null_accuracy_mean'].append(null_accuracy_mean)
-                    linear_shift_dict['null_accuracy_median'].append(null_accuracy_median)
-                    linear_shift_dict['null_accuracy_std'].append(null_accuracy_std)
-                    linear_shift_dict['p_value'].append(p_value)
-
                     linear_shift_dict['cross_modal_dprime'].append(performance['cross_modal_dprime'].mean())
                     linear_shift_dict['n_good_blocks'].append(np.sum(performance['cross_modal_dprime']>=1.0))
 
@@ -1217,10 +1258,10 @@ def concat_decoder_results(files,savepath=None,return_table=True):
                         linear_shift_dict['ccf_ml_mean'].append(np.nan)
                         linear_shift_dict['n_units'].append(np.nan)
                         linear_shift_dict['probe'].append(np.nan)
-        except Exception as e:
-            print(e)
-            print('error with session: '+session_id)
-            continue
+        # except Exception as e:
+        #     print(e)
+        #     print('error with session: '+session_id)
+        #     continue
 
     
     linear_shift_df=pd.DataFrame(linear_shift_dict)
@@ -1235,6 +1276,16 @@ def concat_decoder_results(files,savepath=None,return_table=True):
 
 
 def compute_significant_decoding_by_area(all_decoder_results):
+    ###TODO: incorporate different numer of units
+
+    #determine different numbers of units from all_decoder_results
+    n_units=[]
+    for col in all_decoder_results.filter(like='true_accuracy').columns.values:
+        if len(col.split('_'))>2:
+            n_units.append('_'+col.split('_')[2])
+        else:
+            n_units.append('')
+
     #compare DR and Templeton:
     p_threshold=0.05
 
@@ -1242,77 +1293,116 @@ def compute_significant_decoding_by_area(all_decoder_results):
     #fraction significant
     frac_sig_DR={
         'area':[],
-        'frac_sig_DR':[],
         'n_expts_DR':[],
     }
+    for nu in n_units:
+        frac_sig_DR['frac_sig_DR'+nu]=[]
+
     for area in DR_linear_shift_df['area'].unique():
         frac_sig_DR['area'].append(area)
-        frac_sig_DR['frac_sig_DR'].append(np.mean(DR_linear_shift_df.query('area==@area')['p_value']<p_threshold))
         frac_sig_DR['n_expts_DR'].append(len(DR_linear_shift_df.query('area==@area')))
+        for nu in n_units:
+            frac_sig_DR['frac_sig_DR'+nu].append(np.mean(DR_linear_shift_df.query('area==@area')['p_value'+nu]<p_threshold))
+        
     frac_sig_DR_df=pd.DataFrame(frac_sig_DR)
     #diff from null
     diff_from_null_DR={
         'area':[],
-        'diff_from_null_mean_DR':[],
-        'diff_from_null_median_DR':[],
-        'true_accuracy_DR':[],
-        'null_median_DR':[],
         'n_expts_DR':[],
     }
+    for nu in n_units:
+        diff_from_null_DR['diff_from_null_mean_DR'+nu]=[]
+        diff_from_null_DR['diff_from_null_median_DR'+nu]=[]
+        diff_from_null_DR['diff_from_null_sem_DR'+nu]=[]
+        diff_from_null_DR['true_accuracy_DR'+nu]=[]
+        diff_from_null_DR['true_accuracy_sem_DR'+nu]=[]
+        diff_from_null_DR['null_median_DR'+nu]=[]
+        diff_from_null_DR['null_median_sem_DR'+nu]=[]
+        
+                          
     for area in DR_linear_shift_df['area'].unique():
         diff_from_null_DR['area'].append(area)
-        diff_from_null_DR['diff_from_null_mean_DR'].append((DR_linear_shift_df.query('area==@area')['true_accuracy']-
-                                                    DR_linear_shift_df.query('area==@area')['null_accuracy_mean']).mean())
-        diff_from_null_DR['diff_from_null_median_DR'].append((DR_linear_shift_df.query('area==@area')['true_accuracy']-
-                                                        DR_linear_shift_df.query('area==@area')['null_accuracy_median']).median())
-        diff_from_null_DR['true_accuracy_DR'].append(DR_linear_shift_df.query('area==@area')['true_accuracy'].median())
-        diff_from_null_DR['null_median_DR'].append(DR_linear_shift_df.query('area==@area')['null_accuracy_median'].median())
         diff_from_null_DR['n_expts_DR'].append(len(DR_linear_shift_df.query('area==@area')))
+        for nu in n_units:
+            diff_from_null_DR['diff_from_null_mean_DR'+nu].append((DR_linear_shift_df.query('area==@area')['true_accuracy'+nu]-
+                                                        DR_linear_shift_df.query('area==@area')['null_accuracy_mean'+nu]).mean())
+            diff_from_null_DR['diff_from_null_median_DR'+nu].append((DR_linear_shift_df.query('area==@area')['true_accuracy'+nu]-
+                                                            DR_linear_shift_df.query('area==@area')['null_accuracy_median'+nu]).median())
+            diff_from_null_DR['diff_from_null_sem_DR'+nu].append((DR_linear_shift_df.query('area==@area')['true_accuracy'+nu]-
+                                                                  DR_linear_shift_df.query('area==@area')['null_accuracy_mean'+nu]).sem())
+            diff_from_null_DR['true_accuracy_DR'+nu].append(DR_linear_shift_df.query('area==@area')['true_accuracy'+nu].median())
+            diff_from_null_DR['true_accuracy_sem_DR'+nu].append(DR_linear_shift_df.query('area==@area')['true_accuracy'+nu].sem())
+            diff_from_null_DR['null_median_DR'+nu].append(DR_linear_shift_df.query('area==@area')['null_accuracy_median'+nu].median())
+            diff_from_null_DR['null_median_sem_DR'+nu].append(DR_linear_shift_df.query('area==@area')['null_accuracy_median'+nu].sem())      
 
     diff_from_null_DR_df=pd.DataFrame(diff_from_null_DR)
-    diff_from_null_DR_df
-
+    # diff_from_null_DR_df
 
     Templeton_linear_shift_df=all_decoder_results.query('project.str.contains("Templeton")')
+    
+    # if len(Templeton_linear_shift_df)>0:
+
     #fraction significant
     frac_sig_Templ={
         'area':[],
-        'frac_sig_Templ':[],
         'n_expts_Templ':[],
     }
+
+    for nu in n_units:
+        frac_sig_Templ['frac_sig_Templ'+nu]=[]
     for area in Templeton_linear_shift_df['area'].unique():
         frac_sig_Templ['area'].append(area)
-        frac_sig_Templ['frac_sig_Templ'].append(np.mean(Templeton_linear_shift_df.query('area==@area')['p_value']<p_threshold))
         frac_sig_Templ['n_expts_Templ'].append(len(Templeton_linear_shift_df.query('area==@area')))
+        for nu in n_units:
+            frac_sig_Templ['frac_sig_Templ'+nu].append(np.mean(Templeton_linear_shift_df.query('area==@area')['p_value'+nu]<p_threshold))
+        
     frac_sig_Templ_df=pd.DataFrame(frac_sig_Templ)
     #diff from null
     diff_from_null_Templ={
         'area':[],
-        'diff_from_null_mean_Templ':[],
-        'diff_from_null_median_Templ':[],
-        'true_accuracy_Templ':[],
-        'null_median_Templ':[],
         'n_expts_Templ':[],
     }
+    for nu in n_units:
+        diff_from_null_Templ['diff_from_null_mean_Templ'+nu]=[]
+        diff_from_null_Templ['diff_from_null_median_Templ'+nu]=[]
+        diff_from_null_Templ['diff_from_null_sem_Templ'+nu]=[]
+        diff_from_null_Templ['true_accuracy_Templ'+nu]=[]
+        diff_from_null_Templ['true_accuracy_sem_Templ'+nu]=[]
+        diff_from_null_Templ['null_median_Templ'+nu]=[]
+        diff_from_null_Templ['null_median_sem_Templ'+nu]=[]
+
     for area in Templeton_linear_shift_df['area'].unique():
         diff_from_null_Templ['area'].append(area)
-        diff_from_null_Templ['diff_from_null_mean_Templ'].append((Templeton_linear_shift_df.query('area==@area')['true_accuracy']-
-                                                    Templeton_linear_shift_df.query('area==@area')['null_accuracy_mean']).mean())
-        diff_from_null_Templ['diff_from_null_median_Templ'].append((Templeton_linear_shift_df.query('area==@area')['true_accuracy']-
-                                                        Templeton_linear_shift_df.query('area==@area')['null_accuracy_median']).median())
-        diff_from_null_Templ['true_accuracy_Templ'].append(Templeton_linear_shift_df.query('area==@area')['true_accuracy'].median())
-        diff_from_null_Templ['null_median_Templ'].append(Templeton_linear_shift_df.query('area==@area')['null_accuracy_median'].median())
         diff_from_null_Templ['n_expts_Templ'].append(len(Templeton_linear_shift_df.query('area==@area')))
+        for nu in n_units:
+            diff_from_null_Templ['diff_from_null_mean_Templ'+nu].append((Templeton_linear_shift_df.query('area==@area')['true_accuracy'+nu]-
+                                                        Templeton_linear_shift_df.query('area==@area')['null_accuracy_mean'+nu]).mean())
+            diff_from_null_Templ['diff_from_null_median_Templ'+nu].append((Templeton_linear_shift_df.query('area==@area')['true_accuracy'+nu]-
+                                                            Templeton_linear_shift_df.query('area==@area')['null_accuracy_median'+nu]).median())
+            diff_from_null_Templ['diff_from_null_sem_Templ'+nu].append((Templeton_linear_shift_df.query('area==@area')['true_accuracy'+nu]-
+                                                                    Templeton_linear_shift_df.query('area==@area')['null_accuracy_mean'+nu]).sem())
+            diff_from_null_Templ['true_accuracy_Templ'+nu].append(Templeton_linear_shift_df.query('area==@area')['true_accuracy'+nu].median())
+            diff_from_null_Templ['true_accuracy_sem_Templ'+nu].append(Templeton_linear_shift_df.query('area==@area')['true_accuracy'+nu].sem())
+            diff_from_null_Templ['null_median_Templ'+nu].append(Templeton_linear_shift_df.query('area==@area')['null_accuracy_median'+nu].median())
+            diff_from_null_Templ['null_median_sem_Templ'+nu].append(Templeton_linear_shift_df.query('area==@area')['null_accuracy_median'+nu].sem())
+        
     diff_from_null_Templ_df=pd.DataFrame(diff_from_null_Templ)
 
 
     all_frac_sig_df=pd.merge(frac_sig_DR_df,frac_sig_Templ_df,on='area',how='outer')
     all_diff_from_null_df=pd.merge(diff_from_null_DR_df,diff_from_null_Templ_df,on='area',how='outer')
 
+    # else:
+    #     all_frac_sig_df=frac_sig_DR_df
+    #     all_diff_from_null_df=diff_from_null_DR_df
+
     return all_frac_sig_df,all_diff_from_null_df
 
 
 def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
+    
+    ###TODO: incorporate different numer of units
+    
     #load sessions as we go
 
     #one big loop
