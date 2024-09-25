@@ -72,6 +72,11 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     test_trials=[]
     dec_func_all=[]
     models=[]
+    cr_dict_train = []
+    balanced_accuracy_train = []
+
+    cr_dict_test = []
+    balanced_accuracy_test = []
 
     #make train, test splits based on block number
     if crossval=='blockwise':
@@ -150,12 +155,18 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         
         clf.fit(X[train],y[train])
         prediction=clf.predict(X[test])
+        cr_dict_train.append(classification_report(y[train], clf.predict(X[train]), output_dict=True))
+        balanced_accuracy_train.append(balanced_accuracy_score(y[train], clf.predict(X[train]),
+                                                               sample_weight=None, adjusted=False))
+
+        cr_dict_test.append(classification_report(y[test], clf.predict(X[test]), output_dict=True))
+        balanced_accuracy_test.append(balanced_accuracy_score(y[test], clf.predict(X[test]),
+                                                               sample_weight=None, adjusted=False))
+
         decision_function=clf.decision_function(X[test])
         ypred_all.append(prediction)
-        ypred[test] = prediction
         ypred_train.append(clf.predict(X[train]))
         ytrue_train.append(y[train])
-        y_dec_func[test] = decision_function
         dec_func_all.append(decision_function)
         tidx_used.append([test])
         classes.append(clf.classes_)
@@ -164,11 +175,6 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         train_trials.append(train)
         test_trials.append(test)
 
-        if decoder_type == 'LDA' or decoder_type == 'linearSVC':
-            coefs.append(clf.coef_)
-        else:
-            coefs.append(np.full((X.shape[1]), fill_value=np.nan))
-
         if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression':
             ypred_proba[test,:] = clf.predict_proba(X[test])
         else:
@@ -176,17 +182,22 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
         models.append(clf)
 
-    cr_dict=classification_report(y, ypred, output_dict=True)
-    balanced_accuracy=balanced_accuracy_score(y, ypred, sample_weight=None, adjusted=False)
+    clf.fit(X, y)
+    y_dec_func = clf.decision_function(X)
+    ypred = clf.predict(X)
 
-    cr_dict_train=classification_report(np.hstack(ytrue_train), np.hstack(ypred_train), output_dict=True)
-    balanced_accuracy_train=balanced_accuracy_score(np.hstack(ytrue_train), np.hstack(ypred_train), sample_weight=None, adjusted=False)
+    if decoder_type == 'LDA' or decoder_type == 'linearSVC':
+        coefs = clf.coef_
+    else:
+        coefs = np.full((X.shape[1]), fill_value=np.nan)
 
-    output['cr']=cr_dict
+    output['cr']=cr_dict_test
+
     output['pred_label']=ypred
     output['true_label']=y
     output['pred_label_all']=ypred_all
     output['trials_used']=tidx_used
+
     output['decision_function']=y_dec_func
     output['decision_function_all']=dec_func_all
     output['predict_proba']=ypred_proba
@@ -194,14 +205,17 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     output['classes']=classes
     output['intercept']=intercept
     output['params']=params
-    output['balanced_accuracy']=balanced_accuracy
+    output['balanced_accuracy_test']=np.nanmean(balanced_accuracy_test)
     
     output['pred_label_train']=np.hstack(ypred_train)
     output['true_label_train']=np.hstack(ytrue_train)
+
     output['cr_train']=cr_dict_train
     output['balanced_accuracy_train']=balanced_accuracy_train
+
     output['train_trials']=train_trials
     output['test_trials']=test_trials
+
     output['models']=models
     output['scaler']=scaler
     output['label_names']=unique_labels
@@ -213,6 +227,9 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
 def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,labels_as_index=False):
     #original function to decode labels from input data using linearSVC, no longer used
+    
+    # clean input data
+    
     
     from sklearn import svm
     output={}
@@ -810,11 +827,13 @@ def decode_context_with_linear_shift(session,params):
     decoder_results={}
 
     input_data_type=params['input_data_type']
-    vid_angle=params['vid_angle']
+    vid_angle_facemotion =params['vid_angle_facemotion']
+    vid_angle_LP = params['vid_angle_LP']
     central_section=params['central_section']
     exclude_cue_trials=params['exclude_cue_trials']
     n_unit_threshold=params['n_unit_threshold']
     keep_n_SVDs=params['keep_n_SVDs']
+    LP_parts_to_keep = params['LP_parts_to_keep']
 
     # predict=params['predict']
     # trnum=params['trnum']
@@ -880,9 +899,12 @@ def decode_context_with_linear_shift(session,params):
 
     elif input_data_type=='facemap':
         # mean_trial_behav_SVD,mean_trial_behav_motion = load_facemap_data(session,session_info,trials,vid_angle)
-        mean_trial_behav_SVD = data_utils.load_facemap_data(session,session_info,trials,vid_angle,keep_n_SVDs)
-    
-    
+        mean_trial_behav_SVD = data_utils.load_facemap_data(session,session_info,trials,vid_angle_facemotion,keep_n_SVDs)
+
+    # Shailaja
+    elif input_data_type == 'LP':
+        mean_trial_behav_SVD = data_utils.load_LP_data(session, trials, vid_angle_LP, LP_parts_to_keep)
+
     #make fake blocks for templeton sessions
     if 'Templeton' in session_info.project:
         start_time=trials['start_time'].iloc[0]
@@ -943,7 +965,10 @@ def decode_context_with_linear_shift(session,params):
     decoder_results[session_id]['n_repeats'] = n_repeats
 
     if input_data_type=='facemap':
-        decoder_results[session_id]['vid_angle'] = vid_angle
+        decoder_results[session_id]['vid_angle'] = vid_angle_facemotion
+        
+    if input_data_type=='LP':
+        decoder_results[session_id]['vid_angle'] = vid_angle_LP
     decoder_results[session_id]['trials'] = trials
     decoder_results[session_id]['results'] = {}
 
@@ -951,7 +976,7 @@ def decode_context_with_linear_shift(session,params):
     if input_data_type=='spikes':
         areas=units['structure'].unique()
         areas=np.concatenate([areas,['all']])
-    elif input_data_type=='facemap':
+    elif input_data_type=='facemap' or input_data_type=='LP':
         # areas = list(mean_trial_behav_SVD.keys())
         areas=[0]
 
@@ -1010,6 +1035,10 @@ def decode_context_with_linear_shift(session,params):
                 else:
                     sel_units=np.random.choice(np.arange(0,keep_n_SVDs),n_units_input,replace=False)
 
+            elif input_data_type=='LP':
+                
+                sel_units=np.arange(0, len(LP_parts_to_keep))
+
             decoder_results[session_id]['results'][aa]['shift'][rr]['sel_units']=sel_units
 
             #loop through shifts
@@ -1021,7 +1050,7 @@ def decode_context_with_linear_shift(session,params):
                     shifted_trial_da = trial_da.sel(trials=middle_4_blocks+shift,unit_id=sel_units).mean(dim='time').values
                     input_data=shifted_trial_da.T
 
-                elif input_data_type=='facemap':
+                elif input_data_type=='facemap' or input_data_type == 'LP':
                     trials_used=middle_4_blocks+shift
                     shift_exists=[]
                     for tt in trials_used:
@@ -1137,7 +1166,7 @@ def concat_decoder_results(files,savepath=None,return_table=True):
                         temp_bal_acc=[]
                         for sh in half_shift_inds:
                             if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
-                                temp_bal_acc.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['balanced_accuracy'])
+                                temp_bal_acc.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['balanced_accuracy_test'])
                         if len(temp_bal_acc)>0:
                             all_bal_acc[session_id][aa].append(np.array(temp_bal_acc))
                     all_bal_acc[session_id][aa]=np.vstack(all_bal_acc[session_id][aa])
@@ -1308,6 +1337,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
         'incorrect_confidence':[],
         'cr_all_confidence':[],
         'fa_all_condfidence':[],
+        'hit_all_confidence':[],
         'ccf_ap_mean':[],
         'ccf_dv_mean':[],
         'ccf_ml_mean':[],
@@ -1484,8 +1514,13 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
 
                 CR_all_mean=np.mean(np.hstack([corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==True and is_response==False').index.values],
                                                 -corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==False and is_response==False').index.values]]))
+
                 FA_all_mean=np.mean(np.hstack([corrected_decision_function[trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False and is_vis_context==True and is_response==True').index.values],
                                                 -corrected_decision_function[trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False and is_vis_context==False and is_response==True').index.values]]))
+
+                HIT_all_mean=np.mean(np.hstack([corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==True and is_response==True').index.values],
+                                                -corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==False and is_response==True').index.values]]))
+
 
                 #append to table
                 decoder_confidence_versus_response_type['session'].append(session_id)
@@ -1512,6 +1547,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
                 decoder_confidence_versus_response_type['incorrect_confidence'].append(incorrect_mean)
                 decoder_confidence_versus_response_type['cr_all_confidence'].append(CR_all_mean)
                 decoder_confidence_versus_response_type['fa_all_condfidence'].append(FA_all_mean)
+                decoder_confidence_versus_response_type['hit_all_confidence'].append(HIT_all_mean)
 
                 # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
                 if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
