@@ -859,11 +859,9 @@ def decode_context_with_linear_shift(session,params):
     # generate_labels=params['generate_labels']
     session_id=str(session.id)
 
-    ##TODO: change to directly input trials and units
-    #make helper functions to grab data? load_utils or something?
-
     session_info=npc_lims.get_session_info(session)
 
+    ##TODO: change data loading to use helper functions
     #load trials and units
     try:
         trials=pd.read_parquet(
@@ -892,10 +890,6 @@ def decode_context_with_linear_shift(session,params):
         
         #make trial data array for baseline activity
         trial_da = spike_utils.make_neuron_time_trials_tensor(units, trials, spikes_time_before, spikes_time_after, spikes_binsize)
-
-        # if use_coefs:
-        #     load coef dataframe
-        #     query for this session
 
     elif input_data_type=='facemap':
         # mean_trial_behav_SVD,mean_trial_behav_motion = load_facemap_data(session,session_info,trials,vid_angle)
@@ -996,10 +990,6 @@ def decode_context_with_linear_shift(session,params):
     for aa in areas:
         #make shifted trial data array
         if input_data_type=='spikes':
-            # if use_coefs:
-            #     find top n_units_input by area rank
-                # if area==all, use session rank to choose units
-            #else:
             if aa == 'all':
                 area_units=units
             else:
@@ -1036,15 +1026,11 @@ def decode_context_with_linear_shift(session,params):
                 if input_data_type=='spikes':
                     if nunits=='all':
                         sel_units=area_unit_ids
-                    # elif use_coefs:
-
                     else:
                         sel_units=np.random.choice(area_unit_ids,nunits,replace=False)
                 elif input_data_type=='facemap':
                     if nunits=='all':
                         sel_units=np.arange(0,keep_n_SVDs)
-                    # elif use_coefs:
-
                     else:
                         sel_units=np.random.choice(np.arange(0,keep_n_SVDs),nunits,replace=False)
 
@@ -1276,7 +1262,6 @@ def concat_decoder_results(files,savepath=None,return_table=True):
 
 
 def compute_significant_decoding_by_area(all_decoder_results):
-    ###TODO: incorporate different numer of units
 
     #determine different numbers of units from all_decoder_results
     n_units=[]
@@ -1336,11 +1321,8 @@ def compute_significant_decoding_by_area(all_decoder_results):
             diff_from_null_DR['null_median_sem_DR'+nu].append(DR_linear_shift_df.query('area==@area')['null_accuracy_median'+nu].sem())      
 
     diff_from_null_DR_df=pd.DataFrame(diff_from_null_DR)
-    # diff_from_null_DR_df
 
     Templeton_linear_shift_df=all_decoder_results.query('project.str.contains("Templeton")')
-    
-    # if len(Templeton_linear_shift_df)>0:
 
     #fraction significant
     frac_sig_Templ={
@@ -1388,13 +1370,8 @@ def compute_significant_decoding_by_area(all_decoder_results):
         
     diff_from_null_Templ_df=pd.DataFrame(diff_from_null_Templ)
 
-
     all_frac_sig_df=pd.merge(frac_sig_DR_df,frac_sig_Templ_df,on='area',how='outer')
     all_diff_from_null_df=pd.merge(diff_from_null_DR_df,diff_from_null_Templ_df,on='area',how='outer')
-
-    # else:
-    #     all_frac_sig_df=frac_sig_DR_df
-    #     all_diff_from_null_df=diff_from_null_DR_df
 
     return all_frac_sig_df,all_diff_from_null_df
 

@@ -229,12 +229,3 @@ def load_LP_data(session, trials, vid_angle, LP_parts_to_keep=None):
 
     return mean_trial_behav_SVD
 
-
-import npc_lims
-
-npc_lims.process_capsule_or_pipeline_queue(
-    "59433338-4509-4d3f-9f53-44669c825143",
-    "qc_LP_videos",
-    create_data_assets_from_results=False,
-    
-)
