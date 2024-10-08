@@ -961,11 +961,11 @@ def decode_context_with_linear_shift(session,params):
     decoder_results[session_id]['session_info'] = session_info
     #keep track of which cache path was used
     try:
-        decoder_results[session_id]['trial_cache_path'] = npc_lims.get_cache_path('trials',session_id)
+        decoder_results[session_id]['trial_cache_path'] = npc_lims.get_cache_path('trials',session_id,version='any')
     except:
         decoder_results[session_id]['trial_cache_path'] = ''
     try:
-        decoder_results[session_id]['unit_cache_path'] = npc_lims.get_cache_path('units',session_id)
+        decoder_results[session_id]['unit_cache_path'] = npc_lims.get_cache_path('units',session_id,version='any')
     except:
         decoder_results[session_id]['unit_cache_path'] = ''
 
@@ -1134,7 +1134,7 @@ def concat_decoder_results(files,savepath=None,return_table=True):
 
     #loop through sessions
     for file in files:
-        # try:
+        try:
             decoder_results=pickle.load(open(file,'rb'))
             session_id=list(decoder_results.keys())[0]
             session_info=npc_lims.get_session_info(session_id)
@@ -1244,10 +1244,10 @@ def concat_decoder_results(files,savepath=None,return_table=True):
                         linear_shift_dict['ccf_ml_mean'].append(np.nan)
                         linear_shift_dict['n_units'].append(np.nan)
                         linear_shift_dict['probe'].append(np.nan)
-        # except Exception as e:
-        #     print(e)
-        #     print('error with session: '+session_id)
-        #     continue
+        except Exception as e:
+            print(e)
+            print('error with session: '+session_id)
+            continue
 
     
     linear_shift_df=pd.DataFrame(linear_shift_dict)
@@ -1376,13 +1376,13 @@ def compute_significant_decoding_by_area(all_decoder_results):
     return all_frac_sig_df,all_diff_from_null_df
 
 
-def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
+def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_units=None):
     
     ###TODO: incorporate different numer of units
-    
+    #make n_units an input, append to filename if input is not None
+
     #load sessions as we go
 
-    #one big loop
     use_half_shifts=False
     n_repeats=25
 
@@ -1445,6 +1445,10 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
         'project':[],
         'trials_since_rewarded_target':[],
         'time_since_rewarded_target':[],
+        'trials_since_last_information':[],
+        'time_since_last_information':[],
+        'trials_since_last_information_no_targets':[],
+        'time_since_last_information_no_targets':[],
         'confidence':[],
         'ccf_ap_mean':[],
         'ccf_dv_mean':[],
@@ -1471,8 +1475,6 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
         'n_units':[],
     }
 
-    # all_sessions=list(decoder_results.keys())
-
     start_time=time.time()
 
     ##loop through sessions##
@@ -1495,22 +1497,59 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
                 print('skipping session:',session_id)
                 continue
 
-            #add trials/time since last rewarded target to trials table
             trials_since_rewarded_target=[]
             time_since_rewarded_target=[]
             last_rewarded_time=np.nan
             last_rewarded_trial=np.nan
+            trials_since_last_information=[]
+            time_since_last_information=[]
+            last_informative_trial=np.nan
+            last_informative_time=np.nan
+
+            trials_since_last_information_no_targets=[]
+            time_since_last_information_no_targets=[]
+
+            non_response_flag=False
 
             for tt,trial in trials.iterrows():
-                # print(tt)
+                #track trials/time since last bit of information, exclude trials after non-responses to targets
+                
+                if non_response_flag==True:
+                    trials_since_last_information_no_targets.append(np.nan)
+                    time_since_last_information_no_targets.append(np.nan)
+                else:
+                    trials_since_last_information_no_targets.append(tt-last_informative_trial)
+                    time_since_last_information_no_targets.append(trial['start_time']-last_informative_time)
+
+                trials_since_last_information.append(tt-last_informative_trial)
+                time_since_last_information.append(trial['start_time']-last_informative_time)
+
+                #trials/time since last rewarded target
                 trials_since_rewarded_target.append(tt-last_rewarded_trial)
                 time_since_rewarded_target.append(trial['start_time']-last_rewarded_time)
-                if trial['is_rewarded'] and trial['is_target'] and trial['is_response']:
+
+                if trial['is_target'] and not trial['is_response']:
+                    non_response_flag=True
+
+                elif trial['is_target'] and trial['is_response']:
+                    last_informative_time=trial['start_time']
+                    last_informative_trial=tt
+                    non_response_flag=False
+
+                if trial['is_rewarded'] and trial['is_target']:
                     last_rewarded_time=trial['reward_time']
                     last_rewarded_trial=tt
+
+
             trials['trials_since_rewarded_target']=trials_since_rewarded_target
             trials['time_since_rewarded_target']=time_since_rewarded_target
-            
+
+            trials['trials_since_last_information']=trials_since_last_information
+            trials['time_since_last_information']=time_since_last_information
+
+            trials['trials_since_last_information_no_targets']=trials_since_last_information_no_targets
+            trials['time_since_last_information_no_targets']=time_since_last_information_no_targets
+
             #select the middle 4 blocks
             trials_middle=trials.iloc[decoder_results[session_id]['middle_4_blocks']]
             trials_middle=trials_middle.reset_index()
@@ -1541,8 +1580,12 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
                 for sh in half_shift_inds:
                     temp_shifts=[]
                     for rr in range(n_repeats):
-                        if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
-                            temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['decision_function'])
+                        if n_units is not None:
+                            if sh in list(decoder_results[session_id]['results'][aa]['shift'][n_units][rr].keys()):
+                                temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][n_units][rr][sh]['decision_function'])
+                        else:
+                            if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
+                                temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['decision_function'])
                     decision_function_shifts.append(np.nanmean(np.vstack(temp_shifts),axis=0))
 
                 # true_label=decoder_results[session_id]['results'][aa]['shift'][np.where(shifts==0)[0][0]]['true_label']
@@ -1555,10 +1598,12 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
                 # #normalize all decision function values to the stdev of all the nulls
                 # decision_function_shifts=decision_function_shifts/np.nanstd(decision_function_shifts[:])
 
+                #subtract the null from the true
                 corrected_decision_function=decision_function_shifts[shifts[half_shift_inds]==0,:].flatten()-np.median(decision_function_shifts,axis=0)
 
-                #option to normalize after
-                # corrected_decision_function=corrected_decision_function/np.std(corrected_decision_function)
+                #option to normalize after, if n_units=='all', to account for different #'s of units
+                if n_units=='all':
+                    corrected_decision_function=corrected_decision_function/np.std(np.abs(corrected_decision_function))
 
                 #find average confidence per hit, fa, cr
                 vis_HIT_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==True and is_target==True and is_vis_context==True and \
@@ -1645,6 +1690,20 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
                 decoder_confidence_versus_trials_since_rewarded_target['trials_since_rewarded_target'].append(trials_since_rewarded_target)
                 decoder_confidence_versus_trials_since_rewarded_target['time_since_rewarded_target'].append(time_since_rewarded_target)
                 decoder_confidence_versus_trials_since_rewarded_target['confidence'].append(confidence)
+
+                #trials/time since last bit of information
+                trials_since_last_information=trials_middle.query('is_reward_scheduled==False')['trials_since_last_information'].values
+                time_since_last_information=trials_middle.query('is_reward_scheduled==False')['time_since_last_information'].values
+
+                decoder_confidence_versus_trials_since_rewarded_target['trials_since_last_information'].append(trials_since_last_information)
+                decoder_confidence_versus_trials_since_rewarded_target['time_since_last_information'].append(time_since_last_information)
+
+                #trials/time since last bit of information, excluding trials after non-responses to targets
+                trials_since_last_information_no_targets=trials_middle.query('is_reward_scheduled==False')['trials_since_last_information_no_targets'].values
+                time_since_last_information_no_targets=trials_middle.query('is_reward_scheduled==False')['time_since_last_information_no_targets'].values
+
+                decoder_confidence_versus_trials_since_rewarded_target['trials_since_last_information_no_targets'].append(trials_since_last_information_no_targets)
+                decoder_confidence_versus_trials_since_rewarded_target['time_since_last_information_no_targets'].append(time_since_last_information_no_targets)
 
                 # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
                 if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
@@ -1734,7 +1793,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
                     rewarded_target_trials=rewarded_target_trials[:-1]
                     rewarded_target_trials_plus_one=rewarded_target_trials_plus_one[:-1]
 
-                #find trials and trials+1 of non-rewarded targets
+                #find trials and trials+1 of responses to non-rewarded targets
                 non_rewarded_target_trials=trials_middle.query('is_rewarded==False and is_target==True and is_response==True').index.values
                 non_rewarded_target_trials_plus_one=non_rewarded_target_trials+1
                 if len(non_rewarded_target_trials_plus_one)>0:
@@ -1791,14 +1850,14 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
                     decoder_confidence_before_after_target['ccf_ml_mean'].append(np.nan)
                     decoder_confidence_before_after_target['n_units'].append(np.nan)
 
-        except:
-            print('failed to load session:',session_id)
-            continue
+            total_time=time.time()-start_time
+            session_time=time.time()-session_start_time
+            print('finished session:',session_id)
+            print('session time: ',session_time,' seconds;  total time:',total_time,' seconds')
         
-        total_time=time.time()-start_time
-        session_time=time.time()-session_start_time
-        print('finished session:',session_id)
-        print('session time: ',session_time,' seconds;  total time:',total_time,' seconds')
+        except Exception as e:
+            print('failed to load session ',session_id,': ',e)
+            continue
 
     decoder_confidence_versus_response_type=pd.DataFrame(decoder_confidence_versus_response_type)
     decoder_confidence_dprime_by_block=pd.DataFrame(decoder_confidence_dprime_by_block)
@@ -1809,11 +1868,22 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False):
     if savepath is not None:
         if not os.path.exists(savepath):
             os.makedirs(savepath)
-        decoder_confidence_versus_response_type.to_csv(os.path.join(savepath,'decoder_confidence_versus_response_type.csv'),index=False)
-        decoder_confidence_dprime_by_block.to_csv(os.path.join(savepath,'decoder_confidence_dprime_by_block.csv'),index=False)
-        decoder_confidence_by_switch.to_csv(os.path.join(savepath,'decoder_confidence_by_switch.csv'),index=False)
-        decoder_confidence_versus_trials_since_rewarded_target.to_csv(os.path.join(savepath,'decoder_confidence_versus_trials_since_rewarded_target.csv'),index=False)
-        decoder_confidence_before_after_target.to_csv(os.path.join(savepath,'decoder_confidence_before_after_target.csv'),index=False)
+        if n_units is not None:
+            n_units_str=n_units+'_units'
+        else:
+            n_units_str=''
+
+        decoder_confidence_versus_response_type.to_csv(os.path.join(savepath,'decoder_confidence_versus_response_type'+n_units_str+'.csv'),index=False)
+        decoder_confidence_dprime_by_block.to_csv(os.path.join(savepath,'decoder_confidence_dprime_by_block'+n_units_str+'.csv'),index=False)
+        decoder_confidence_by_switch.to_csv(os.path.join(savepath,'decoder_confidence_by_switch'+n_units_str+'.csv'),index=False)
+        decoder_confidence_versus_trials_since_rewarded_target.to_csv(os.path.join(savepath,'decoder_confidence_versus_trials_since_rewarded_target'+n_units_str+'.csv'),index=False)
+        decoder_confidence_before_after_target.to_csv(os.path.join(savepath,'decoder_confidence_before_after_target'+n_units_str+'.csv'),index=False)
+
+        decoder_confidence_versus_response_type.to_pickle(os.path.join(savepath,'decoder_confidence_versus_response_type'+n_units_str+'.pkl'))
+        decoder_confidence_dprime_by_block.to_pickle(os.path.join(savepath,'decoder_confidence_dprime_by_block'+n_units_str+'.pkl'))
+        decoder_confidence_by_switch.to_pickle(os.path.join(savepath,'decoder_confidence_by_switch'+n_units_str+'.pkl'))
+        decoder_confidence_versus_trials_since_rewarded_target.to_pickle(os.path.join(savepath,'decoder_confidence_versus_trials_since_rewarded_target'+n_units_str+'.pkl'))
+        decoder_confidence_before_after_target.to_pickle(os.path.join(savepath,'decoder_confidence_before_after_target'+n_units_str+'.pkl'))
 
     if return_table:
         return decoder_confidence_versus_response_type,decoder_confidence_dprime_by_block,decoder_confidence_by_switch,decoder_confidence_versus_trials_since_rewarded_target,decoder_confidence_before_after_target
