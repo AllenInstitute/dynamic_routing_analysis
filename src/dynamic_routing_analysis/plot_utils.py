@@ -836,7 +836,7 @@ def plot_single_session_decoding_results(path):
                 temp_bal_acc=[]
                 for sh in half_shift_inds:
                     if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
-                        temp_bal_acc.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['balanced_accuracy'])
+                        temp_bal_acc.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['balanced_accuracy_test'])
                 if len(temp_bal_acc)>0:
                     bal_acc[aa].append(np.array(temp_bal_acc))
             bal_acc[aa]=np.vstack(bal_acc[aa])
