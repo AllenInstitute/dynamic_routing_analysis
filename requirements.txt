@@ -138,7 +138,7 @@ nlopt==2.6.1
 notebook==6.4.13
 npc-ephys
 npc-io
-npc_sessions==0.0.225
+npc_sessions
 npc-sync
 npc-utils
 npc_lims
@@ -245,7 +245,7 @@ webcolors==1.13
 webencodings==0.5.1
 widgetsnbextension
 wrapt==1.15.0
-xarray==2023.9.0
+xarray
 xlrd==2.0.1
 xlsx2csv==0.8.1
 XlsxWriter==3.1.8
