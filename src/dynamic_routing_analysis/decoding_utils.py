@@ -859,7 +859,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     # generate_labels=params['generate_labels']
     
     
-    if session_info is not None:
+    if session is not None:
         session_info=npc_lims.get_session_info(session)
 
     session_id=str(session_info.id)
