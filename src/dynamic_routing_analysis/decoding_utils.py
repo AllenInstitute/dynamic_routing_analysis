@@ -1425,6 +1425,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         'project':[],
         'block':[],
         'cross_modal_dprime':[],
+        'n_good_blocks':[],
         'confidence':[],
         'ccf_ap_mean':[],
         'ccf_dv_mean':[],
@@ -1462,6 +1463,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         'ccf_dv_mean':[],
         'ccf_ml_mean':[],
         'n_units':[],
+        'cross_modal_dprime':[],
+        'n_good_blocks':[],
     }
 
     decoder_confidence_before_after_target={
@@ -1469,6 +1472,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         'area':[],
         'project':[],
         'cross_modal_dprime':[],
+        'n_good_blocks':[],
         'rewarded_target':[],
         'rewarded_target_plus_one':[],
         'non_rewarded_target':[],
@@ -1725,6 +1729,9 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     decoder_confidence_versus_trials_since_rewarded_target['ccf_ml_mean'].append(np.nan)
                     decoder_confidence_versus_trials_since_rewarded_target['n_units'].append(np.nan)
 
+                decoder_confidence_versus_trials_since_rewarded_target['cross_modal_dprime'].append(performance['cross_modal_dprime'].mean())
+                decoder_confidence_versus_trials_since_rewarded_target['n_good_blocks'].append(np.sum(performance['cross_modal_dprime']>=1.0))
+
                 ##loop through blocks##
                 blocks=trials_middle['block_index'].unique()
                 for bb in blocks:
@@ -1744,6 +1751,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     decoder_confidence_dprime_by_block['project'].append(session_info.project)
                     decoder_confidence_dprime_by_block['block'].append(bb)
                     decoder_confidence_dprime_by_block['cross_modal_dprime'].append(block_dprime)
+                    decoder_confidence_dprime_by_block['n_good_blocks'].append(np.sum(performance['cross_modal_dprime']>=1.0))
                     decoder_confidence_dprime_by_block['confidence'].append(block_mean)
 
                     # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
@@ -1829,6 +1837,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 decoder_confidence_before_after_target['area'].append(area_name)
                 decoder_confidence_before_after_target['project'].append(session_info.project)
                 decoder_confidence_before_after_target['cross_modal_dprime'].append(performance['cross_modal_dprime'].mean())
+                decoder_confidence_before_after_target['n_good_blocks'].append(np.sum(performance['cross_modal_dprime']>=1.0))
                 decoder_confidence_before_after_target['rewarded_target'].append(sign_corrected_decision_function[rewarded_target_trials])
                 decoder_confidence_before_after_target['rewarded_target_plus_one'].append(sign_corrected_decision_function[rewarded_target_trials_plus_one])
                 if len(non_rewarded_target_trials)>0:
