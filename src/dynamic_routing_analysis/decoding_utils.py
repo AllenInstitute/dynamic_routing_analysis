@@ -1046,7 +1046,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                     
                     sel_units=np.arange(0, len(LP_parts_to_keep))
 
-                decoder_results[session_id]['results'][aa]['shift'][rr]['sel_units']=sel_units
+                decoder_results[session_id]['results'][aa]['shift'][nunits][rr]['sel_units']=sel_units
 
                 #loop through shifts
                 for sh,shift in enumerate(shifts):
