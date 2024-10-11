@@ -1491,7 +1491,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
     ##loop through sessions##
     for file in files:
-        try:
+        # try:
             session_start_time=time.time()
             decoder_results=pickle.load(open(file,'rb'))
             session_id=list(decoder_results.keys())[0]
@@ -1593,6 +1593,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     temp_shifts=[]
                     for rr in range(n_repeats):
                         if n_units is not None:
+                            if n_units=='all' and rr>0:
+                                continue
                             if sh in list(decoder_results[session_id]['results'][aa]['shift'][n_units][rr].keys()):
                                 temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][n_units][rr][sh]['decision_function'])
                         else:
@@ -1600,22 +1602,30 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                                 temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['decision_function'])
                     decision_function_shifts.append(np.nanmean(np.vstack(temp_shifts),axis=0))
 
+
                 # true_label=decoder_results[session_id]['results'][aa]['shift'][np.where(shifts==0)[0][0]]['true_label']
-                try:
-                    decision_function_shifts=np.vstack(decision_function_shifts)
-                except:
-                    print(session_id,'failed to stack decision functions; skipping')
-                    continue
+                
+                if n_units is not 'all':
+                    try:
+                        decision_function_shifts=np.vstack(decision_function_shifts)
+                    except:
+                        print(session_id,'failed to stack decision functions; skipping')
+                        continue
+                else:
+                    decision_function_shifts=decision_function_shifts[0]
                 
                 # #normalize all decision function values to the stdev of all the nulls
                 # decision_function_shifts=decision_function_shifts/np.nanstd(decision_function_shifts[:])
 
                 #subtract the null from the true
-                corrected_decision_function=decision_function_shifts[shifts[half_shift_inds]==0,:].flatten()-np.median(decision_function_shifts,axis=0)
+                if n_units is not 'all':
+                    corrected_decision_function=decision_function_shifts[shifts[half_shift_inds]==0,:].flatten()-np.median(decision_function_shifts,axis=0)
+                else:
+                    corrected_decision_function=decision_function_shifts[shifts[half_shift_inds]==0]-np.median(decision_function_shifts,axis=0)
 
-                #option to normalize after, if n_units=='all', to account for different #'s of units
-                if n_units=='all':
-                    corrected_decision_function=corrected_decision_function/np.std(np.abs(corrected_decision_function))
+                # #option to normalize after, if n_units=='all', to account for different #'s of units
+                # if n_units=='all':
+                #     corrected_decision_function=corrected_decision_function/np.std(np.abs(corrected_decision_function))
 
                 #find average confidence per hit, fa, cr
                 vis_HIT_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==True and is_target==True and is_vis_context==True and \
@@ -1872,9 +1882,9 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
             print('finished session:',session_id)
             print('session time: ',session_time,' seconds;  total time:',total_time,' seconds')
         
-        except Exception as e:
-            print('failed to load session ',session_id,': ',e)
-            continue
+        # except Exception as e:
+        #     print('failed to load session ',session_id,': ',e)
+        #     continue
 
     decoder_confidence_versus_response_type=pd.DataFrame(decoder_confidence_versus_response_type)
     decoder_confidence_dprime_by_block=pd.DataFrame(decoder_confidence_dprime_by_block)
@@ -1886,7 +1896,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         if not os.path.exists(savepath):
             os.makedirs(savepath)
         if n_units is not None:
-            n_units_str=n_units+'_units'
+            n_units_str=str(n_units)+'_units'
         else:
             n_units_str=''
 
