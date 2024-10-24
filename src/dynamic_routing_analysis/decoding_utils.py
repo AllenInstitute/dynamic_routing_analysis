@@ -1155,8 +1155,9 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
     for file in files:
         try:
             decoder_results=pickle.load(open(file,'rb'))
-            session_id=list(decoder_results.keys())[0]
+            session_id=str(list(decoder_results.keys())[0])
             session_info=npc_lims.get_session_info(session_id)
+            project=str(session_info.project)
             print('loading session: '+session_id)
             try:
                 performance=pd.read_parquet(
@@ -1245,7 +1246,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                     #make big dict/dataframe for this:
                     #save true decoding, mean/median null decoding, and p value for each area/probe
                     linear_shift_dict['session_id'].append(session_id)
-                    linear_shift_dict['project'].append(session_info.project)
+                    linear_shift_dict['project'].append(project)
                     linear_shift_dict['area'].append(area_name)
                     linear_shift_dict['cross_modal_dprime'].append(performance['cross_modal_dprime'].mean())
                     linear_shift_dict['n_good_blocks'].append(np.sum(performance['cross_modal_dprime']>=1.0))
@@ -1477,6 +1478,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         'session':[],
         'area':[],
         'project':[],
+        'trial_index':[],
         'trials_since_rewarded_target':[],
         'time_since_rewarded_target':[],
         'trials_since_last_information':[],
@@ -1526,6 +1528,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
             session_id=list(decoder_results.keys())[0]
             session_info=npc_lims.get_session_info(session_id)
             session_id_str=str(session_id)
+            project=str(session_info.project)
             #load session
             try:
                 trials=pd.read_parquet(
@@ -1681,7 +1684,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 #append to table
                 decoder_confidence_versus_response_type['session'].append(session_id)
                 decoder_confidence_versus_response_type['area'].append(area_name)
-                decoder_confidence_versus_response_type['project'].append(session_info.project)
+                decoder_confidence_versus_response_type['project'].append(project)
                 if performance.query('rewarded_modality=="vis"').empty:
                     decoder_confidence_versus_response_type['vis_context_dprime'].append(np.nan)
                 else:
@@ -1730,7 +1733,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 #append to table per session and area
                 decoder_confidence_versus_trials_since_rewarded_target['session'].append(session_id)
                 decoder_confidence_versus_trials_since_rewarded_target['area'].append(area_name)
-                decoder_confidence_versus_trials_since_rewarded_target['project'].append(session_info.project)
+                decoder_confidence_versus_trials_since_rewarded_target['project'].append(project)
+                decoder_confidence_versus_trials_since_rewarded_target['trial_index'].append(trials_middle.query('is_reward_scheduled==False')['id'].values)
                 decoder_confidence_versus_trials_since_rewarded_target['trials_since_rewarded_target'].append(trials_since_rewarded_target)
                 decoder_confidence_versus_trials_since_rewarded_target['time_since_rewarded_target'].append(time_since_rewarded_target)
                 decoder_confidence_versus_trials_since_rewarded_target['confidence'].append(confidence)
@@ -1780,7 +1784,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     #append to table
                     decoder_confidence_dprime_by_block['session'].append(session_id)
                     decoder_confidence_dprime_by_block['area'].append(area_name)
-                    decoder_confidence_dprime_by_block['project'].append(session_info.project)
+                    decoder_confidence_dprime_by_block['project'].append(project)
                     decoder_confidence_dprime_by_block['block'].append(bb)
                     decoder_confidence_dprime_by_block['cross_modal_dprime'].append(block_dprime)
                     decoder_confidence_dprime_by_block['n_good_blocks'].append(np.sum(performance['cross_modal_dprime']>=1.0))
@@ -1810,7 +1814,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     #append to table
                     decoder_confidence_by_switch['session'].append(session_id)
                     decoder_confidence_by_switch['area'].append(area_name)
-                    decoder_confidence_by_switch['project'].append(session_info.project)
+                    decoder_confidence_by_switch['project'].append(project)
                     decoder_confidence_by_switch['switch_trial'].append(switch_trial['id'])
                     decoder_confidence_by_switch['block'].append(switch_trial_block_index)
                     decoder_confidence_by_switch['dprime_before'].append(performance.query('block_index==(@switch_trial_block_index-1)')['cross_modal_dprime'].values[0])
@@ -1867,7 +1871,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 #append to table
                 decoder_confidence_before_after_target['session'].append(session_id)
                 decoder_confidence_before_after_target['area'].append(area_name)
-                decoder_confidence_before_after_target['project'].append(session_info.project)
+                decoder_confidence_before_after_target['project'].append(project)
                 decoder_confidence_before_after_target['cross_modal_dprime'].append(performance['cross_modal_dprime'].mean())
                 decoder_confidence_before_after_target['n_good_blocks'].append(np.sum(performance['cross_modal_dprime']>=1.0))
                 decoder_confidence_before_after_target['rewarded_target'].append(sign_corrected_decision_function[rewarded_target_trials])
