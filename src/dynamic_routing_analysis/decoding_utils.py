@@ -868,7 +868,10 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     decoder_type=params['decoder_type']
     # use_coefs=params['use_coefs']
     # generate_labels=params['generate_labels']
-    
+    if 'only_use_all_units' in params:
+        only_use_all_units=params['only_use_all_units']
+    else:
+        only_use_all_units=False
     
     if session is not None:
         session_info=npc_lims.get_session_info(session)
@@ -998,8 +1001,11 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
 
     
     if input_data_type=='spikes':
-        areas=units['structure'].unique()
-        areas=np.concatenate([areas,['all']])
+        if only_use_all_units:
+            areas=['all']
+        else:
+            areas=units['structure'].unique()
+            areas=np.concatenate([areas,['all']])
     elif input_data_type=='facemap' or input_data_type=='LP':
         # areas = list(mean_trial_behav_SVD.keys())
         areas=[0]
