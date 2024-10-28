@@ -1124,7 +1124,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     if use_zarr==False:
         #make directory if does not exist
         if not os.path.exists(savepath):
-            os.makedirs(savepath)
+            upath.UPath(savepath).mkdir(parents=True)
         (upath.UPath(savepath) / f"{session_id}_{filename}.pkl").write_bytes(
             pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
         )
@@ -1163,7 +1163,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
     if type(files) is not list: 
         files=[files]
     #assume first file has same nunits as all others
-    decoder_results=pickle.loads(files[0].read_bytes())
+    decoder_results=pickle.loads(upath.UPath(files[0]).read_bytes())
     session_id=list(decoder_results.keys())[0]
     nunits_global=decoder_results[session_id]['n_units']
 
@@ -1177,7 +1177,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
     #loop through sessions
     for file in files:
         try:
-            decoder_results=pickle.loads(file.read_bytes())
+            decoder_results=pickle.loads(upath.UPath(file).read_bytes())
             session_id=str(list(decoder_results.keys())[0])
             session_info=npc_lims.get_session_info(session_id)
             project=str(session_info.project)
@@ -1315,10 +1315,12 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
     elif use_zarr==False:
         if savepath is not None:
             try:
+                if not upath.UPath(savepath).is_dir():
+                    upath.UPath(savepath).mkdir(parents=True)
                 if single_session:
-                    linear_shift_df.to_csv(os.path.join(savepath,session_id+'_linear_shift_decoding_results.csv'))
+                    linear_shift_df.to_csv(upath.UPath(savepath / (session_id+'_linear_shift_decoding_results.csv')))
                 else:
-                    linear_shift_df.to_csv(os.path.join(savepath,'all_linear_shift_decoding_results.csv'))
+                    linear_shift_df.to_csv(upath.UPath(savepath / 'all_linear_shift_decoding_results.csv'))
             except Exception as e:
                 print(e)
                 print('error saving linear shift df')
@@ -1551,9 +1553,9 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
             files=[files]
 
     for file in files:
-        try:
+        # try:
             session_start_time=time.time()
-            decoder_results=pickle.loads(file.read_bytes())
+            decoder_results=pickle.loads(upath.UPath(file).read_bytes())
             session_id=list(decoder_results.keys())[0]
             session_info=npc_lims.get_session_info(session_id)
             session_id_str=str(session_id)
@@ -1801,6 +1803,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 blocks=trials_middle['block_index'].unique()
                 for bb in blocks:
                     block_trials=trials_middle.query('block_index==@bb and is_reward_scheduled==False')
+                    if len( block_trials )==0:
+                        continue
                     #find average confidence and dprime for the block
                     if block_trials['is_vis_context'].values[0]:
                         multiplier=1
@@ -1937,9 +1941,9 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
             print('finished session:',session_id)
             print('session time: ',session_time,' seconds;  total time:',total_time,' seconds')
         
-        except Exception as e:
-            print('failed to load session ',session_id,': ',e)
-            continue
+        # except Exception as e:
+        #     print('failed to load session ',session_id,': ',e)
+        #     continue
 
     decoder_confidence_versus_response_type_dict=decoder_confidence_versus_response_type.copy()
     decoder_confidence_dprime_by_block_dict=decoder_confidence_dprime_by_block.copy()
@@ -1954,8 +1958,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
     decoder_confidence_before_after_target=pd.DataFrame(decoder_confidence_before_after_target)
 
     if savepath is not None:
-        if not os.path.exists(savepath):
-            os.makedirs(savepath)
+        if not upath.UPath(savepath).is_dir():
+            upath.UPath(savepath).mkdir(parents=True)
         if n_units is not None:
             n_units_str='_'+str(n_units)+'_units'
         else:
@@ -1983,26 +1987,26 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
         elif use_zarr==False:
 
-            decoder_confidence_versus_response_type.to_csv(os.path.join(savepath,temp_session_str+'decoder_confidence_versus_response_type'+n_units_str+'.csv'),index=False)
-            decoder_confidence_dprime_by_block.to_csv(os.path.join(savepath,temp_session_str+'decoder_confidence_dprime_by_block'+n_units_str+'.csv'),index=False)
-            decoder_confidence_by_switch.to_csv(os.path.join(savepath,temp_session_str+'decoder_confidence_by_switch'+n_units_str+'.csv'),index=False)
-            decoder_confidence_versus_trials_since_rewarded_target.to_csv(os.path.join(savepath,temp_session_str+'decoder_confidence_versus_trials_since_rewarded_target'+n_units_str+'.csv'),index=False)
-            decoder_confidence_before_after_target.to_csv(os.path.join(savepath,temp_session_str+'decoder_confidence_before_after_target'+n_units_str+'.csv'),index=False)
+            decoder_confidence_versus_response_type.to_csv(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_versus_response_type'+n_units_str+'.csv'),index=False)
+            decoder_confidence_dprime_by_block.to_csv(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_dprime_by_block'+n_units_str+'.csv'),index=False)
+            decoder_confidence_by_switch.to_csv(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_by_switch'+n_units_str+'.csv'),index=False)
+            decoder_confidence_versus_trials_since_rewarded_target.to_csv(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_versus_trials_since_rewarded_target'+n_units_str+'.csv'),index=False)
+            decoder_confidence_before_after_target.to_csv(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_before_after_target'+n_units_str+'.csv'),index=False)
 
-            decoder_confidence_versus_response_type.to_pickle(os.path.join(savepath,temp_session_str+'decoder_confidence_versus_response_type'+n_units_str+'.pkl'))
-            decoder_confidence_dprime_by_block.to_pickle(os.path.join(savepath,temp_session_str+'decoder_confidence_dprime_by_block'+n_units_str+'.pkl'))
-            decoder_confidence_by_switch.to_pickle(os.path.join(savepath,temp_session_str+'decoder_confidence_by_switch'+n_units_str+'.pkl'))
-            decoder_confidence_versus_trials_since_rewarded_target.to_pickle(os.path.join(savepath,temp_session_str+'decoder_confidence_versus_trials_since_rewarded_target'+n_units_str+'.pkl'))
-            decoder_confidence_before_after_target.to_pickle(os.path.join(savepath,temp_session_str+'decoder_confidence_before_after_target'+n_units_str+'.pkl'))
+            decoder_confidence_versus_response_type.to_pickle(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_versus_response_type'+n_units_str+'.pkl'))
+            decoder_confidence_dprime_by_block.to_pickle(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_dprime_by_block'+n_units_str+'.pkl'))
+            decoder_confidence_by_switch.to_pickle(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_by_switch'+n_units_str+'.pkl'))
+            decoder_confidence_versus_trials_since_rewarded_target.to_pickle(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_versus_trials_since_rewarded_target'+n_units_str+'.pkl'))
+            decoder_confidence_before_after_target.to_pickle(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_before_after_target'+n_units_str+'.pkl'))
 
     if return_table:
         return decoder_confidence_versus_response_type,decoder_confidence_dprime_by_block,decoder_confidence_by_switch,decoder_confidence_versus_trials_since_rewarded_target,decoder_confidence_before_after_target
     
-def concat_decoder_summary_tables(dir):
+def concat_decoder_summary_tables(dir,savepath):
 
     #create summary folder if does not exist
-    if not os.path.exists(os.path.join(dir,'summary')):
-        os.makedirs(os.path.join(dir,'summary'))
+    if not os.path.exists(savepath):
+        os.makedirs(savepath)
 
     decoder_results_summary_files=glob.glob(os.path.join(dir,'*decoding_results.csv'))
 
