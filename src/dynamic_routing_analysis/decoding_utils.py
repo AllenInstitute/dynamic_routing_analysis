@@ -1,3 +1,4 @@
+import glob
 import os
 import pickle
 import time
@@ -19,11 +20,19 @@ from dynamic_routing_analysis import data_utils, spike_utils
 # Dump the dictionary to the Zarr file
 def dump_dict_to_zarr(group, data):
     for key, value in data.items():
+        print(key)
         if isinstance(value, dict):
             subgroup = group.create_group(key)
-            dump_dict_to_zarr(subgroup, value)
+            dump_dict_to_zarr(group=subgroup, data=value)
+        #elif isinstance(value, npc_lims.SessionInfo):
+            #continue
+        #elif isinstance(value, upath.implementations.cloud.S3Path):
+            #value=str(value)
         else:
-            group[key] = value
+            try:
+                group[key] = value
+            except:
+                print(f'Could not save {key} of type {type(value)}')
 
 # 'linearSVC' or 'LDA' or 'RandomForest'
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',crossval_index=None,labels_as_index=False):
@@ -954,10 +963,10 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     elif central_section=='4_blocks_plus':
         #find middle 4 block labels
         first_block=trials.query('block_index==0').index.values
-        middle_of_first=first_block[np.round(len(first_block)/2).astype('int')]
+        middle_of_first=first_block[np.ceil(len(first_block)/2).astype('int')]
 
         last_block=trials.query('block_index==5').index.values
-        middle_of_last=last_block[np.round(len(last_block)/2).astype('int')]
+        middle_of_last=last_block[np.ceil(len(last_block)/2).astype('int')]
 
         middle_4_block_trials=trials.loc[middle_of_first:middle_of_last]
         middle_4_blocks=middle_4_block_trials.index.values
@@ -1111,10 +1120,11 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
         )
     else:
+        print('use_zarr not implemented for raw decoding results')
+        ### too many incompatible data types to save as zarr
         # Create a Zarr group
-        zarr_file = zarr.open(savepath /  (filename + '.zarr'), mode='w')
-
-        dump_dict_to_zarr(zarr_file, decoder_results)
+        # zarr_file = zarr.open(upath.UPath(savepath) /  (filename + '.zarr'), mode='w')
+        # dump_dict_to_zarr(group=zarr_file, data=decoder_results)
 
     print(f'finished {session_id}')
     # print(f'time elapsed: {time.time()-start_time}')
@@ -1170,9 +1180,11 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                             npc_lims.get_cache_path('performance',session_info.id,version='any')
                         )
             except:
+                print('no cached performance table, skipping')
                 continue
 
             if session_info.is_annotated==False:
+                print('session not annotated, skipping')
                 continue
 
             all_bal_acc[session_id]={}
@@ -1184,8 +1196,8 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
 
             shifts=decoder_results[session_id]['shifts']
             #extract results according to the trial shift
-            half_neg_shift=np.round(shifts.min()/2)
-            half_pos_shift=np.round(shifts.max()/2)
+            half_neg_shift=np.ceil(shifts.min()/2)
+            half_pos_shift=np.ceil(shifts.max()/2)
             # half_shifts=np.arange(-half_neg_shift,half_pos_shift+1)
             half_neg_shift_ind=np.where(shifts==half_neg_shift)[0][0]
             half_pos_shift_ind=np.where(shifts==half_pos_shift)[0][0]
@@ -1212,13 +1224,14 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                         for rr in range(n_repeats):
                             if rr in decoder_results[session_id]['results'][aa]['shift'][nu].keys():
                                 temp_bal_acc=[]
-                            else:
-                                continue
-                            for sh in half_shift_inds:
-                                if sh in list(decoder_results[session_id]['results'][aa]['shift'][nu][rr].keys()):
-                                    temp_bal_acc.append(decoder_results[session_id]['results'][aa]['shift'][nu][rr][sh]['balanced_accuracy_test'])
-                            if len(temp_bal_acc)>0:
-                                all_bal_acc[session_id][aa][nu].append(np.array(temp_bal_acc))
+                            # else:
+                            #     print('n repeats invalid: '+str(rr))
+                            #     continue
+                                for sh in half_shift_inds:
+                                    if sh in list(decoder_results[session_id]['results'][aa]['shift'][nu][rr].keys()):
+                                        temp_bal_acc.append(decoder_results[session_id]['results'][aa]['shift'][nu][rr][sh]['balanced_accuracy_test'])
+                                if len(temp_bal_acc)>0:
+                                    all_bal_acc[session_id][aa][nu].append(np.array(temp_bal_acc))
                         all_bal_acc[session_id][aa][nu]=np.vstack(all_bal_acc[session_id][aa][nu])
                         all_bal_acc[session_id][aa][nu]=np.nanmean(all_bal_acc[session_id][aa][nu],axis=0)
 
@@ -1270,6 +1283,8 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                         linear_shift_dict['ccf_ml_mean'].append(np.nan)
                         linear_shift_dict['n_units'].append(np.nan)
                         linear_shift_dict['probe'].append(np.nan)
+
+            print(aa+' done')
         except Exception as e:
             print(e)
             print('error with session: '+session_id)
@@ -1278,14 +1293,15 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
     
     linear_shift_df=pd.DataFrame(linear_shift_dict)
 
-    if use_zarr==True and single_session==True:
+    if use_zarr==True:
+
         results={
             session_id:{
                 'linear_shift_summary_table':linear_shift_dict,
                 },
         }
 
-        zarr_file = zarr.open(files, mode='w')
+        zarr_file = zarr.open(files[0], mode='w')
 
         dump_dict_to_zarr(zarr_file, results)
 
@@ -1601,11 +1617,11 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
             trials['time_since_last_information_no_targets']=time_since_last_information_no_targets
 
             #select the middle 4 blocks
+            trials['original_index']=trials.index.values
             trials_middle=trials.iloc[decoder_results[session_id]['middle_4_blocks']]
             trials_middle=trials_middle.reset_index()
-            trials_middle['id']=trials_middle.index.values
+            trials_middle.loc[:,'id']=trials_middle.index.values
             
-
             areas=list(decoder_results[session_id]['results'].keys())
 
             ##loop through areas##
@@ -1617,8 +1633,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 #make corrected decoder confidence
                 shifts=decoder_results[session_id]['shifts']
                 areas=decoder_results[session_id]['areas']
-                half_neg_shift=np.round(shifts.min()/2)
-                half_pos_shift=np.round(shifts.max()/2)
+                half_neg_shift=np.ceil(shifts.min()/2)
+                half_pos_shift=np.ceil(shifts.max()/2)
                 half_neg_shift_ind=np.where(shifts==half_neg_shift)[0][0]
                 half_pos_shift_ind=np.where(shifts==half_pos_shift)[0][0]
                 half_shift_inds=np.arange(half_neg_shift_ind,half_pos_shift_ind+1)
@@ -1688,7 +1704,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
 
                 #append to table
-                decoder_confidence_versus_response_type['session'].append(session_id)
+                decoder_confidence_versus_response_type['session'].append(session_id_str)
                 decoder_confidence_versus_response_type['area'].append(area_name)
                 decoder_confidence_versus_response_type['project'].append(project)
                 if performance.query('rewarded_modality=="vis"').empty:
@@ -1728,33 +1744,33 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
                 #find decoder confidence according to time/trials since last rewarded target
                 #3 arrays - time since last rewarded target, trials since last rewarded target, decoder confidence
-                trials_since_rewarded_target=trials_middle.query('is_reward_scheduled==False')['trials_since_rewarded_target'].values
-                time_since_rewarded_target=trials_middle.query('is_reward_scheduled==False')['time_since_rewarded_target'].values
-                confidence=corrected_decision_function[trials_middle.query('is_reward_scheduled==False').index.values]
-                for tt,trial in trials_middle.query('is_reward_scheduled==False').reset_index().iterrows():
+                trials_since_rewarded_target=trials_middle['trials_since_rewarded_target'].values
+                time_since_rewarded_target=trials_middle['time_since_rewarded_target'].values
+                confidence=corrected_decision_function[trials_middle.index.values]
+                for tt,trial in trials_middle.reset_index().iterrows():
                     #reverse sign if other modality
                     if trial['is_aud_context']:
                         confidence[tt]=-confidence[tt]
 
                 #append to table per session and area
-                decoder_confidence_versus_trials_since_rewarded_target['session'].append(session_id)
+                decoder_confidence_versus_trials_since_rewarded_target['session'].append(session_id_str)
                 decoder_confidence_versus_trials_since_rewarded_target['area'].append(area_name)
                 decoder_confidence_versus_trials_since_rewarded_target['project'].append(project)
-                decoder_confidence_versus_trials_since_rewarded_target['trial_index'].append(trials_middle.query('is_reward_scheduled==False')['id'].values)
+                decoder_confidence_versus_trials_since_rewarded_target['trial_index'].append(trials_middle['original_index'].values)
                 decoder_confidence_versus_trials_since_rewarded_target['trials_since_rewarded_target'].append(trials_since_rewarded_target)
                 decoder_confidence_versus_trials_since_rewarded_target['time_since_rewarded_target'].append(time_since_rewarded_target)
                 decoder_confidence_versus_trials_since_rewarded_target['confidence'].append(confidence)
 
                 #trials/time since last bit of information
-                trials_since_last_information=trials_middle.query('is_reward_scheduled==False')['trials_since_last_information'].values
-                time_since_last_information=trials_middle.query('is_reward_scheduled==False')['time_since_last_information'].values
+                trials_since_last_information=trials_middle['trials_since_last_information'].values
+                time_since_last_information=trials_middle['time_since_last_information'].values
 
                 decoder_confidence_versus_trials_since_rewarded_target['trials_since_last_information'].append(trials_since_last_information)
                 decoder_confidence_versus_trials_since_rewarded_target['time_since_last_information'].append(time_since_last_information)
 
                 #trials/time since last bit of information, excluding trials after non-responses to targets
-                trials_since_last_information_no_targets=trials_middle.query('is_reward_scheduled==False')['trials_since_last_information_no_targets'].values
-                time_since_last_information_no_targets=trials_middle.query('is_reward_scheduled==False')['time_since_last_information_no_targets'].values
+                trials_since_last_information_no_targets=trials_middle['trials_since_last_information_no_targets'].values
+                time_since_last_information_no_targets=trials_middle['time_since_last_information_no_targets'].values
 
                 decoder_confidence_versus_trials_since_rewarded_target['trials_since_last_information_no_targets'].append(trials_since_last_information_no_targets)
                 decoder_confidence_versus_trials_since_rewarded_target['time_since_last_information_no_targets'].append(time_since_last_information_no_targets)
@@ -1788,7 +1804,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     block_mean=np.nanmean(corrected_decision_function[block_trials.index.values])*multiplier
 
                     #append to table
-                    decoder_confidence_dprime_by_block['session'].append(session_id)
+                    decoder_confidence_dprime_by_block['session'].append(session_id_str)
                     decoder_confidence_dprime_by_block['area'].append(area_name)
                     decoder_confidence_dprime_by_block['project'].append(project)
                     decoder_confidence_dprime_by_block['block'].append(bb)
@@ -1818,7 +1834,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                         multiplier=-1
                     switch_trial_block_index=switch_trial['block_index']
                     #append to table
-                    decoder_confidence_by_switch['session'].append(session_id)
+                    decoder_confidence_by_switch['session'].append(session_id_str)
                     decoder_confidence_by_switch['area'].append(area_name)
                     decoder_confidence_by_switch['project'].append(project)
                     decoder_confidence_by_switch['switch_trial'].append(switch_trial['id'])
@@ -1875,7 +1891,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                         non_response_non_target_trials_plus_one=non_response_non_target_trials_plus_one[:-1]
 
                 #append to table
-                decoder_confidence_before_after_target['session'].append(session_id)
+                decoder_confidence_before_after_target['session'].append(session_id_str)
                 decoder_confidence_before_after_target['area'].append(area_name)
                 decoder_confidence_before_after_target['project'].append(project)
                 decoder_confidence_before_after_target['cross_modal_dprime'].append(performance['cross_modal_dprime'].mean())
@@ -1974,3 +1990,37 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
     if return_table:
         return decoder_confidence_versus_response_type,decoder_confidence_dprime_by_block,decoder_confidence_by_switch,decoder_confidence_versus_trials_since_rewarded_target,decoder_confidence_before_after_target
+    
+def concat_decoder_summary_tables(dir):
+
+    #create summary folder if does not exist
+    if not os.path.exists(os.path.join(dir,'summary')):
+        os.makedirs(os.path.join(dir,'summary'))
+
+    decoder_results_summary_files=glob.glob(os.path.join(dir,'*decoding_results.csv'))
+
+    decoder_confidence_versus_response_type_files=glob.glob(os.path.join(dir,'*decoder_confidence_versus_response_type*.pkl'))
+    decoder_confidence_dprime_by_block=glob.glob(os.path.join(dir,'*decoder_confidence_dprime_by_block*.pkl'))
+    decoder_confidence_by_switch=glob.glob(os.path.join(dir,'*decoder_confidence_by_switch*.pkl'))
+    decoder_confidence_versus_trials_since_rewarded_target=glob.glob(os.path.join(dir,'*decoder_confidence_versus_trials_since_rewarded_target*.pkl'))
+    decoder_confidence_before_after_target=glob.glob(os.path.join(dir,'*decoder_confidence_before_after_target*.pkl'))
+
+    #load summary tables & concat
+
+    decoder_results_summary=pd.concat([pd.read_csv(f) for f in decoder_results_summary_files],ignore_index=True)
+    
+    decoder_confidence_versus_response_type=pd.concat([pd.read_pickle(f) for f in decoder_confidence_versus_response_type_files],ignore_index=True)
+    decoder_confidence_dprime_by_block=pd.concat([pd.read_pickle(f) for f in decoder_confidence_dprime_by_block],ignore_index=True)
+    decoder_confidence_by_switch=pd.concat([pd.read_pickle(f) for f in decoder_confidence_by_switch],ignore_index=True)
+    decoder_confidence_versus_trials_since_rewarded_target=pd.concat([pd.read_pickle(f) for f in decoder_confidence_versus_trials_since_rewarded_target],ignore_index=True)
+    decoder_confidence_before_after_target=pd.concat([pd.read_pickle(f) for f in decoder_confidence_before_after_target],ignore_index=True)
+    
+    #save summary tables
+
+    decoder_results_summary.to_csv(os.path.join(dir,'summary','decoder_results_summary.csv'))
+
+    decoder_confidence_versus_response_type.to_pickle(os.path.join(dir,'summary','decoder_confidence_versus_response_type.pkl'))
+    decoder_confidence_dprime_by_block.to_pickle(os.path.join(dir,'summary','decoder_confidence_dprime_by_block.pkl'))
+    decoder_confidence_by_switch.to_pickle(os.path.join(dir,'summary','decoder_confidence_by_switch.pkl'))
+    decoder_confidence_versus_trials_since_rewarded_target.to_pickle(os.path.join(dir,'summary','decoder_confidence_versus_trials_since_rewarded_target.pkl'))
+    decoder_confidence_before_after_target.to_pickle(os.path.join(dir,'summary','decoder_confidence_before_after_target.pkl'))
