@@ -1163,7 +1163,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
     if type(files) is not list: 
         files=[files]
     #assume first file has same nunits as all others
-    decoder_results=pickle.load(open(files[0],'rb'))
+    decoder_results=pickle.loads(files[0].read_bytes())
     session_id=list(decoder_results.keys())[0]
     nunits_global=decoder_results[session_id]['n_units']
 
@@ -1177,7 +1177,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
     #loop through sessions
     for file in files:
         try:
-            decoder_results=pickle.load(open(file,'rb'))
+            decoder_results=pickle.loads(file.read_bytes())
             session_id=str(list(decoder_results.keys())[0])
             session_info=npc_lims.get_session_info(session_id)
             project=str(session_info.project)
@@ -1553,7 +1553,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
     for file in files:
         try:
             session_start_time=time.time()
-            decoder_results=pickle.load(open(file,'rb'))
+            decoder_results=pickle.loads(file.read_bytes())
             session_id=list(decoder_results.keys())[0]
             session_info=npc_lims.get_session_info(session_id)
             session_id_str=str(session_id)
