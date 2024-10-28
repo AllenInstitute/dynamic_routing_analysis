@@ -1116,6 +1116,9 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         print(f'finished {session_id} {aa}')
     #save results
     if use_zarr==False:
+        #make directory if does not exist
+        if not os.path.exists(savepath):
+            os.makedirs(savepath)
         (upath.UPath(savepath) / f"{session_id}_{filename}.pkl").write_bytes(
             pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
         )
@@ -1151,6 +1154,8 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
         'n_good_blocks':[],
     }
 
+    if type(files) is not list: 
+        files=[files]
     #assume first file has same nunits as all others
     decoder_results=pickle.load(open(files[0],'rb'))
     session_id=list(decoder_results.keys())[0]
@@ -1163,11 +1168,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
         linear_shift_dict['null_accuracy_std_'+str(nu)]=[]
         linear_shift_dict['p_value_'+str(nu)]=[]
 
-
     #loop through sessions
-    if single_session:
-        if type(files) is not list:
-            files=[files]
     for file in files:
         try:
             decoder_results=pickle.load(open(file,'rb'))
