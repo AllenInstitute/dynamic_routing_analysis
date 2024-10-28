@@ -989,6 +989,12 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     decoder_results[session_id]['n_units'] = n_units_input
     decoder_results[session_id]['n_repeats'] = n_repeats
 
+    import dataclasses
+    session_info=dataclasses.asdict(session_info)
+    for ii in session_info.keys():
+        if type(session_info[ii]) not in [int, str, bool, dict, list]:
+            session_info[ii]=str(session_info[ii])
+    
     decoder_results[session_id]['session_info'] = session_info
     #keep track of which cache path was used
     try:
