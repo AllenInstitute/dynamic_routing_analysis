@@ -1321,8 +1321,12 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
 
                 if single_session:
                     linear_shift_df.to_csv(upath.UPath(savepath / (session_id+'_linear_shift_decoding_results.csv')))
+                    
                 else:
                     linear_shift_df.to_csv(upath.UPath(savepath / 'all_linear_shift_decoding_results.csv'))
+
+                print('saved decoder results table to:',savepath)
+                
             except Exception as e:
                 print(e)
                 print('error saving linear shift df')
@@ -2000,6 +2004,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
             decoder_confidence_by_switch.to_pickle(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_by_switch'+n_units_str+'.pkl'))
             decoder_confidence_versus_trials_since_rewarded_target.to_pickle(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_versus_trials_since_rewarded_target'+n_units_str+'.pkl'))
             decoder_confidence_before_after_target.to_pickle(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_before_after_target'+n_units_str+'.pkl'))
+
+            print('saved '+n_units_str+' decoder confidence tables to:',savepath)
 
     if return_table:
         return decoder_confidence_versus_response_type,decoder_confidence_dprime_by_block,decoder_confidence_by_switch,decoder_confidence_versus_trials_since_rewarded_target,decoder_confidence_before_after_target
