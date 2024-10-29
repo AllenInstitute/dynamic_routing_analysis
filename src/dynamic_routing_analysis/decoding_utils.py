@@ -1123,8 +1123,9 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     #save results
     if use_zarr==False:
         #make directory if does not exist
-        if not os.path.exists(savepath):
+        if not upath.UPath(savepath).is_dir():
             upath.UPath(savepath).mkdir(parents=True)
+
         (upath.UPath(savepath) / f"{session_id}_{filename}.pkl").write_bytes(
             pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
         )
@@ -1317,6 +1318,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
             try:
                 if not upath.UPath(savepath).is_dir():
                     upath.UPath(savepath).mkdir(parents=True)
+
                 if single_session:
                     linear_shift_df.to_csv(upath.UPath(savepath / (session_id+'_linear_shift_decoding_results.csv')))
                 else:
