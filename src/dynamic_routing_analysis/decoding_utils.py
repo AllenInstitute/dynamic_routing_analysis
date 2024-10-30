@@ -1326,7 +1326,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                     linear_shift_df.to_csv(upath.UPath(savepath / 'all_linear_shift_decoding_results.csv'))
 
                 print('saved decoder results table to:',savepath)
-                
+
             except Exception as e:
                 print(e)
                 print('error saving linear shift df')
@@ -2010,36 +2010,60 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
     if return_table:
         return decoder_confidence_versus_response_type,decoder_confidence_dprime_by_block,decoder_confidence_by_switch,decoder_confidence_versus_trials_since_rewarded_target,decoder_confidence_before_after_target
     
+
+    
 def concat_decoder_summary_tables(dir,savepath):
 
     #create summary folder if does not exist
-    if not os.path.exists(savepath):
-        os.makedirs(savepath)
+    if not upath.UPath(savepath).is_dir():
+            upath.UPath(savepath).mkdir(parents=True)
 
-    decoder_results_summary_files=glob.glob(os.path.join(dir,'*decoding_results.csv'))
+    decoder_results_summary_files=[]
+    for p in dir.glob('*decoding_results.csv'):
+        decoder_results_summary_files.append(pd.read_csv(p))
+    decoder_results_summary=pd.concat(decoder_results_summary_files)
+    decoder_results_summary.to_csv(upath.UPath(savepath) / 'decoder_results_summary.csv')
 
-    decoder_confidence_versus_response_type_files=glob.glob(os.path.join(dir,'*decoder_confidence_versus_response_type*.pkl'))
-    decoder_confidence_dprime_by_block=glob.glob(os.path.join(dir,'*decoder_confidence_dprime_by_block*.pkl'))
-    decoder_confidence_by_switch=glob.glob(os.path.join(dir,'*decoder_confidence_by_switch*.pkl'))
-    decoder_confidence_versus_trials_since_rewarded_target=glob.glob(os.path.join(dir,'*decoder_confidence_versus_trials_since_rewarded_target*.pkl'))
-    decoder_confidence_before_after_target=glob.glob(os.path.join(dir,'*decoder_confidence_before_after_target*.pkl'))
+    #find different n_units
+    n_units=[]
+    for col in decoder_results_summary.filter(like='true_accuracy_').columns.values:
+        if len(col.split('_'))==3:
+            temp_n_units=col.split('_')[2]
+            try:
+                n_units.append(int(temp_n_units))
+            except:
+                n_units.append(temp_n_units)
+        else:
+            n_units.append(None)
 
-    #load summary tables & concat
+    for nu in n_units:
+        decoder_confidence_versus_response_type_files=[]
+        for p in dir.glob('*decoder_confidence_versus_response_type_'+str(nu)+'_units.pkl'):
+            decoder_confidence_versus_response_type_files.append(pd.read_pickle(p))
+        decoder_confidence_versus_response_type=pd.concat(decoder_confidence_versus_response_type_files)
+        decoder_confidence_versus_response_type.to_pickle(upath.UPath(savepath) / ('decoder_confidence_versus_response_type_'+str(nu)+'_units.pkl'))
 
-    decoder_results_summary=pd.concat([pd.read_csv(f) for f in decoder_results_summary_files],ignore_index=True)
-    
-    decoder_confidence_versus_response_type=pd.concat([pd.read_pickle(f) for f in decoder_confidence_versus_response_type_files],ignore_index=True)
-    decoder_confidence_dprime_by_block=pd.concat([pd.read_pickle(f) for f in decoder_confidence_dprime_by_block],ignore_index=True)
-    decoder_confidence_by_switch=pd.concat([pd.read_pickle(f) for f in decoder_confidence_by_switch],ignore_index=True)
-    decoder_confidence_versus_trials_since_rewarded_target=pd.concat([pd.read_pickle(f) for f in decoder_confidence_versus_trials_since_rewarded_target],ignore_index=True)
-    decoder_confidence_before_after_target=pd.concat([pd.read_pickle(f) for f in decoder_confidence_before_after_target],ignore_index=True)
-    
-    #save summary tables
+        decoder_confidence_dprime_by_block_files=[]
+        for p in dir.glob('*decoder_confidence_dprime_by_block_'+str(nu)+'_units.pkl'):
+            decoder_confidence_dprime_by_block_files.append(pd.read_pickle(p))
+        decoder_confidence_dprime_by_block=pd.concat(decoder_confidence_dprime_by_block_files)
+        decoder_confidence_dprime_by_block.to_pickle(upath.UPath(savepath) / ('decoder_confidence_dprime_by_block_'+str(nu)+'_units.pkl'))
 
-    decoder_results_summary.to_csv(os.path.join(dir,'summary','decoder_results_summary.csv'))
+        decoder_confidence_by_switch_files=[]
+        for p in dir.glob('*decoder_confidence_by_switch_'+str(nu)+'_units.pkl'):
+            decoder_confidence_by_switch_files.append(pd.read_pickle(p))
+        decoder_confidence_by_switch=pd.concat(decoder_confidence_by_switch_files)
+        decoder_confidence_by_switch.to_pickle(upath.UPath(savepath) / ('decoder_confidence_by_switch_'+str(nu)+'_units.pkl'))
 
-    decoder_confidence_versus_response_type.to_pickle(os.path.join(dir,'summary','decoder_confidence_versus_response_type.pkl'))
-    decoder_confidence_dprime_by_block.to_pickle(os.path.join(dir,'summary','decoder_confidence_dprime_by_block.pkl'))
-    decoder_confidence_by_switch.to_pickle(os.path.join(dir,'summary','decoder_confidence_by_switch.pkl'))
-    decoder_confidence_versus_trials_since_rewarded_target.to_pickle(os.path.join(dir,'summary','decoder_confidence_versus_trials_since_rewarded_target.pkl'))
-    decoder_confidence_before_after_target.to_pickle(os.path.join(dir,'summary','decoder_confidence_before_after_target.pkl'))
+        decoder_confidence_versus_trials_since_rewarded_target_files=[]
+        for p in dir.glob('*decoder_confidence_versus_trials_since_rewarded_target_'+str(nu)+'_units.pkl'):
+            decoder_confidence_versus_trials_since_rewarded_target_files.append(pd.read_pickle(p))
+        decoder_confidence_versus_trials_since_rewarded_target=pd.concat(decoder_confidence_versus_trials_since_rewarded_target_files)
+        decoder_confidence_versus_trials_since_rewarded_target.to_pickle(upath.UPath(savepath) / ('decoder_confidence_versus_trials_since_rewarded_target_'+str(nu)+'_units.pkl'))
+
+        decoder_confidence_before_after_target_files=[]
+        for p in dir.glob('*decoder_confidence_before_after_target_'+str(nu)+'_units.pkl'):
+            decoder_confidence_before_after_target_files.append(pd.read_pickle(p))
+        decoder_confidence_before_after_target=pd.concat(decoder_confidence_before_after_target_files)
+        decoder_confidence_before_after_target.to_pickle(upath.UPath(savepath) / ('decoder_confidence_before_after_target_'+str(nu)+'_units.pkl'))
+
