@@ -998,11 +998,11 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     decoder_results[session_id]['session_info'] = session_info
     #keep track of which cache path was used
     try:
-        decoder_results[session_id]['trial_cache_path'] = npc_lims.get_cache_path('trials',session_id,version='any')
+        decoder_results[session_id]['trial_cache_path'] = str(npc_lims.get_cache_path('trials',session_id,version='any'))
     except:
         decoder_results[session_id]['trial_cache_path'] = ''
     try:
-        decoder_results[session_id]['unit_cache_path'] = npc_lims.get_cache_path('units',session_id,version='any')
+        decoder_results[session_id]['unit_cache_path'] = str(npc_lims.get_cache_path('units',session_id,version='any'))
     except:
         decoder_results[session_id]['unit_cache_path'] = ''
 
@@ -2011,7 +2011,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         return decoder_confidence_versus_response_type,decoder_confidence_dprime_by_block,decoder_confidence_by_switch,decoder_confidence_versus_trials_since_rewarded_target,decoder_confidence_before_after_target
     
 
-    
+
 def concat_decoder_summary_tables(dir,savepath):
 
     #create summary folder if does not exist
