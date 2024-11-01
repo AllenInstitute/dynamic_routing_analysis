@@ -885,6 +885,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
 
     if 'return_results' in params:
         return_results=params['return_results']
+    else:
+        return_results=False
     
     if session is not None:
         session_info=npc_lims.get_session_info(session)
