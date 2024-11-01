@@ -1,3 +1,4 @@
+import gc
 import glob
 import os
 import pickle
@@ -881,6 +882,9 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         only_use_all_units=params['only_use_all_units']
     else:
         only_use_all_units=False
+
+    if 'return_results' in params:
+        return_results=params['return_results']
     
     if session is not None:
         session_info=npc_lims.get_session_info(session)
@@ -1138,6 +1142,13 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
 
     print(f'finished {session_id}')
     # print(f'time elapsed: {time.time()-start_time}')
+    del decoder_results
+    del trial_da
+    del units
+    del trials
+    gc.collect()
+    if return_results:
+        return decoder_results
 
 
 def concat_decoder_results(files,savepath=None,return_table=True,single_session=False,use_zarr=False):
@@ -1331,8 +1342,12 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                 print(e)
                 print('error saving linear shift df')
     
+    del decoder_results
+    gc.collect()
+
     if return_table:
         return linear_shift_df
+    
 
 
 def compute_significant_decoding_by_area(all_decoder_results):
@@ -2006,6 +2021,9 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
             decoder_confidence_before_after_target.to_pickle(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_before_after_target'+n_units_str+'.pkl'))
 
             print('saved '+n_units_str+' decoder confidence tables to:',savepath)
+
+    del decoder_results
+    gc.collect()
 
     if return_table:
         return decoder_confidence_versus_response_type,decoder_confidence_dprime_by_block,decoder_confidence_by_switch,decoder_confidence_versus_trials_since_rewarded_target,decoder_confidence_before_after_target
