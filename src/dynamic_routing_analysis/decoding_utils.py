@@ -1064,6 +1064,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
 
         #loop through repeats
         for nunits in n_units_input:
+            if nunits>len(area_units):
+                continue
             decoder_results[session_id]['results'][aa]['shift'][nunits]={}
             for rr in range(n_repeats):
                 if n_repeats>1:
