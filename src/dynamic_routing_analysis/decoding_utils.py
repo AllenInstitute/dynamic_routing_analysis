@@ -1671,6 +1671,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
             ##loop through areas##
             for aa in areas:
+                if n_units not in decoder_results[session_id]['results'][aa]['shift'].keys():
+                    continue
                 if type(aa)==str and 'probe' in aa:
                     area_name=aa.split('_')[0]
                 else:
@@ -1692,8 +1694,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     temp_shifts=[]
                     for rr in range(n_repeats):
                         if n_units is not None:
-                            if n_units not in decoder_results[session_id]['results'][aa]['shift'].keys():
-                                continue
+                            
                             if n_units=='all' and rr>0:
                                 continue
                             if sh in list(decoder_results[session_id]['results'][aa]['shift'][n_units][rr].keys()):
@@ -1701,7 +1702,10 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                         else:
                             if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
                                 temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['decision_function'])
-                    decision_function_shifts.append(np.nanmean(np.vstack(temp_shifts),axis=0))
+                    if len(temp_shifts)>0:
+                        decision_function_shifts.append(np.nanmean(np.vstack(temp_shifts),axis=0))
+                    else:
+                        decision_function_shifts.append(np.nan)
 
 
                 # true_label=decoder_results[session_id]['results'][aa]['shift'][np.where(shifts==0)[0][0]]['true_label']
