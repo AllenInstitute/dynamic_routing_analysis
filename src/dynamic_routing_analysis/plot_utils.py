@@ -876,7 +876,7 @@ def get_slice_files(slice_: Literal['coronal', 'sagittal', 'horizontal', 'top'],
 IBLATLAS_PLOT_SCALAR_ON_SLICE_PARAMS = {
     'hemisphere': "both",
     'background': "boundary",
-    'empty_color': "white",
+    'empty_color': [0.9] * 3,
     'vector': True,
     'linewidth': 0.1,
     'edgecolor': [0.3] * 3,
