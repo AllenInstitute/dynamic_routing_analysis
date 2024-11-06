@@ -1,16 +1,29 @@
+from __future__ import annotations
+
+import copy
+import functools
+import logging
 import os
 import pickle
+from collections.abc import Iterable
+from typing import Literal
 
+import iblatlas.plots
+import matplotlib
+import matplotlib.colors
+import matplotlib.figure
+import matplotlib.gridspec
 import matplotlib.pyplot as plt
 import npc_lims
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import pyarrow.dataset as ds
-import xarray as xr
 from matplotlib import patches
 
 from dynamic_routing_analysis import spike_utils
 
+logger = logging.getLogger(__name__)
 
 def plot_unit_by_id(sel_unit,save_path=None,show_metric=None):
 
@@ -79,7 +92,7 @@ def plot_unit_by_id(sel_unit,save_path=None,show_metric=None):
     ax=ax.flatten()
     stims=['vis1','sound1']
     for st,stim in enumerate(stims):
-        
+
         if stim=='vis1':
             sel_context='aud'
         elif stim=='sound1':
@@ -139,7 +152,7 @@ def plot_stim_response_by_unit_id(sel_unit,save_path=None,show_metric=None):
     stims=['vis1','sound1']
     stim_names=['vis','aud']
 
-    for st,stim in enumerate(stims):
+    for st,_stim in enumerate(stims):
 
         stim_trials=trials[:].query('stim_name==@stim')
         ax[st].axvline(0, color='k', linestyle='-',alpha=0.5)
@@ -149,10 +162,10 @@ def plot_stim_response_by_unit_id(sel_unit,save_path=None,show_metric=None):
         if st==0:
             ax[st].set_ylabel('trials')
 
-        for it,(tt,trial) in enumerate(stim_trials.iterrows()):
+        for it,(_tt,trial) in enumerate(stim_trials.iterrows()):
             stim_start=trial['stim_start_time']
             spikes=unit_df['spike_times'].iloc[0]-stim_start
-            
+
             trial_spike_inds=(spikes>=-0.2)&(spikes<=0.5)
             if sum(trial_spike_inds)==0:
                 continue
@@ -161,7 +174,7 @@ def plot_stim_response_by_unit_id(sel_unit,save_path=None,show_metric=None):
 
             ax[st].vlines(spikes,ymin=it,ymax=it+1,linewidth=0.75,color='k')
 
-            
+
 
     if show_metric is not None:
         fig.suptitle('unit '+unit_df['unit_id'].values[0]+'; '+unit_df['structure'].values[0]+'; '+show_metric)
@@ -244,13 +257,13 @@ def plot_motor_response_by_unit_id(sel_unit,save_path=None,show_metric=None):
     responses=[True,False]
     response_names=['lick','no lick']
     stim='vis1'
-    
-    for rr,resp in enumerate(responses):
+
+    for rr,_resp in enumerate(responses):
 
         if stim=='vis1':
-            sel_context='aud'
+            pass
         elif stim=='sound1':
-            sel_context='vis'
+            pass
         resp_trials=trials[:].query('stim_name==@stim and context_name==@sel_context and is_response==@resp')
         ax[rr].axvline(0, color='k', linestyle='-',alpha=0.5)
         ax[rr].set_title(response_names[rr])
@@ -259,10 +272,10 @@ def plot_motor_response_by_unit_id(sel_unit,save_path=None,show_metric=None):
         if rr==0:
             ax[rr].set_ylabel('trials')
 
-        for it,(tt,trial) in enumerate(resp_trials.iterrows()):
+        for it,(_tt,trial) in enumerate(resp_trials.iterrows()):
             stim_start=trial['stim_start_time']
             spikes=unit_df['spike_times'].iloc[0]-stim_start
-            
+
             trial_spike_inds=(spikes>=-0.2)&(spikes<=0.5)
             if sum(trial_spike_inds)==0:
                 continue
@@ -277,7 +290,7 @@ def plot_motor_response_by_unit_id(sel_unit,save_path=None,show_metric=None):
         fig.suptitle('unit '+unit_df['unit_id'].values[0]+'; '+unit_df['structure'].values[0])
 
     fig.tight_layout()
-    
+
     if save_path is not None:
         fig.savefig(os.path.join(save_path,unit_df['unit_id'].values[0]+'_lick_rasters.png'),
                     dpi=300, facecolor='w', edgecolor='w',
@@ -301,12 +314,12 @@ def plot_motor_response_by_unit_id(sel_unit,save_path=None,show_metric=None):
     response_names=['lick','no lick']
     # stim='vis1'
 
-    for rr,resp in enumerate(responses):
+    for rr,_resp in enumerate(responses):
 
         if stim=='vis1':
-            sel_context='aud'
+            pass
         elif stim=='sound1':
-            sel_context='vis'
+            pass
         resp_trials=trials[:].query('stim_name==@stim and context_name==@sel_context and is_response==@resp').index.values
 
         spikes=trial_da.sel(
@@ -341,7 +354,7 @@ def plot_motor_response_by_unit_id(sel_unit,save_path=None,show_metric=None):
                     transparent=True, bbox_inches='tight', pad_inches=0.1,
                     metadata=None)
         plt.close()
-        
+
 def plot_context_offset_by_unit_id(sel_unit,save_path=None,show_metric=None):
     unit_df = ds.dataset(npc_lims.get_cache_path('units',session_id=sel_unit[:17],version='any')
                          ).to_table(filter=(ds.field('unit_id') == sel_unit)).to_pandas()
@@ -358,7 +371,7 @@ def plot_context_offset_by_unit_id(sel_unit,save_path=None,show_metric=None):
     stims=['vis1','sound1']
     stim_names=['vis','aud']
 
-    for st,stim in enumerate(stims):
+    for st,_stim in enumerate(stims):
 
         stim_trials=trials[:].query('stim_name==@stim').reset_index()
 
@@ -367,12 +380,12 @@ def plot_context_offset_by_unit_id(sel_unit,save_path=None,show_metric=None):
         colors[stim_trials.query('is_aud_context').index]='tab:blue'
 
         #aud context trials
-        aud_context_trials=stim_trials.query('is_aud_context').index.values
+        stim_trials.query('is_aud_context').index.values
 
         #make patches during aud context trials
         for it,trial in stim_trials.query('is_aud_context').iterrows():
             stim_start=trial['stim_start_time']
-            ax[st].add_patch(patches.Rectangle((-0.2, it), 0.7, 0.5, fill=True, color='grey', 
+            ax[st].add_patch(patches.Rectangle((-0.2, it), 0.7, 0.5, fill=True, color='grey',
                                                edgecolor=None,alpha=0.1))
 
         ax[st].axvline(0, color='k', linestyle='-',alpha=0.5)
@@ -382,10 +395,10 @@ def plot_context_offset_by_unit_id(sel_unit,save_path=None,show_metric=None):
         if st==0:
             ax[st].set_ylabel('trials')
 
-        for it,(tt,trial) in enumerate(stim_trials.iterrows()):
+        for it,(_tt,trial) in enumerate(stim_trials.iterrows()):
             stim_start=trial['stim_start_time']
             spikes=unit_df['spike_times'].iloc[0]-stim_start
-            
+
             trial_spike_inds=(spikes>=-0.2)&(spikes<=0.5)
             if sum(trial_spike_inds)==0:
                 continue
@@ -395,7 +408,7 @@ def plot_context_offset_by_unit_id(sel_unit,save_path=None,show_metric=None):
             # ax[st].vlines(spikes,ymin=it,ymax=it+1,linewidth=0.75,color='k')
             ax[st].vlines(spikes,ymin=it,ymax=it+1,linewidth=0.75,color=colors[it])
 
-            
+
 
     if show_metric is not None:
         fig.suptitle('unit '+unit_df['unit_id'].values[0]+'; '+unit_df['structure'].values[0]+'; '+show_metric)
@@ -634,8 +647,8 @@ def plot_stimulus_modulation_pie_chart(adj_pvals,sel_project,savepath=None):
 
     #any stim
     # any_stim_resp=adj_pvals.query('vis1<0.05 or vis2<0.05 or sound1<0.05 or sound2<0.05')
-    any_stim_resp=adj_pvals.query('any_stim<0.05')
-    stim_and_context=adj_pvals.query('any_stim<0.05 and context<0.05')
+    adj_pvals.query('any_stim<0.05')
+    adj_pvals.query('any_stim<0.05 and context<0.05')
 
     #catch
     catch_stim_resp=adj_pvals.query('catch<0.05')
@@ -661,14 +674,13 @@ def plot_stimulus_modulation_pie_chart(adj_pvals,sel_project,savepath=None):
         if 'Templeton' in sel_project:
             temp_savepath=os.path.join(savepath,"stimulus_responsiveness_Templeton.png")
         else:
-            temp_savepath=os.path.join(savepath,"stimulus_responsiveness_DR.png")   
+            temp_savepath=os.path.join(savepath,"stimulus_responsiveness_DR.png")
 
         fig.savefig(temp_savepath,
                     dpi=300, facecolor='w', edgecolor='w',
                     orientation='portrait', format='png',
                     transparent=True, bbox_inches='tight', pad_inches=0.1,
-                    metadata=None)  
-        
+                    metadata=None)
 
 
 def plot_context_stim_lick_modulation_pie_chart(adj_pvals,sel_project,savepath=None):
@@ -694,7 +706,7 @@ def plot_context_stim_lick_modulation_pie_chart(adj_pvals,sel_project,savepath=N
     #stim and context modulation
     stim_and_context_resp=adj_pvals.query('context<0.05 and (vis1<0.05 or vis2<0.05 or sound1<0.05 or sound2<0.05) and lick>=0.05')
 
-    neither_stim_nor_context_resp=adj_pvals.query('context>=0.05 and vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05 and lick>=0.05')  
+    neither_stim_nor_context_resp=adj_pvals.query('context>=0.05 and vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05 and lick>=0.05')
 
 
     labels=['stimulus only','stimulus and context','context only',
@@ -707,7 +719,7 @@ def plot_context_stim_lick_modulation_pie_chart(adj_pvals,sel_project,savepath=N
     fig,ax=plt.subplots()
     ax.pie(sizes,labels=labels,autopct='%1.1f%%',
         colors=['tab:blue', 'tab:orange', 'tab:green',
-                'tab:red' , 'tab:purple', 'tab:brown', 
+                'tab:red' , 'tab:purple', 'tab:brown',
                 'tab:pink', 'grey'])
     ax.set_title('n = '+str(len(adj_pvals))+' units')
     fig.suptitle('context, lick, and stim modulation')
@@ -717,14 +729,14 @@ def plot_context_stim_lick_modulation_pie_chart(adj_pvals,sel_project,savepath=N
         if 'Templeton' in sel_project:
             temp_savepath=os.path.join(savepath,"context_stim_lick_Templeton.png")
         else:
-            temp_savepath=os.path.join(savepath,"context_stim_lick_DR.png")   
+            temp_savepath=os.path.join(savepath,"context_stim_lick_DR.png")
 
         fig.savefig(temp_savepath,
                     dpi=300, facecolor='w', edgecolor='w',
                     orientation='portrait', format='png',
                     transparent=True, bbox_inches='tight', pad_inches=0.1,
-                    metadata=None)  
-        
+                    metadata=None)
+
 
 def plot_context_mod_stim_resp_pie_chart(adj_pvals,sel_project,savepath=None):
 
@@ -771,14 +783,14 @@ def plot_context_mod_stim_resp_pie_chart(adj_pvals,sel_project,savepath=None):
         if 'Templeton' in sel_project:
             temp_savepath=os.path.join(savepath,"context_mod_stim_resp_Templeton.png")
         else:
-            temp_savepath=os.path.join(savepath,"context_mod_stim_resp_DR.png")   
+            temp_savepath=os.path.join(savepath,"context_mod_stim_resp_DR.png")
 
         fig.savefig(temp_savepath,
                     dpi=300, facecolor='w', edgecolor='w',
                     orientation='portrait', format='png',
                     transparent=True, bbox_inches='tight', pad_inches=0.1,
-                    metadata=None) 
-        
+                    metadata=None)
+
     #evoked
     labels=['vis1 only','vis2 only','both vis',
             'sound1 only','sound2 only','both sound',
@@ -798,14 +810,14 @@ def plot_context_mod_stim_resp_pie_chart(adj_pvals,sel_project,savepath=None):
         if 'Templeton' in sel_project:
             temp_savepath=os.path.join(savepath,"evoked_context_mod_stim_resp_Templeton.png")
         else:
-            temp_savepath=os.path.join(savepath,"evoked_context_mod_stim_resp_DR.png")   
+            temp_savepath=os.path.join(savepath,"evoked_context_mod_stim_resp_DR.png")
 
         fig.savefig(temp_savepath,
                     dpi=300, facecolor='w', edgecolor='w',
                     orientation='portrait', format='png',
                     transparent=True, bbox_inches='tight', pad_inches=0.1,
-                    metadata=None) 
-        
+                    metadata=None)
+
 
 def plot_single_session_decoding_results(path):
 
@@ -825,7 +837,7 @@ def plot_single_session_decoding_results(path):
     half_pos_shift_ind=np.where(shifts==half_pos_shift)[0][0]
     half_shift_inds=np.arange(half_neg_shift_ind,half_pos_shift_ind+1)
 
-    if use_half_shifts==False:
+    if use_half_shifts is False:
         half_shift_inds=np.arange(len(shifts))
 
     bal_acc={}
@@ -844,10 +856,10 @@ def plot_single_session_decoding_results(path):
     for aa in areas:
         if aa in decoder_results[session_id]['results']:
             mean_acc=np.nanmean(bal_acc[aa],axis=0)
-            
+
             true_acc=mean_acc[shifts[half_shift_inds]==1]
             pval=np.round(np.nanmean(mean_acc>=true_acc),decimals=4)
-            
+
             fig,ax=plt.subplots(1,1)
             ax.axhline(true_acc,color='k',linestyle='--',alpha=0.5)
             ax.axvline(1,color='k',linestyle='--',alpha=0.5)
@@ -856,3 +868,172 @@ def plot_single_session_decoding_results(path):
             ax.set_xlabel('trial shift')
             ax.set_ylabel('balanced accuracy')
             ax.set_title(str(aa)+' p='+str(pval))
+
+@functools.cache
+def get_slice_files(slice_: Literal['coronal', 'sagittal', 'horizontal', 'top'], mapping: Literal['Beryl', 'Allen', 'Cosmos']) -> npt.NDArray:
+    return iblatlas.plots.load_slice_files(slice_, mapping.lower())
+
+IBLATLAS_PLOT_SCALAR_ON_SLICE_PARAMS = {
+    'hemisphere': "both",
+    'background': "boundary",
+    'empty_color': "white",
+    'vector': True,
+    'linewidth': 0.1,
+    'edgecolor': [0.3] * 3,
+}
+
+def plot_brain_heatmap(
+    regions: Iterable[str] | npt.ArrayLike,
+    values: Iterable[float] | npt.ArrayLike,
+    sagittal_planes: float | Iterable[float] | None = None,
+    region_type: str | Literal['structure', 'location'] = 'structure',
+    cmap: str = 'Oranges',
+    clevels: tuple[float, float] | None = None,
+    **override_kwargs,
+) -> matplotlib.figure.Figure:
+    """A wrapper around `iblatlas.plots.plot_scalar_on_slice()` for making consistent brain
+    heatmaps.
+
+    See source code:
+    https://github.com/int-brain-lab/iblatlas/blob/f3f281511eb4f2eb9e738175ad968e1e52c42a9a/iblatlas/plots.py#L365
+
+
+    Parameters
+    ----------
+    regions : array_like
+        An array of brain region acronyms from nwb.units['structure'] or nwb.units['location'].
+    values : array_like
+        An array of scalar value per acronym. If hemisphere is 'both' and different values want to
+        be shown on each hemisphere, values should contain 2 columns, 1st column for LH values, 2nd
+        column for RH values, with nan values for regions not plotted on either side.
+    region_type : {'structure', 'location'}, default='structure'
+        The column used to get `regions` from the nwb units table. `location` specifies individual
+        regions for cortical layers; `structure` specifies parent regions.
+    sagittal_planes : Iterable[float], default=None
+        List of medial-lateral positions in um for adding sagittal slice images. If None, only a
+        'top' view is shown.
+    cmap: str, default='Oranges'
+        Colormap to use, as-per matplotlib colormap names.
+    clevels : array_like
+        The min and max color levels to use. If None, [0, 1] is used with values normalized to their max.
+    override_kwargs : dict
+        Additional keyword arguments to pass to `iblatlas.plots.plot_scalar_on_slice()`, overriding
+        the defaults defined in `IBLATLAS_PLOT_SCALAR_ON_SLICE_PARAMS`.
+    Returns
+    -------
+    fig: matplotlib.figure.Figure
+        The plotted figure.
+    """
+    # clean up inputs
+    regions = np.array(regions)
+    values = np.array(values)
+    if sagittal_planes is None:
+        sagittal_planes = []
+    else:
+        sagittal_planes = tuple(sagittal_planes) # type: ignore
+    if clevels is None:
+        clevels = (None, None) # type: ignore
+    else:
+        clevels = tuple(clevels) # type: ignore
+        if len(clevels) != 2:
+            raise ValueError("clevels must be a sequence of length 2")
+
+    # set up kwargs that are shared between all axes
+    joint_kwargs = {
+        'regions': regions,
+        'values': values,
+        'mapping': 'Allen' if region_type == "location" else 'Beryl',
+        'cmap': cmap,
+        'clevels': clevels,
+        'vector': True, # transforms below will only work for vector=True
+    }
+    for params in (IBLATLAS_PLOT_SCALAR_ON_SLICE_PARAMS, override_kwargs):
+        for key in ('slice_files', 'vector', 'slice', 'show_cbar', 'ax'):
+            if key in params:
+                logger.warning(f"Overriding {key} is not supported and will be ignored.")
+                del params[key]
+        joint_kwargs.update(params)
+
+    rotate_top = True
+    if rotate_top:
+        top_slice_files = np.array([])
+        for region in get_slice_files("top", joint_kwargs["mapping"].lower()):
+            rotated = copy.deepcopy(region)
+            coordsReg = region["coordsReg"]
+            if isinstance(coordsReg, dict):
+                rotated["coordsReg"]["x"] = region["coordsReg"]["y"]
+                rotated["coordsReg"]["y"] = region["coordsReg"]["x"]
+            else:
+                for new, orig in zip(rotated["coordsReg"], region["coordsReg"]):
+                    new["x"] = orig["y"]
+                    new["y"] = orig["x"]
+            top_slice_files = np.append(top_slice_files, rotated)
+    else:
+        top_slice_files = None
+
+    ml = (-5739, 5636)
+    dv = (-7643.0, 332.0)  # from 'sagittal'
+
+    def ccf_ml_to_vector_space(v):
+        return 1140 * (v - ml[0]) / np.diff(ml)
+
+    height_ratios: list[float] = [1] * (len(sagittal_planes) + 2)
+    height_ratios[0] = np.diff(ml) / np.diff(dv) # y-extent in 'top' ax / y-extent in sagittal ax
+    height_ratios[-1] = 0.1  # cbar
+
+    fig = plt.figure()
+    axes = []
+    gs = matplotlib.gridspec.GridSpec(
+        len(sagittal_planes) + 2, 1, figure=fig, height_ratios=height_ratios
+    )
+    axes.append(ax_top := fig.add_subplot(gs[0, 0]))
+    iblatlas.plots.plot_scalar_on_slice(
+        ax=ax_top,
+        slice="top",
+        show_cbar=False,
+        slice_files=top_slice_files,
+        **joint_kwargs,
+    )
+
+    for i, coord in enumerate(sagittal_planes):
+        axes.append(ax := fig.add_subplot(gs[i + 1, 0]))
+        iblatlas.plots.plot_scalar_on_slice(
+            ax=ax,
+            slice="sagittal",
+            coord=coord,
+            slice_files=get_slice_files("sagittal", joint_kwargs["mapping"]),
+            **joint_kwargs,
+        )
+        if rotate_top:
+            axlinefunc = ax_top.axhline
+        else:
+            axlinefunc = ax_top.axvline
+        if joint_kwargs["vector"]:
+            coord = ccf_ml_to_vector_space(coord)
+        axlinefunc(coord, color=joint_kwargs["edgecolor"], linestyle="--", lw=0.2)
+
+    axes.append(ax_cbar := fig.add_subplot(gs[len(sagittal_planes) + 1, 0]))
+    fig.colorbar(
+        matplotlib.cm.ScalarMappable(
+            norm=matplotlib.colors.Normalize(*joint_kwargs["clevels"]),
+            cmap="Oranges",
+        ),
+        ax=ax_cbar,
+        fraction=0.5,
+        orientation="horizontal",
+        location="bottom",
+    )
+
+    if rotate_top:
+        ax_top.invert_yaxis()
+        xlim = ax_top.get_xlim()
+        ylim = ax_top.get_ylim()
+        ax_top.set_xlim(ylim)
+        ax_top.set_ylim(xlim)
+
+    for ax in axes:
+        ax.set_aspect(1)
+        ax.set_axis_off()
+        ax.set_clip_on(False)
+
+    return fig
