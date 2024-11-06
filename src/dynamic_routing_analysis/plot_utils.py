@@ -927,7 +927,7 @@ def plot_brain_heatmap(
     # clean up inputs
     regions = np.array(regions)
     values = np.array(values)
-    if values.shape[0] == 2 and values.shape[1] != 2:
+    if len(values.shape) > 1 and values.shape[0] == 2 and values.shape[1] != 2:
         values = values.T
     if sagittal_planes is None:
         sagittal_planes = []
