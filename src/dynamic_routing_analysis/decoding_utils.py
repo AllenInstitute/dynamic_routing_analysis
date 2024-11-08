@@ -894,12 +894,6 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         return_results=params['return_results']
     else:
         return_results=False
-
-    if crossval=='5_fold_constant':
-        skf = StratifiedKFold(n_splits=5,shuffle=True)
-        train_test_split = skf.split(input_data, labels)
-    else:
-        train_test_split=None
     
     if session is not None:
         session_info=npc_lims.get_session_info(session)
@@ -949,6 +943,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     elif input_data_type == 'LP':
         mean_trial_behav_SVD = data_utils.load_LP_data(session, trials, vid_angle_LP, LP_parts_to_keep)
 
+
     #make fake blocks for templeton sessions
     if 'Templeton' in session_info.project:
         start_time=trials['start_time'].iloc[0]
@@ -994,6 +989,13 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         negative_shift=middle_4_blocks.min()
         positive_shift=trials.index.max()-middle_4_blocks.max()
         shifts=np.arange(-negative_shift,positive_shift+1)
+
+    labels=middle_4_block_trials['context_name'].values
+    if crossval=='5_fold_constant':
+        skf = StratifiedKFold(n_splits=5,shuffle=True)
+        train_test_split = skf.split(np.zeros(len(labels)), labels)
+    else:
+        train_test_split=None
 
     decoder_results[session_id]={}
     decoder_results[session_id]['shifts'] = shifts
