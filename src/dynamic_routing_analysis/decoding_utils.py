@@ -1048,11 +1048,24 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
 
     decoder_results[session_id]['areas'] = areas
 
+    #add non-probe-specific area to areas
+    all_probe_areas=[]
+    if len(units.query('structure.str.contains("probe")'))>0:
+        probe_areas=units.query('structure.str.contains("probe")')['structure'].unique()
+        for pa in probe_areas:
+            all_probe_areas.append([pa.split('_')[0]+'_all'])
+
+    general_areas=np.unique(np.array(all_probe_areas))
+    areas=np.concatenate([areas,general_areas])
+
     for aa in areas:
         #make shifted trial data array
         if input_data_type=='spikes':
             if aa == 'all':
                 area_units=units
+            elif '_all' in aa:
+                temp_area=aa.split('_')[0]
+                area_units=units.query('structure==@temp_area')
             else:
                 area_units=units.query('structure==@aa')
 
