@@ -1055,15 +1055,15 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         for pa in probe_areas:
             all_probe_areas.append([pa.split('_')[0]+'_all'])
 
+    general_areas=np.unique(np.array(all_probe_areas))
+    areas=np.concatenate([areas,general_areas])
+
     #consolidate SC areas
     for aa in areas:
         if aa in ['SCop','SCsg','SCzo']:
-            areas.append('SCs')
+            areas=np.concatenate([areas,['SCs']])
         elif aa in ['SCig','SCiw','SCdg','SCdw']:
-            areas.append('SCm')
-
-    general_areas=np.unique(np.array(all_probe_areas))
-    areas=np.concatenate([areas,general_areas])
+            areas=np.concatenate([areas,['SCm']])
 
     for aa in areas:
         #make shifted trial data array
