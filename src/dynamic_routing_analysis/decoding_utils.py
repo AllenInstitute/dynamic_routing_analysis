@@ -1055,6 +1055,13 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         for pa in probe_areas:
             all_probe_areas.append([pa.split('_')[0]+'_all'])
 
+    #consolidate SC areas
+    for aa in areas:
+        if aa in ['SCop','SCsg','SCzo']:
+            areas.append('SCs')
+        elif aa in ['SCig','SCiw','SCdg','SCdw']:
+            areas.append('SCm')
+
     general_areas=np.unique(np.array(all_probe_areas))
     areas=np.concatenate([areas,general_areas])
 
@@ -1066,6 +1073,10 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             elif '_all' in aa:
                 temp_area=aa.split('_')[0]
                 area_units=units.query('structure==@temp_area')
+            elif aa=='SCs':
+                area_units=units.query('structure=="SCop" or structure=="SCsg" or structure=="SCzo"')
+            elif aa=='SCm':
+                area_units=units.query('structure=="SCig" or structure=="SCiw" or structure=="SCdg" or structure=="SCdw"')
             else:
                 area_units=units.query('structure==@aa')
 
