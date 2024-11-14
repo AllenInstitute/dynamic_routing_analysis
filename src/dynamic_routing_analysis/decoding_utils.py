@@ -11,7 +11,7 @@ import upath
 import xarray as xr
 import zarr
 from sklearn.metrics import balanced_accuracy_score, classification_report
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import RepeatedStratifiedKFold, StratifiedKFold
 from sklearn.preprocessing import RobustScaler, StandardScaler
 
 import dynamic_routing_analysis as dra
@@ -234,8 +234,8 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     output['params']=params
     output['balanced_accuracy_test']=np.nanmean(balanced_accuracy_test)
     
-    output['pred_label_train']=np.hstack(ypred_train)
-    output['true_label_train']=np.hstack(ytrue_train)
+    output['pred_label_train']=ypred_train
+    output['true_label_train']=ytrue_train
 
     output['cr_train']=cr_dict_train
     output['balanced_accuracy_train']=balanced_accuracy_train
@@ -990,13 +990,6 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         positive_shift=trials.index.max()-middle_4_blocks.max()
         shifts=np.arange(-negative_shift,positive_shift+1)
 
-    labels=middle_4_block_trials['context_name'].values
-    if crossval=='5_fold_constant':
-        skf = StratifiedKFold(n_splits=5,shuffle=True)
-        train_test_split = skf.split(np.zeros(len(labels)), labels)
-    else:
-        train_test_split=None
-
     decoder_results[session_id]={}
     decoder_results[session_id]['shifts'] = shifts
     decoder_results[session_id]['middle_4_blocks'] = middle_4_blocks
@@ -1131,6 +1124,11 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                 for sh,shift in enumerate(shifts):
                     
                     labels=middle_4_block_trials['context_name'].values
+                    if crossval=='5_fold_constant':
+                        skf = StratifiedKFold(n_splits=5,shuffle=True,random_state=165482)
+                        train_test_split = skf.split(np.zeros(len(labels)), labels)
+                    else:
+                        train_test_split=None
 
                     if input_data_type=='spikes':
                         shifted_trial_da = trial_da.sel(trials=middle_4_blocks+shift,unit_id=sel_units).mean(dim='time').values
