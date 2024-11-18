@@ -166,3 +166,4 @@ cython_debug/
 install.sh 
 
 results/
+.scratch/
