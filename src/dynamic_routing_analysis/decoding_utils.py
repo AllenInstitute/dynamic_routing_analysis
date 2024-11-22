@@ -1313,8 +1313,8 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                     for nu in nunits:
                         if nu in all_bal_acc[session_id][aa].keys():
         
-                            true_acc_ind=np.where(half_shifts==1)[0][0]
-                            null_acc_ind=np.where(half_shifts!=1)[0]
+                            true_acc_ind=np.where(half_shifts==0)[0][0]
+                            null_acc_ind=np.where(half_shifts!=0)[0]
                             true_accuracy=all_bal_acc[session_id][aa][nu][true_acc_ind]
                             null_accuracy_mean=np.mean(all_bal_acc[session_id][aa][nu][null_acc_ind])
                             null_accuracy_median=np.median(all_bal_acc[session_id][aa][nu][null_acc_ind])
@@ -1530,20 +1530,58 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         'area':[],
         'project':[],
         'vis_context_dprime':[],
+        'aud_context_dprime':[],
+        'overall_dprime':[],
+        'n_good_blocks':[],
+
         'vis_hit_confidence':[],
         'vis_fa_confidence':[],
         'vis_cr_confidence':[],
-        'aud_context_dprime':[],
         'aud_hit_confidence':[],
         'aud_fa_confidence':[],
         'aud_cr_confidence':[],
-        'overall_dprime':[],
-        'n_good_blocks':[],
         'correct_confidence':[],
         'incorrect_confidence':[],
         'cr_all_confidence':[],
-        'fa_all_condfidence':[],
+        'fa_all_confidence':[],
         'hit_all_confidence':[],
+
+        'vis_hit_null_confidence':[],
+        'vis_fa_null_confidence':[],
+        'vis_cr_null_confidence':[],
+        'aud_hit_null_confidence':[],
+        'aud_fa_null_confidence':[],
+        'aud_cr_null_confidence':[],
+        'correct_null_confidence':[],
+        'incorrect_null_confidence':[],
+        'cr_all_null_confidence':[],
+        'fa_all_null_confidence':[],
+        'hit_all_null_confidence':[],
+
+        'vis_hit_predict_proba':[],
+        'vis_fa_predict_proba':[],
+        'vis_cr_predict_proba':[],
+        'aud_hit_predict_proba':[],
+        'aud_fa_predict_proba':[],
+        'aud_cr_predict_proba':[],
+        'correct_predict_proba':[],
+        'incorrect_predict_proba':[],
+        'cr_all_predict_proba':[],
+        'fa_all_predict_proba':[],
+        'hit_all_predict_proba':[],
+
+        'vis_hit_null_predict_proba':[],
+        'vis_fa_null_predict_proba':[],
+        'vis_cr_null_predict_proba':[],
+        'aud_hit_null_predict_proba':[],
+        'aud_fa_null_predict_proba':[],
+        'aud_cr_null_predict_proba':[],
+        'correct_null_predict_proba':[],
+        'incorrect_null_predict_proba':[],
+        'cr_all_null_predict_proba':[],
+        'fa_all_null_predict_proba':[],
+        'hit_all_null_predict_proba':[],
+
         'ccf_ap_mean':[],
         'ccf_dv_mean':[],
         'ccf_ml_mean':[],
@@ -1558,6 +1596,11 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         'cross_modal_dprime':[],
         'n_good_blocks':[],
         'confidence':[],
+        'null_confidence':[],
+        'null_min_confidence':[],
+        'predict_proba':[],
+        'predict_proba_null':[],
+        'predict_proba_null_min':[],
         'ccf_ap_mean':[],
         'ccf_dv_mean':[],
         'ccf_ml_mean':[],
@@ -1573,6 +1616,11 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         'dprime_before':[],
         'dprime_after':[],
         'confidence':[],
+        'null_confidence':[],
+        'null_min_confidence':[],
+        'predict_proba':[],
+        'predict_proba_null':[],
+        'predict_proba_null_min':[],
         'ccf_ap_mean':[],
         'ccf_dv_mean':[],
         'ccf_ml_mean':[],
@@ -1591,6 +1639,11 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         'trials_since_last_information_no_targets':[],
         'time_since_last_information_no_targets':[],
         'confidence':[],
+        'confidence_null':[],
+        'confidence_null_min':[],
+        'predict_proba':[],
+        'predict_proba_null':[],
+        'predict_proba_null_min':[],
         'ccf_ap_mean':[],
         'ccf_dv_mean':[],
         'ccf_ml_mean':[],
@@ -1727,9 +1780,11 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     half_shift_inds=np.arange(len(shifts))
 
                 decision_function_shifts=[]
+                predict_proba_shifts=[]
                     
                 for sh in half_shift_inds:
                     temp_shifts=[]
+                    temp_proba_shifts=[]
                     for rr in range(n_repeats):
                         if n_units is not None:
                             
@@ -1737,60 +1792,125 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                                 continue
                             if sh in list(decoder_results[session_id]['results'][aa]['shift'][n_units][rr].keys()):
                                 temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][n_units][rr][sh]['decision_function'])
+                                temp_proba_shifts.append(decoder_results[session_id]['results'][aa]['shift'][n_units][rr][sh]['predict_proba'][:,0])
                         else:
                             if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
                                 temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['decision_function'])
+                                temp_proba_shifts.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['predict_proba'][:,0])
                     if len(temp_shifts)>0:
                         decision_function_shifts.append(np.nanmean(np.vstack(temp_shifts),axis=0))
+                        predict_proba_shifts.append(np.nanmean(np.vstack(temp_proba_shifts),axis=0))
                     else:
                         decision_function_shifts.append(np.nan)
-
+                        predict_proba_shifts.append(np.nan)
 
                 # true_label=decoder_results[session_id]['results'][aa]['shift'][np.where(shifts==0)[0][0]]['true_label']
                 
                 try:
                     decision_function_shifts=np.vstack(decision_function_shifts)
+                    predict_proba_shifts=np.vstack(predict_proba_shifts)
                 except:
-                    print(session_id,'failed to stack decision functions; skipping')
+                    print(session_id,'failed to stack decision functions / predict_proba; skipping')
                     continue
                 
                 # #normalize all decision function values to the stdev of all the nulls
                 # decision_function_shifts=decision_function_shifts/np.nanstd(decision_function_shifts[:])
 
-                corrected_decision_function=decision_function_shifts[shifts[half_shift_inds]==0,:].flatten()-np.median(decision_function_shifts,axis=0)
+                # corrected_decision_function=decision_function_shifts[shifts[half_shift_inds]==0,:].flatten()-np.median(decision_function_shifts,axis=0)
 
                 # #option to normalize after, if n_units=='all', to account for different #'s of units
                 # if n_units=='all':
                 #     corrected_decision_function=corrected_decision_function/np.std(np.abs(corrected_decision_function))
 
+                #for now, do NOT correct decision function values:
+                corrected_decision_function=decision_function_shifts[shifts[half_shift_inds]==0,:].flatten()
+                null_decision_function=np.median(decision_function_shifts[shifts[half_shift_inds]!=0,:],axis=0)
+                null_min_decision_function=np.mean(np.vstack([decision_function_shifts[shifts[half_shift_inds[0]],:],
+                                                            decision_function_shifts[shifts[half_shift_inds[-1]],:]]),axis=0)
+
+                predict_proba=predict_proba_shifts[shifts[half_shift_inds]==0,:].flatten()
+                null_predict_proba=np.median(predict_proba_shifts[shifts[half_shift_inds]!=0,:],axis=0)
+                null_min_predict_proba=np.mean(np.vstack([predict_proba_shifts[shifts[half_shift_inds[0]],:],
+                                                            predict_proba_shifts[shifts[half_shift_inds[-1]],:]]),axis=0)
+
+                #get trial indices for each type
+                vis_HIT_idx=trials_middle.query('(is_correct==True and is_target==True and is_vis_context==True \
+                                            and is_response==True and is_reward_scheduled==False)').index.values
+                aud_HIT_idx=trials_middle.query('(is_correct==True and is_target==True and is_vis_context==False \
+                                            and is_response==True and is_reward_scheduled==False)').index.values
+                vis_CR_idx=trials_middle.query('(is_correct==True and is_target==True and is_vis_context==True \
+                                            and is_response==False and is_reward_scheduled==False)').index.values
+                aud_CR_idx=trials_middle.query('(is_correct==True and is_target==True and is_vis_context==False \
+                                            and is_response==False and is_reward_scheduled==False)').index.values
+                vis_FA_idx=trials_middle.query('(is_correct==False and is_target==True and is_vis_context==True \
+                                            and is_response==True and is_reward_scheduled==False)').index.values
+                aud_FA_idx=trials_middle.query('(is_correct==False and is_target==True and is_vis_context==False \
+                                            and is_response==True and is_reward_scheduled==False)').index.values
+                
+                correct_vis_idx=trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False').index.values
+                incorrect_vis_idx=trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False').index.values
+                correct_aud_idx=trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False').index.values
+                incorrect_aud_idx=trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False').index.values
+                
                 #find average confidence per hit, fa, cr
-                vis_HIT_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==True and is_target==True and is_vis_context==True and \
-                                                                                    is_response==True and is_reward_scheduled==False)').index.values])
-                aud_HIT_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==True and is_target==True and is_vis_context==False and \
-                                                                                    is_response==True and is_reward_scheduled==False)').index.values])
-                vis_CR_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==True and is_target==True and is_vis_context==True and \
-                                                                                    is_response==False and is_reward_scheduled==False)').index.values])
-                aud_CR_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==True and is_target==True and is_vis_context==False and \
-                                                                                    is_response==False and is_reward_scheduled==False)').index.values])
-                vis_FA_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==False and is_target==True and is_vis_context==True and \
-                                                                                    is_response==True and is_reward_scheduled==False)').index.values])
-                aud_FA_mean=np.mean(corrected_decision_function[trials_middle.query('(is_correct==False and is_target==True and is_vis_context==False and \
-                                                                                    is_response==True and is_reward_scheduled==False)').index.values])
+                vis_HIT_mean=np.mean(corrected_decision_function[vis_HIT_idx])
+                aud_HIT_mean=np.mean(corrected_decision_function[aud_HIT_idx])
+                vis_CR_mean=np.mean(corrected_decision_function[vis_CR_idx])
+                aud_CR_mean=np.mean(corrected_decision_function[aud_CR_idx])
+                vis_FA_mean=np.mean(corrected_decision_function[vis_FA_idx])
+                aud_FA_mean=np.mean(corrected_decision_function[aud_FA_idx])
 
-                correct_mean=np.mean(np.hstack([corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==True').index.values],
-                                                -corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==False').index.values]]))
-                incorrect_mean=np.mean(np.hstack([corrected_decision_function[trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False and is_vis_context==True').index.values],
-                                                -corrected_decision_function[trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False and is_vis_context==False').index.values]]))
+                correct_mean=np.mean(np.hstack([corrected_decision_function[correct_vis_idx],-corrected_decision_function[correct_aud_idx]]))
+                incorrect_mean=np.mean(np.hstack([corrected_decision_function[incorrect_vis_idx],-corrected_decision_function[incorrect_aud_idx]]))
 
-                CR_all_mean=np.mean(np.hstack([corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==True and is_response==False').index.values],
-                                                -corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==False and is_response==False').index.values]]))
+                CR_all_mean=np.mean(np.hstack([corrected_decision_function[vis_CR_idx],-corrected_decision_function[aud_CR_idx]]))
+                FA_all_mean=np.mean(np.hstack([corrected_decision_function[vis_FA_idx],-corrected_decision_function[aud_FA_idx]]))
+                HIT_all_mean=np.mean(np.hstack([corrected_decision_function[vis_HIT_idx],-corrected_decision_function[aud_HIT_idx]]))
 
-                FA_all_mean=np.mean(np.hstack([corrected_decision_function[trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False and is_vis_context==True and is_response==True').index.values],
-                                                -corrected_decision_function[trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False and is_vis_context==False and is_response==True').index.values]]))
+                #find average null confidence per hit, fa, cr
+                vis_HIT_null_mean=np.mean(null_decision_function[vis_HIT_idx])
+                aud_HIT_null_mean=np.mean(null_decision_function[aud_HIT_idx])
+                vis_CR_null_mean=np.mean(null_decision_function[vis_CR_idx])
+                aud_CR_null_mean=np.mean(null_decision_function[aud_CR_idx])
+                vis_FA_null_mean=np.mean(null_decision_function[vis_FA_idx])
+                aud_FA_null_mean=np.mean(null_decision_function[aud_FA_idx])
 
-                HIT_all_mean=np.mean(np.hstack([corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==True and is_response==True').index.values],
-                                                -corrected_decision_function[trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False and is_vis_context==False and is_response==True').index.values]]))
+                correct_null_mean=np.mean(np.hstack([null_decision_function[correct_vis_idx],-null_decision_function[correct_aud_idx]]))
+                incorrect_null_mean=np.mean(np.hstack([null_decision_function[incorrect_vis_idx],-null_decision_function[incorrect_aud_idx]]))
+                
+                CR_all_null_mean=np.mean(np.hstack([null_decision_function[vis_CR_idx],-null_decision_function[aud_CR_idx]]))
+                FA_all_null_mean=np.mean(np.hstack([null_decision_function[vis_FA_idx],-null_decision_function[aud_FA_idx]]))
+                HIT_all_null_mean=np.mean(np.hstack([null_decision_function[vis_HIT_idx],-null_decision_function[aud_HIT_idx]]))
 
+                #find average predict_proba per hit, fa, cr
+                vis_HIT_proba_mean=np.mean(predict_proba[vis_HIT_idx])
+                aud_HIT_proba_mean=np.mean(predict_proba[aud_HIT_idx])
+                vis_CR_proba_mean=np.mean(predict_proba[vis_CR_idx])
+                aud_CR_proba_mean=np.mean(predict_proba[aud_CR_idx])
+                vis_FA_proba_mean=np.mean(predict_proba[vis_FA_idx])
+                aud_FA_proba_mean=np.mean(predict_proba[aud_FA_idx])
+
+                correct_proba_mean=np.mean(np.hstack([predict_proba[correct_vis_idx],1-predict_proba[correct_aud_idx]]))
+                incorrect_proba_mean=np.mean(np.hstack([predict_proba[incorrect_vis_idx],1-predict_proba[incorrect_aud_idx]]))
+
+                CR_all_proba_mean=np.mean(np.hstack([predict_proba[vis_CR_idx],1-predict_proba[aud_CR_idx]]))
+                FA_all_proba_mean=np.mean(np.hstack([predict_proba[vis_FA_idx],1-predict_proba[aud_FA_idx]]))
+                HIT_all_proba_mean=np.mean(np.hstack([predict_proba[vis_HIT_idx],1-predict_proba[aud_HIT_idx]]))
+
+                #find average null predict_proba per hit, fa, cr
+                vis_HIT_null_proba_mean=np.mean(null_predict_proba[vis_HIT_idx])
+                aud_HIT_null_proba_mean=np.mean(null_predict_proba[aud_HIT_idx])
+                vis_CR_null_proba_mean=np.mean(null_predict_proba[vis_CR_idx])
+                aud_CR_null_proba_mean=np.mean(null_predict_proba[aud_CR_idx])
+                vis_FA_null_proba_mean=np.mean(null_predict_proba[vis_FA_idx])
+                aud_FA_null_proba_mean=np.mean(null_predict_proba[aud_FA_idx])
+
+                correct_null_proba_mean=np.mean(np.hstack([null_predict_proba[correct_vis_idx],1-null_predict_proba[correct_aud_idx]]))
+                incorrect_null_proba_mean=np.mean(np.hstack([null_predict_proba[incorrect_vis_idx],1-null_predict_proba[incorrect_aud_idx]]))
+
+                CR_all_null_proba_mean=np.mean(np.hstack([null_predict_proba[vis_CR_idx],1-null_predict_proba[aud_CR_idx]]))
+                FA_all_null_proba_mean=np.mean(np.hstack([null_predict_proba[vis_FA_idx],1-null_predict_proba[aud_FA_idx]]))
+                HIT_all_null_proba_mean=np.mean(np.hstack([null_predict_proba[vis_HIT_idx],1-null_predict_proba[aud_HIT_idx]]))
 
                 #append to table
                 decoder_confidence_versus_response_type['session'].append(session_id_str)
@@ -1803,6 +1923,9 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 decoder_confidence_versus_response_type['vis_hit_confidence'].append(vis_HIT_mean)
                 decoder_confidence_versus_response_type['vis_fa_confidence'].append(vis_FA_mean)
                 decoder_confidence_versus_response_type['vis_cr_confidence'].append(vis_CR_mean)
+                decoder_confidence_versus_response_type['vis_hit_null_confidence'].append(vis_HIT_null_mean)
+                decoder_confidence_versus_response_type['vis_fa_null_confidence'].append(vis_FA_null_mean)
+                decoder_confidence_versus_response_type['vis_cr_null_confidence'].append(vis_CR_null_mean)
                 if performance.query('rewarded_modality=="aud"').empty:
                     decoder_confidence_versus_response_type['aud_context_dprime'].append(np.nan)
                 else:
@@ -1810,14 +1933,47 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 decoder_confidence_versus_response_type['aud_hit_confidence'].append(aud_HIT_mean)
                 decoder_confidence_versus_response_type['aud_fa_confidence'].append(aud_FA_mean)
                 decoder_confidence_versus_response_type['aud_cr_confidence'].append(aud_CR_mean)
+                decoder_confidence_versus_response_type['aud_hit_null_confidence'].append(aud_HIT_null_mean)
+                decoder_confidence_versus_response_type['aud_fa_null_confidence'].append(aud_FA_null_mean)
+                decoder_confidence_versus_response_type['aud_cr_null_confidence'].append(aud_CR_null_mean)
 
                 decoder_confidence_versus_response_type['overall_dprime'].append(performance['cross_modal_dprime'].mean())
                 decoder_confidence_versus_response_type['n_good_blocks'].append(performance.query('cross_modal_dprime>=1.0')['cross_modal_dprime'].count())
                 decoder_confidence_versus_response_type['correct_confidence'].append(correct_mean)
                 decoder_confidence_versus_response_type['incorrect_confidence'].append(incorrect_mean)
                 decoder_confidence_versus_response_type['cr_all_confidence'].append(CR_all_mean)
-                decoder_confidence_versus_response_type['fa_all_condfidence'].append(FA_all_mean)
+                decoder_confidence_versus_response_type['fa_all_confidence'].append(FA_all_mean)
                 decoder_confidence_versus_response_type['hit_all_confidence'].append(HIT_all_mean)
+                decoder_confidence_versus_response_type['correct_null_confidence'].append(correct_null_mean)
+                decoder_confidence_versus_response_type['incorrect_null_confidence'].append(incorrect_null_mean)
+                decoder_confidence_versus_response_type['cr_all_null_confidence'].append(CR_all_null_mean)
+                decoder_confidence_versus_response_type['fa_all_null_confidence'].append(FA_all_null_mean)
+                decoder_confidence_versus_response_type['hit_all_null_confidence'].append(HIT_all_null_mean)
+
+                #append predict_proba values
+                decoder_confidence_versus_response_type['vis_hit_predict_proba'].append(vis_HIT_proba_mean)
+                decoder_confidence_versus_response_type['vis_fa_predict_proba'].append(vis_FA_proba_mean)
+                decoder_confidence_versus_response_type['vis_cr_predict_proba'].append(vis_CR_proba_mean)
+                decoder_confidence_versus_response_type['aud_hit_predict_proba'].append(aud_HIT_proba_mean)
+                decoder_confidence_versus_response_type['aud_fa_predict_proba'].append(aud_FA_proba_mean)
+                decoder_confidence_versus_response_type['aud_cr_predict_proba'].append(aud_CR_proba_mean)
+                decoder_confidence_versus_response_type['correct_predict_proba'].append(correct_proba_mean)
+                decoder_confidence_versus_response_type['incorrect_predict_proba'].append(incorrect_proba_mean)
+                decoder_confidence_versus_response_type['cr_all_predict_proba'].append(CR_all_proba_mean)
+                decoder_confidence_versus_response_type['fa_all_predict_proba'].append(FA_all_proba_mean)
+                decoder_confidence_versus_response_type['hit_all_predict_proba'].append(HIT_all_proba_mean)
+                #append null predict_proba values
+                decoder_confidence_versus_response_type['vis_hit_null_predict_proba'].append(vis_HIT_null_proba_mean)
+                decoder_confidence_versus_response_type['vis_fa_null_predict_proba'].append(vis_FA_null_proba_mean)
+                decoder_confidence_versus_response_type['vis_cr_null_predict_proba'].append(vis_CR_null_proba_mean)
+                decoder_confidence_versus_response_type['aud_hit_null_predict_proba'].append(aud_HIT_null_proba_mean)
+                decoder_confidence_versus_response_type['aud_fa_null_predict_proba'].append(aud_FA_null_proba_mean)
+                decoder_confidence_versus_response_type['aud_cr_null_predict_proba'].append(aud_CR_null_proba_mean)
+                decoder_confidence_versus_response_type['correct_null_predict_proba'].append(correct_null_proba_mean)
+                decoder_confidence_versus_response_type['incorrect_null_predict_proba'].append(incorrect_null_proba_mean)
+                decoder_confidence_versus_response_type['cr_all_null_predict_proba'].append(CR_all_null_proba_mean)
+                decoder_confidence_versus_response_type['fa_all_null_predict_proba'].append(FA_all_null_proba_mean)
+                decoder_confidence_versus_response_type['hit_all_null_predict_proba'].append(HIT_all_null_proba_mean)
 
                 # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
                 if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
@@ -1836,6 +1992,12 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 trials_since_rewarded_target=trials_middle['trials_since_rewarded_target'].values
                 time_since_rewarded_target=trials_middle['time_since_rewarded_target'].values
                 confidence=corrected_decision_function[trials_middle.index.values]
+                confidence_null=null_decision_function[trials_middle.index.values]
+                confidence_null_min=null_min_decision_function[trials_middle.index.values]
+                temp_predict_proba=predict_proba[trials_middle.index.values]
+                temp_predict_proba_null=null_predict_proba[trials_middle.index.values]
+                temp_predict_proba_null_min=null_min_predict_proba[trials_middle.index.values]
+
                 for tt,trial in trials_middle.reset_index().iterrows():
                     #reverse sign if other modality
                     if trial['is_aud_context']:
@@ -1849,6 +2011,11 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 decoder_confidence_versus_trials_since_rewarded_target['trials_since_rewarded_target'].append(trials_since_rewarded_target)
                 decoder_confidence_versus_trials_since_rewarded_target['time_since_rewarded_target'].append(time_since_rewarded_target)
                 decoder_confidence_versus_trials_since_rewarded_target['confidence'].append(confidence)
+                decoder_confidence_versus_trials_since_rewarded_target['confidence_null'].append(confidence_null)
+                decoder_confidence_versus_trials_since_rewarded_target['confidence_null_min'].append(confidence_null_min)
+                decoder_confidence_versus_trials_since_rewarded_target['predict_proba'].append(temp_predict_proba)
+                decoder_confidence_versus_trials_since_rewarded_target['predict_proba_null'].append(temp_predict_proba_null)
+                decoder_confidence_versus_trials_since_rewarded_target['predict_proba_null_min'].append(temp_predict_proba_null_min)
 
                 #trials/time since last bit of information
                 trials_since_last_information=trials_middle['trials_since_last_information'].values
@@ -1888,11 +2055,18 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     #find average confidence and dprime for the block
                     if block_trials['is_vis_context'].values[0]:
                         multiplier=1
+                        additive=0
                     elif block_trials['is_aud_context'].values[0]:
                         multiplier=-1
+                        additive=1
                     
                     block_dprime=performance.query('block_index==@bb')['cross_modal_dprime'].values[0]
                     block_mean=np.nanmean(corrected_decision_function[block_trials.index.values])*multiplier
+                    block_mean_null=np.nanmean(null_decision_function[block_trials.index.values])*multiplier
+                    block_mean_null_min=np.nanmean(null_min_decision_function[block_trials.index.values])*multiplier
+                    block_predict_proba=additive+np.nanmean(predict_proba[block_trials.index.values])*multiplier
+                    block_predict_proba_null=additive+np.nanmean(null_predict_proba[block_trials.index.values])*multiplier
+                    block_predict_proba_null_min=additive+np.nanmean(null_min_predict_proba[block_trials.index.values])*multiplier
 
                     #append to table
                     decoder_confidence_dprime_by_block['session'].append(session_id_str)
@@ -1902,6 +2076,11 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     decoder_confidence_dprime_by_block['cross_modal_dprime'].append(block_dprime)
                     decoder_confidence_dprime_by_block['n_good_blocks'].append(np.sum(performance['cross_modal_dprime']>=1.0))
                     decoder_confidence_dprime_by_block['confidence'].append(block_mean)
+                    decoder_confidence_dprime_by_block['null_confidence'].append(block_mean_null)
+                    decoder_confidence_dprime_by_block['null_min_confidence'].append(block_mean_null_min)
+                    decoder_confidence_dprime_by_block['predict_proba'].append(block_predict_proba)
+                    decoder_confidence_dprime_by_block['predict_proba_null'].append(block_predict_proba_null)
+                    decoder_confidence_dprime_by_block['predict_proba_null_min'].append(block_predict_proba_null_min)
 
                     # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
                     if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
@@ -1921,8 +2100,10 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 for st,switch_trial in switch_trials.iloc[1:].iterrows():
                     if switch_trial['is_vis_context']:
                         multiplier=1
+                        additive=0
                     elif switch_trial['is_aud_context']:
                         multiplier=-1
+                        additive=1
                     switch_trial_block_index=switch_trial['block_index']
                     #append to table
                     decoder_confidence_by_switch['session'].append(session_id_str)
@@ -1933,6 +2114,11 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     decoder_confidence_by_switch['dprime_before'].append(performance.query('block_index==(@switch_trial_block_index-1)')['cross_modal_dprime'].values[0])
                     decoder_confidence_by_switch['dprime_after'].append(performance.query('block_index==(@switch_trial_block_index)')['cross_modal_dprime'].values[0])
                     decoder_confidence_by_switch['confidence'].append(corrected_decision_function[switch_trial['id']-20:switch_trial['id']+30]*multiplier)
+                    decoder_confidence_by_switch['null_confidence'].append(null_decision_function[switch_trial['id']-20:switch_trial['id']+30]*multiplier)
+                    decoder_confidence_by_switch['null_min_confidence'].append(null_min_decision_function[switch_trial['id']-20:switch_trial['id']+30]*multiplier)
+                    decoder_confidence_by_switch['predict_proba'].append(additive+predict_proba[switch_trial['id']-20:switch_trial['id']+30]*multiplier)
+                    decoder_confidence_by_switch['predict_proba_null'].append(additive+null_predict_proba[switch_trial['id']-20:switch_trial['id']+30]*multiplier)
+                    decoder_confidence_by_switch['predict_proba_null_min'].append(additive+null_min_predict_proba[switch_trial['id']-20:switch_trial['id']+30]*multiplier)
 
                     # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
                     if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
