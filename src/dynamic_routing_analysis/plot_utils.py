@@ -18,10 +18,12 @@ import npc_lims
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import polars as pl
 import pyarrow.dataset as ds
 from matplotlib import patches
 
 from dynamic_routing_analysis import spike_utils
+from dynamic_routing_analysis import ccf_utils
 
 logger = logging.getLogger(__name__)
 
@@ -882,13 +884,15 @@ IBLATLAS_PLOT_SCALAR_ON_SLICE_PARAMS = {
     'edgecolor': [0.3] * 3,
 }
 
+
 def plot_brain_heatmap(
     regions: Iterable[str] | npt.ArrayLike,
     values: Iterable[float] | npt.ArrayLike,
     sagittal_planes: float | Iterable[float] | None = None,
-    region_type: str | Literal['structure', 'location'] = 'structure',
-    cmap: str = 'Oranges',
+    agg_layers: str | None = "max",
+    cmap: str = "Reds",
     clevels: tuple[float, float] | None = None,
+    cmap_norm: bool = False,
     **override_kwargs,
 ) -> matplotlib.figure.Figure:
     """A wrapper around `iblatlas.plots.plot_scalar_on_slice()` for making consistent brain
@@ -927,33 +931,135 @@ def plot_brain_heatmap(
     # clean up inputs
     regions = np.array(regions)
     values = np.array(values)
-    if len(values.shape) > 1 and values.shape[0] == 2 and values.shape[1] != 2:
+    if values.ndim == 1:
+        values = np.array([values, np.full(len(values), np.nan)]).T
+    if values.ndim > 1 and values.shape[0] == 2 and values.shape[1] != 2:
         values = values.T
+    if values.shape[0] != regions.shape[0]:
+        raise ValueError(f"{values.shape[0]=} does not match {regions.shape[0]=}")
+    v = []
+    s = []
+    for region, value in zip(regions, values):
+        structures = ccf_utils.get_deepest_children(region)
+        s.extend(structures)
+        v.extend([value] * len(structures))
+    values = np.array(v)
+    regions = np.array(s)
+    
+    top_values = []
+    top_regions = []
+    if agg_layers is not None:
+        if not isinstance(agg_layers, str):
+            raise ValueError(
+                f"Layer aggregation function should be specified as a string, e.g. 'max', 'mean', not {agg_layers!r}"
+            )
+        # for the 'top' view of cortex, layer 1 is in view, but typically not informative
+        # - find all the layers for an area, aggregate and update layer 1's value
+        def get_agg_layer_df(regions, values):
+            return (
+                # create a mapping of layer acronym to corresponding top-level layer and an aggregate value across all layers
+                ccf_utils.get_ccf_structure_tree_df()
+                # get values for any matching areas, but operate on all areas until very end:
+                .join(
+                    pl.DataFrame({"acronym": regions, "value": values}),
+                    on="acronym",
+                    how="left",
+                )  # preserve all rows
+                # exclude nan values from calculations:
+                .with_columns(
+                    pl.col("value").fill_nan(None),
+                )
+                .filter(
+                    pl.col("name").str.to_lowercase().str.contains("layer"),
+                )
+                .group_by("parent_structure_id")
+                .agg("acronym", "value")
+                .filter(
+                    pl.col("acronym").list.join("").str.contains("1"),
+                    pl.col("acronym").list.len()
+                    > 1,  # if only one acronym in group, it has a 1 in the name but no layers (e.g. CA1)
+                )
+                .with_columns(
+                    pl.col("acronym").list.first().alias("top_layer"),
+                    # if all values are null, agg = 0.0, which is incorrect
+                    # - we also don't want to drop nulls completely, so apply selectively:
+                    pl.when(pl.col("value").list.drop_nulls().list.len() != 0)
+                    .then(
+                        pl.col("value")
+                        .list.drop_nulls()
+                        .list.eval(getattr(pl.element(), agg_layers)())
+                        .list.get(0)
+                    )
+                    .otherwise(pl.lit(np.nan)),
+                )
+                .explode("acronym")
+                # filter rows with matches in actual data
+                .join(
+                    pl.DataFrame({"acronym": regions, "value": values}),
+                    on="acronym",
+                    how="semi",
+                )
+            )
+
+        df_left = get_agg_layer_df(regions, values[:, 0])
+        df_right = get_agg_layer_df(regions, values[:, 1])
+        for idx, r in enumerate(regions):
+            if r not in df_left["acronym"] and r not in df_right["acronym"]:
+                top_regions.append(r)
+                top_values.append(values[idx, :])
+            else:
+                top_layer = df_left.filter(pl.col("acronym") == r)["top_layer"][
+                    0
+                ]  # doesn't matter which df we use here
+                lr_values = [
+                    df.filter(pl.col("acronym") == r)["value"][0]
+                    for df in (df_left, df_right)
+                ]
+                top_regions.append(top_layer)
+                top_values.append(lr_values)
+    top_values = np.array(top_values)
+    top_regions = np.array(top_regions)
+    assert top_values.shape[1] == 2
+    assert top_values.shape[0] == top_regions.shape[0]
+
     if sagittal_planes is None:
         sagittal_planes = []
     elif not isinstance(sagittal_planes, Iterable):
-        sagittal_planes = (sagittal_planes, )
+        sagittal_planes = (sagittal_planes,)
     else:
-        sagittal_planes = tuple(sagittal_planes) # type: ignore
-    if clevels is None:
-        clevels = (None, None) # type: ignore
-    else:
-        clevels = tuple(clevels) # type: ignore
+        sagittal_planes = tuple(sagittal_planes)  # type: ignore
+
+    if clevels is not None:
+        clevels = tuple(clevels)  # type: ignore
         if len(clevels) != 2:
             raise ValueError("clevels must be a sequence of length 2")
+
+    if cmap_norm:
+        if clevels:
+            logger.warning(
+                f"`clevels` were provided, but {cmap_norm=} requested: levels will be normalized to [0, 1]"
+            )
+        clevels = (None, None)
+    elif clevels is None:
+        if sagittal_planes:
+            all_values = np.concatenate([top_values, values])
+        else:
+            all_values = top_values
+        clevels = (np.nanmin(all_values), np.nanmax(all_values))
+
     # set up kwargs that are shared between all axes
     joint_kwargs = {
-        'regions': regions,
-        'values': values,
-        'mapping': 'Allen' if region_type == "location" else 'Beryl',
-        'cmap': cmap,
-        'clevels': clevels,
-        'vector': True, # transforms below will only work for vector=True
+        "mapping": "Allen",
+        "cmap": cmap,
+        "clevels": clevels,
+        "vector": True,  # transforms below will only work for vector=True
     }
     for params in (IBLATLAS_PLOT_SCALAR_ON_SLICE_PARAMS, override_kwargs):
-        for key in ('slice_files', 'vector', 'slice', 'show_cbar', 'ax'):
+        for key in ("slice_files", "vector", "slice", "show_cbar", "ax"):
             if key in params:
-                logger.warning(f"Overriding {key} is not supported and will be ignored.")
+                logger.warning(
+                    f"Overriding {key} is not supported and will be ignored."
+                )
                 del params[key]
         joint_kwargs.update(params)
 
@@ -981,7 +1087,9 @@ def plot_brain_heatmap(
         return 1140 * (v - ml[0]) / np.diff(ml)
 
     height_ratios: list[float] = [1] * (len(sagittal_planes) + 2)
-    height_ratios[0] = np.diff(ml) / np.diff(dv) # y-extent in 'top' ax / y-extent in sagittal ax
+    height_ratios[0] = np.diff(ml) / np.diff(
+        dv
+    )  # y-extent in 'top' ax / y-extent in sagittal ax
     height_ratios[-1] = 0.1  # cbar
 
     fig = plt.figure()
@@ -991,6 +1099,8 @@ def plot_brain_heatmap(
     )
     axes.append(ax_top := fig.add_subplot(gs[0, 0]))
     iblatlas.plots.plot_scalar_on_slice(
+        regions=top_regions,
+        values=top_values,
         ax=ax_top,
         slice="top",
         show_cbar=False,
@@ -1001,6 +1111,8 @@ def plot_brain_heatmap(
     for i, coord in enumerate(sagittal_planes):
         axes.append(ax := fig.add_subplot(gs[i + 1, 0]))
         iblatlas.plots.plot_scalar_on_slice(
+            regions=regions,
+            values=values,
             ax=ax,
             slice="sagittal",
             coord=coord,
@@ -1019,7 +1131,7 @@ def plot_brain_heatmap(
     fig.colorbar(
         matplotlib.cm.ScalarMappable(
             norm=matplotlib.colors.Normalize(*joint_kwargs["clevels"]),
-            cmap="Oranges",
+            cmap=cmap,
         ),
         ax=ax_cbar,
         fraction=0.5,
