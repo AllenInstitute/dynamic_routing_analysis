@@ -1081,6 +1081,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         
         decoder_results[session_id]['results'][aa]={}
         decoder_results[session_id]['results'][aa]['shift']={}
+        decoder_results[session_id]['results'][aa]['no_shift']={}
 
         if input_data_type=='spikes':
             
@@ -1099,6 +1100,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             if nunits!='all' and nunits>len(area_units):
                 continue
             decoder_results[session_id]['results'][aa]['shift'][nunits]={}
+            decoder_results[session_id]['results'][aa]['no_shift'][nunits]={}
             for rr in range(n_repeats):
                 if n_repeats>1:
                     decoder_results[session_id]['results'][aa]['shift'][nunits][rr]={}
@@ -1119,6 +1121,24 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                     sel_units=np.arange(0, len(LP_parts_to_keep))
 
                 decoder_results[session_id]['results'][aa]['shift'][nunits][rr]['sel_units']=sel_units
+                decoder_results[session_id]['results'][aa]['no_shift'][nunits][rr]['sel_units']=sel_units
+
+                #run once with all trials and no shifts
+                labels=trials['context_name'].values
+                input_data=trial_da.sel(unit_id=sel_units).mean(dim='time').values.T
+                if crossval=='5_fold_constant':
+                    skf = StratifiedKFold(n_splits=5,shuffle=True,random_state=165482)
+                    train_test_split = skf.split(np.zeros(len(labels)), labels)
+                else:
+                    train_test_split=None
+                decoder_results[session_id]['results'][aa]['no_shift'][nunits][rr] = decoder_helper(
+                    input_data=input_data,
+                    labels=labels,
+                    decoder_type=decoder_type,
+                    crossval=crossval,
+                    crossval_index=None,
+                    labels_as_index=labels_as_index,
+                    train_test_split_input=train_test_split)
 
                 #loop through shifts
                 for sh,shift in enumerate(shifts):
