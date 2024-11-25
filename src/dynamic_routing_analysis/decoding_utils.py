@@ -1792,11 +1792,11 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                                 continue
                             if sh in list(decoder_results[session_id]['results'][aa]['shift'][n_units][rr].keys()):
                                 temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][n_units][rr][sh]['decision_function'])
-                                temp_proba_shifts.append(decoder_results[session_id]['results'][aa]['shift'][n_units][rr][sh]['predict_proba'][:,0])
+                                temp_proba_shifts.append(decoder_results[session_id]['results'][aa]['shift'][n_units][rr][sh]['predict_proba'][:,1])
                         else:
                             if sh in list(decoder_results[session_id]['results'][aa]['shift'][rr].keys()):
                                 temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['decision_function'])
-                                temp_proba_shifts.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['predict_proba'][:,0])
+                                temp_proba_shifts.append(decoder_results[session_id]['results'][aa]['shift'][rr][sh]['predict_proba'][:,1])
                     if len(temp_shifts)>0:
                         decision_function_shifts.append(np.nanmean(np.vstack(temp_shifts),axis=0))
                         predict_proba_shifts.append(np.nanmean(np.vstack(temp_proba_shifts),axis=0))
@@ -1853,64 +1853,64 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 incorrect_aud_idx=trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False').index.values
                 
                 #find average confidence per hit, fa, cr
-                vis_HIT_mean=np.mean(corrected_decision_function[vis_HIT_idx])
-                aud_HIT_mean=np.mean(corrected_decision_function[aud_HIT_idx])
-                vis_CR_mean=np.mean(corrected_decision_function[vis_CR_idx])
-                aud_CR_mean=np.mean(corrected_decision_function[aud_CR_idx])
-                vis_FA_mean=np.mean(corrected_decision_function[vis_FA_idx])
-                aud_FA_mean=np.mean(corrected_decision_function[aud_FA_idx])
+                vis_HIT_mean=np.nanmean(corrected_decision_function[vis_HIT_idx])
+                aud_HIT_mean=np.nanmean(corrected_decision_function[aud_HIT_idx])
+                vis_CR_mean=np.nanmean(corrected_decision_function[vis_CR_idx])
+                aud_CR_mean=np.nanmean(corrected_decision_function[aud_CR_idx])
+                vis_FA_mean=np.nanmean(corrected_decision_function[vis_FA_idx])
+                aud_FA_mean=np.nanmean(corrected_decision_function[aud_FA_idx])
 
-                correct_mean=np.mean(np.hstack([corrected_decision_function[correct_vis_idx],-corrected_decision_function[correct_aud_idx]]))
-                incorrect_mean=np.mean(np.hstack([corrected_decision_function[incorrect_vis_idx],-corrected_decision_function[incorrect_aud_idx]]))
+                correct_mean=np.nanmean(np.hstack([corrected_decision_function[correct_vis_idx],-corrected_decision_function[correct_aud_idx]]))
+                incorrect_mean=np.nanmean(np.hstack([corrected_decision_function[incorrect_vis_idx],-corrected_decision_function[incorrect_aud_idx]]))
 
-                CR_all_mean=np.mean(np.hstack([corrected_decision_function[vis_CR_idx],-corrected_decision_function[aud_CR_idx]]))
-                FA_all_mean=np.mean(np.hstack([corrected_decision_function[vis_FA_idx],-corrected_decision_function[aud_FA_idx]]))
-                HIT_all_mean=np.mean(np.hstack([corrected_decision_function[vis_HIT_idx],-corrected_decision_function[aud_HIT_idx]]))
+                CR_all_mean=np.nanmean(np.hstack([corrected_decision_function[vis_CR_idx],-corrected_decision_function[aud_CR_idx]]))
+                FA_all_mean=np.nanmean(np.hstack([corrected_decision_function[vis_FA_idx],-corrected_decision_function[aud_FA_idx]]))
+                HIT_all_mean=np.nanmean(np.hstack([corrected_decision_function[vis_HIT_idx],-corrected_decision_function[aud_HIT_idx]]))
 
                 #find average null confidence per hit, fa, cr
-                vis_HIT_null_mean=np.mean(null_decision_function[vis_HIT_idx])
-                aud_HIT_null_mean=np.mean(null_decision_function[aud_HIT_idx])
-                vis_CR_null_mean=np.mean(null_decision_function[vis_CR_idx])
-                aud_CR_null_mean=np.mean(null_decision_function[aud_CR_idx])
-                vis_FA_null_mean=np.mean(null_decision_function[vis_FA_idx])
-                aud_FA_null_mean=np.mean(null_decision_function[aud_FA_idx])
+                vis_HIT_null_mean=np.nanmean(null_decision_function[vis_HIT_idx])
+                aud_HIT_null_mean=np.nanmean(null_decision_function[aud_HIT_idx])
+                vis_CR_null_mean=np.nanmean(null_decision_function[vis_CR_idx])
+                aud_CR_null_mean=np.nanmean(null_decision_function[aud_CR_idx])
+                vis_FA_null_mean=np.nanmean(null_decision_function[vis_FA_idx])
+                aud_FA_null_mean=np.nanmean(null_decision_function[aud_FA_idx])
 
-                correct_null_mean=np.mean(np.hstack([null_decision_function[correct_vis_idx],-null_decision_function[correct_aud_idx]]))
-                incorrect_null_mean=np.mean(np.hstack([null_decision_function[incorrect_vis_idx],-null_decision_function[incorrect_aud_idx]]))
+                correct_null_mean=np.nanmean(np.hstack([null_decision_function[correct_vis_idx],-null_decision_function[correct_aud_idx]]))
+                incorrect_null_mean=np.nanmean(np.hstack([null_decision_function[incorrect_vis_idx],-null_decision_function[incorrect_aud_idx]]))
                 
-                CR_all_null_mean=np.mean(np.hstack([null_decision_function[vis_CR_idx],-null_decision_function[aud_CR_idx]]))
-                FA_all_null_mean=np.mean(np.hstack([null_decision_function[vis_FA_idx],-null_decision_function[aud_FA_idx]]))
-                HIT_all_null_mean=np.mean(np.hstack([null_decision_function[vis_HIT_idx],-null_decision_function[aud_HIT_idx]]))
+                CR_all_null_mean=np.nanmean(np.hstack([null_decision_function[vis_CR_idx],-null_decision_function[aud_CR_idx]]))
+                FA_all_null_mean=np.nanmean(np.hstack([null_decision_function[vis_FA_idx],-null_decision_function[aud_FA_idx]]))
+                HIT_all_null_mean=np.nanmean(np.hstack([null_decision_function[vis_HIT_idx],-null_decision_function[aud_HIT_idx]]))
 
                 #find average predict_proba per hit, fa, cr
-                vis_HIT_proba_mean=np.mean(predict_proba[vis_HIT_idx])
-                aud_HIT_proba_mean=np.mean(predict_proba[aud_HIT_idx])
-                vis_CR_proba_mean=np.mean(predict_proba[vis_CR_idx])
-                aud_CR_proba_mean=np.mean(predict_proba[aud_CR_idx])
-                vis_FA_proba_mean=np.mean(predict_proba[vis_FA_idx])
-                aud_FA_proba_mean=np.mean(predict_proba[aud_FA_idx])
+                vis_HIT_proba_mean=np.nanmean(predict_proba[vis_HIT_idx])
+                aud_HIT_proba_mean=np.nanmean(predict_proba[aud_HIT_idx])
+                vis_CR_proba_mean=np.nanmean(predict_proba[vis_CR_idx])
+                aud_CR_proba_mean=np.nanmean(predict_proba[aud_CR_idx])
+                vis_FA_proba_mean=np.nanmean(predict_proba[vis_FA_idx])
+                aud_FA_proba_mean=np.nanmean(predict_proba[aud_FA_idx])
 
-                correct_proba_mean=np.mean(np.hstack([predict_proba[correct_vis_idx],1-predict_proba[correct_aud_idx]]))
-                incorrect_proba_mean=np.mean(np.hstack([predict_proba[incorrect_vis_idx],1-predict_proba[incorrect_aud_idx]]))
+                correct_proba_mean=np.nanmean(np.hstack([predict_proba[correct_vis_idx],1-predict_proba[correct_aud_idx]]))
+                incorrect_proba_mean=np.nanmean(np.hstack([predict_proba[incorrect_vis_idx],1-predict_proba[incorrect_aud_idx]]))
 
-                CR_all_proba_mean=np.mean(np.hstack([predict_proba[vis_CR_idx],1-predict_proba[aud_CR_idx]]))
-                FA_all_proba_mean=np.mean(np.hstack([predict_proba[vis_FA_idx],1-predict_proba[aud_FA_idx]]))
-                HIT_all_proba_mean=np.mean(np.hstack([predict_proba[vis_HIT_idx],1-predict_proba[aud_HIT_idx]]))
+                CR_all_proba_mean=np.nanmean(np.hstack([predict_proba[vis_CR_idx],1-predict_proba[aud_CR_idx]]))
+                FA_all_proba_mean=np.nanmean(np.hstack([predict_proba[vis_FA_idx],1-predict_proba[aud_FA_idx]]))
+                HIT_all_proba_mean=np.nanmean(np.hstack([predict_proba[vis_HIT_idx],1-predict_proba[aud_HIT_idx]]))
 
                 #find average null predict_proba per hit, fa, cr
-                vis_HIT_null_proba_mean=np.mean(null_predict_proba[vis_HIT_idx])
-                aud_HIT_null_proba_mean=np.mean(null_predict_proba[aud_HIT_idx])
-                vis_CR_null_proba_mean=np.mean(null_predict_proba[vis_CR_idx])
-                aud_CR_null_proba_mean=np.mean(null_predict_proba[aud_CR_idx])
-                vis_FA_null_proba_mean=np.mean(null_predict_proba[vis_FA_idx])
-                aud_FA_null_proba_mean=np.mean(null_predict_proba[aud_FA_idx])
+                vis_HIT_null_proba_mean=np.nanmean(null_predict_proba[vis_HIT_idx])
+                aud_HIT_null_proba_mean=np.nanmean(null_predict_proba[aud_HIT_idx])
+                vis_CR_null_proba_mean=np.nanmean(null_predict_proba[vis_CR_idx])
+                aud_CR_null_proba_mean=np.nanmean(null_predict_proba[aud_CR_idx])
+                vis_FA_null_proba_mean=np.nanmean(null_predict_proba[vis_FA_idx])
+                aud_FA_null_proba_mean=np.nanmean(null_predict_proba[aud_FA_idx])
 
-                correct_null_proba_mean=np.mean(np.hstack([null_predict_proba[correct_vis_idx],1-null_predict_proba[correct_aud_idx]]))
-                incorrect_null_proba_mean=np.mean(np.hstack([null_predict_proba[incorrect_vis_idx],1-null_predict_proba[incorrect_aud_idx]]))
+                correct_null_proba_mean=np.nanmean(np.hstack([null_predict_proba[correct_vis_idx],1-null_predict_proba[correct_aud_idx]]))
+                incorrect_null_proba_mean=np.nanmean(np.hstack([null_predict_proba[incorrect_vis_idx],1-null_predict_proba[incorrect_aud_idx]]))
 
-                CR_all_null_proba_mean=np.mean(np.hstack([null_predict_proba[vis_CR_idx],1-null_predict_proba[aud_CR_idx]]))
-                FA_all_null_proba_mean=np.mean(np.hstack([null_predict_proba[vis_FA_idx],1-null_predict_proba[aud_FA_idx]]))
-                HIT_all_null_proba_mean=np.mean(np.hstack([null_predict_proba[vis_HIT_idx],1-null_predict_proba[aud_HIT_idx]]))
+                CR_all_null_proba_mean=np.nanmean(np.hstack([null_predict_proba[vis_CR_idx],1-null_predict_proba[aud_CR_idx]]))
+                FA_all_null_proba_mean=np.nanmean(np.hstack([null_predict_proba[vis_FA_idx],1-null_predict_proba[aud_FA_idx]]))
+                HIT_all_null_proba_mean=np.nanmean(np.hstack([null_predict_proba[vis_HIT_idx],1-null_predict_proba[aud_HIT_idx]]))
 
                 #append to table
                 decoder_confidence_versus_response_type['session'].append(session_id_str)
