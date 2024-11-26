@@ -1054,10 +1054,12 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     #consolidate SC areas
     for aa in areas:
         if aa in ['SCop','SCsg','SCzo']:
-            areas=np.concatenate([areas,['SCs']])
+            if 'SCs' not in areas:
+                areas=np.concatenate([areas,['SCs']])
         elif aa in ['SCig','SCiw','SCdg','SCdw']:
-            areas=np.concatenate([areas,['SCm']])
-
+            if 'SCm' not in areas:
+                areas=np.concatenate([areas,['SCm']])
+            
     for aa in areas:
         #make shifted trial data array
         if input_data_type=='spikes':
@@ -1065,7 +1067,9 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                 area_units=units
             elif '_all' in aa:
                 temp_area=aa.split('_')[0]
-                area_units=units.query('structure==@temp_area')
+                possible_probe_areas=[temp_area+'_probeA',temp_area+'_probeB',temp_area+'_probeC',
+                                      temp_area+'_probeD',temp_area+'_probeE',temp_area+'_probeF']
+                area_units=units.query('structure in @possible_probe_areas')
             elif aa=='SCs':
                 area_units=units.query('structure=="SCop" or structure=="SCsg" or structure=="SCzo"')
             elif aa=='SCm':
@@ -2159,9 +2163,10 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 #find trial and trial+1 of rewarded targets
                 rewarded_target_trials=trials_middle.query('is_rewarded==True and is_target==True and is_response==True and is_reward_scheduled==False').index.values
                 rewarded_target_trials_plus_one=rewarded_target_trials+1
-                if rewarded_target_trials_plus_one[-1]>=len(corrected_decision_function):
-                    rewarded_target_trials=rewarded_target_trials[:-1]
-                    rewarded_target_trials_plus_one=rewarded_target_trials_plus_one[:-1]
+                if len(rewarded_target_trials_plus_one)>0:
+                    if rewarded_target_trials_plus_one[-1]>=len(corrected_decision_function):
+                        rewarded_target_trials=rewarded_target_trials[:-1]
+                        rewarded_target_trials_plus_one=rewarded_target_trials_plus_one[:-1]
 
                 #find trials and trials+1 of responses to non-rewarded targets
                 non_rewarded_target_trials=trials_middle.query('is_rewarded==False and is_target==True and is_response==True').index.values
