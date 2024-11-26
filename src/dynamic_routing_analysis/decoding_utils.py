@@ -1104,6 +1104,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             for rr in range(n_repeats):
                 if n_repeats>1:
                     decoder_results[session_id]['results'][aa]['shift'][nunits][rr]={}
+                    decoder_results[session_id]['results'][aa]['no_shift'][nunits][rr]={}
 
                 if input_data_type=='spikes':
                     if nunits=='all':
@@ -1845,13 +1846,11 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 #for now, do NOT correct decision function values:
                 corrected_decision_function=decision_function_shifts[shifts[half_shift_inds]==0,:].flatten()
                 null_decision_function=np.median(decision_function_shifts[shifts[half_shift_inds]!=0,:],axis=0)
-                null_min_decision_function=np.mean(np.vstack([decision_function_shifts[shifts[half_shift_inds[0]],:],
-                                                            decision_function_shifts[shifts[half_shift_inds[-1]],:]]),axis=0)
+                null_min_decision_function=np.mean(np.vstack([decision_function_shifts[0,:],decision_function_shifts[-1,:]]),axis=0)
 
                 predict_proba=predict_proba_shifts[shifts[half_shift_inds]==0,:].flatten()
                 null_predict_proba=np.median(predict_proba_shifts[shifts[half_shift_inds]!=0,:],axis=0)
-                null_min_predict_proba=np.mean(np.vstack([predict_proba_shifts[shifts[half_shift_inds[0]],:],
-                                                            predict_proba_shifts[shifts[half_shift_inds[-1]],:]]),axis=0)
+                null_min_predict_proba=np.mean(np.vstack([predict_proba_shifts[0,:],predict_proba_shifts[-1,:]]),axis=0)
 
                 #get trial indices for each type
                 vis_HIT_idx=trials_middle.query('(is_correct==True and is_target==True and is_vis_context==True \
