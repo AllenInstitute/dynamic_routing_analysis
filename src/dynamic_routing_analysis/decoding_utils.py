@@ -912,8 +912,24 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             print('no cached trials table, using npc_sessions')
             trials = session.trials[:]
 
+    trials_original_index=trials.index.values
+
     if exclude_cue_trials:
-        trials=trials.query('is_reward_scheduled==False').reset_index()
+        trials=trials.query('is_reward_scheduled==False')
+        trials_original_index=trials.index.values
+        trials=trials.reset_index()
+
+    if 'predict' in params:
+        predict=params['predict']
+    else:
+        predict='context'
+
+    if predict=='vis_appropriate_response':
+        trials=trials.query('(is_vis_target and is_aud_context) or (is_aud_target and is_vis_context)')
+        trials_original_index=trials.index.values
+        trials=trials.reset_index()
+        # is_vis_appropriate_response=np.zeros(len(trials))
+        is_vis_appropriate_response=(trials['is_vis_target'].values & trials['is_response'].values) | (trials['is_aud_target'].values & ~trials['is_response'].values)
 
     if input_data_type=='spikes':
         #make data array
@@ -991,6 +1007,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         shifts=np.arange(-negative_shift,positive_shift+1)
 
     decoder_results[session_id]={}
+    decoder_results[session_id]['trials_original_index']=trials_original_index
     decoder_results[session_id]['shifts'] = shifts
     decoder_results[session_id]['middle_4_blocks'] = middle_4_blocks
     decoder_results[session_id]['spikes_binsize'] = spikes_binsize
@@ -1049,8 +1066,6 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     general_areas=np.unique(np.array(all_probe_areas))
     areas=np.concatenate([areas,general_areas])
 
-    decoder_results[session_id]['areas'] = areas
-
     #consolidate SC areas
     for aa in areas:
         if aa in ['SCop','SCsg','SCzo']:
@@ -1059,6 +1074,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         elif aa in ['SCig','SCiw','SCdg','SCdw']:
             if 'SCm' not in areas:
                 areas=np.concatenate([areas,['SCm']])
+
+    decoder_results[session_id]['areas'] = areas
             
     for aa in areas:
         #make shifted trial data array
@@ -1129,7 +1146,10 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                 decoder_results[session_id]['results'][aa]['no_shift'][nunits][rr]['sel_units']=sel_units
 
                 #run once with all trials and no shifts
-                labels=trials['context_name'].values
+                if predict=='context':
+                    labels=trials['context_name'].values
+                elif predict=='vis_appropriate_response':
+                    labels=is_vis_appropriate_response
                 input_data=trial_da.sel(unit_id=sel_units).mean(dim='time').values.T
                 if crossval=='5_fold_constant':
                     skf = StratifiedKFold(n_splits=5,shuffle=True,random_state=165482)
@@ -1148,7 +1168,11 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                 #loop through shifts
                 for sh,shift in enumerate(shifts):
                     
-                    labels=middle_4_block_trials['context_name'].values
+                    if predict=='context':
+                        labels=middle_4_block_trials['context_name'].values
+                    elif predict=='vis_appropriate_response':
+                        labels=is_vis_appropriate_response[middle_4_blocks]
+
                     if crossval=='5_fold_constant':
                         skf = StratifiedKFold(n_splits=5,shuffle=True,random_state=165482)
                         train_test_split = skf.split(np.zeros(len(labels)), labels)
