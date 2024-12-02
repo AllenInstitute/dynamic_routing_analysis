@@ -1039,8 +1039,6 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         # areas = list(mean_trial_behav_SVD.keys())
         areas=[0]
 
-    decoder_results[session_id]['areas'] = areas
-
     #add non-probe-specific area to areas
     all_probe_areas=[]
     if len(units.query('structure.str.contains("probe")'))>0:
@@ -1050,6 +1048,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
 
     general_areas=np.unique(np.array(all_probe_areas))
     areas=np.concatenate([areas,general_areas])
+
+    decoder_results[session_id]['areas'] = areas
 
     #consolidate SC areas
     for aa in areas:
