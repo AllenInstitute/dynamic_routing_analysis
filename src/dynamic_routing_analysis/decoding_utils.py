@@ -2448,6 +2448,12 @@ def concat_decoder_summary_tables(dir,savepath):
         decoder_confidence_versus_trials_since_rewarded_target=pd.concat(decoder_confidence_versus_trials_since_rewarded_target_files)
         decoder_confidence_versus_trials_since_rewarded_target.to_pickle(upath.UPath(savepath) / ('decoder_confidence_versus_trials_since_rewarded_target_'+str(nu)+'_units.pkl'))
 
+        decoder_confidence_all_trials_files=[]
+        for p in dir.glob('*decoder_confidence_all_trials_'+str(nu)+'_units.pkl'):
+            decoder_confidence_all_trials_files.append(pd.read_pickle(p))
+        decoder_confidence_all_trials=pd.concat(decoder_confidence_all_trials_files)
+        decoder_confidence_all_trials.to_pickle(upath.UPath(savepath) / ('decoder_confidence_all_trials_'+str(nu)+'_units.pkl'))
+
         decoder_confidence_before_after_target_files=[]
         for p in dir.glob('*decoder_confidence_before_after_target_'+str(nu)+'_units.pkl'):
             decoder_confidence_before_after_target_files.append(pd.read_pickle(p))
