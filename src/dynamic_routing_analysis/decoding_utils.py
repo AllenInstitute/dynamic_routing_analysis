@@ -2150,7 +2150,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 decoder_confidence_all_trials['probe'].append(probe_name)
                 decoder_confidence_all_trials['cross_modal_dprime'].append(performance['cross_modal_dprime'].mean())
                 decoder_confidence_all_trials['n_good_blocks'].append(np.sum(performance['cross_modal_dprime']>=1.0))
-                decoder_confidence_all_trials['trial_index'].append(trials_middle['original_index'].values)
+                decoder_confidence_all_trials['trial_index'].append(trials['original_index'].values)
                 decoder_confidence_all_trials['confidence'].append(confidence_all_trials)
                 decoder_confidence_all_trials['predict_proba'].append(predict_proba_all_trials)
                 decoder_confidence_all_trials['n_units'].append(decoder_results[session_id]['results'][aa]['n_units'])
