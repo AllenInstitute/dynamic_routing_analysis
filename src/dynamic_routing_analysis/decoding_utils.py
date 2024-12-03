@@ -1321,10 +1321,8 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                 half_shifts=shifts
 
             half_shift_inds=np.arange(len(half_shifts))
-            
-            areas=decoder_results[session_id]['areas']
 
-            #TODO: ####option to exclude areas with multiple probes in a session or SC subdivisions####
+            areas=list(decoder_results[session_id]['results'].keys())
 
             #TODO: add decoder accuracy using all trials (no shift)
 
@@ -1360,7 +1358,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                             probe_name=aa.split('_probe')[1]
                         elif '_all' in aa:
                             area_name=aa.split('_all')[0]
-                            probe_name='all_probes'
+                            probe_name='all'
                         else:
                             area_name=aa
                             probe_name=''
@@ -1851,7 +1849,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                         probe_name=aa.split('_probe')[1]
                     elif '_all' in aa:
                         area_name=aa.split('_all')[0]
-                        probe_name='all_probes'
+                        probe_name='all'
                     else:
                         area_name=aa
                         probe_name=''
