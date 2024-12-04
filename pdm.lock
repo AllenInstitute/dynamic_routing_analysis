@@ -174,19 +174,19 @@ files = [
 
 [[package]]
 name = "altair"
-version = "5.4.1"
-requires_python = ">=3.8"
+version = "5.5.0"
+requires_python = ">=3.9"
 summary = "Vega-Altair: A declarative statistical visualization library for Python."
 dependencies = [
     "jinja2",
     "jsonschema>=3.0",
-    "narwhals>=1.5.2",
+    "narwhals>=1.14.2",
     "packaging",
-    "typing-extensions>=4.10.0; python_version < \"3.13\"",
+    "typing-extensions>=4.10.0; python_version < \"3.14\"",
 ]
 files = [
-    {file = "altair-5.4.1-py3-none-any.whl", hash = "sha256:0fb130b8297a569d08991fb6fe763582e7569f8a04643bbd9212436e3be04aef"},
-    {file = "altair-5.4.1.tar.gz", hash = "sha256:0ce8c2e66546cb327e5f2d7572ec0e7c6feece816203215613962f0ec1d76a82"},
+    {file = "altair-5.5.0-py3-none-any.whl", hash = "sha256:91a310b926508d560fe0148d02a194f38b824122641ef528113d029fcd129f8c"},
+    {file = "altair-5.5.0.tar.gz", hash = "sha256:d960ebe6178c56de3855a68c47b516be38640b73fb3b5111c2a9ca90546dd73d"},
 ]
 
 [[package]]
@@ -206,24 +206,24 @@ files = [
 
 [[package]]
 name = "altair"
-version = "5.4.1"
+version = "5.5.0"
 extras = ["all"]
-requires_python = ">=3.8"
+requires_python = ">=3.9"
 summary = "Vega-Altair: A declarative statistical visualization library for Python."
 dependencies = [
     "altair-tiles>=0.3.0",
-    "altair==5.4.1",
+    "altair==5.5.0",
     "anywidget>=0.9.0",
     "numpy",
-    "pandas>=0.25.3",
+    "pandas>=1.1.3",
     "pyarrow>=11",
     "vega-datasets>=0.9.0",
     "vegafusion[embed]>=1.6.6",
-    "vl-convert-python>=1.6.0",
+    "vl-convert-python>=1.7.0",
 ]
 files = [
-    {file = "altair-5.4.1-py3-none-any.whl", hash = "sha256:0fb130b8297a569d08991fb6fe763582e7569f8a04643bbd9212436e3be04aef"},
-    {file = "altair-5.4.1.tar.gz", hash = "sha256:0ce8c2e66546cb327e5f2d7572ec0e7c6feece816203215613962f0ec1d76a82"},
+    {file = "altair-5.5.0-py3-none-any.whl", hash = "sha256:91a310b926508d560fe0148d02a194f38b824122641ef528113d029fcd129f8c"},
+    {file = "altair-5.5.0.tar.gz", hash = "sha256:d960ebe6178c56de3855a68c47b516be38640b73fb3b5111c2a9ca90546dd73d"},
 ]
 
 [[package]]
@@ -2614,12 +2614,12 @@ files = [
 
 [[package]]
 name = "narwhals"
-version = "1.14.0"
+version = "1.15.2"
 requires_python = ">=3.8"
 summary = "Extremely lightweight compatibility layer between dataframe libraries"
 files = [
-    {file = "narwhals-1.14.0-py3-none-any.whl", hash = "sha256:2498e5fa243d9e783df4f81e34fe33f0166d48f74d2db98d753e79510a6a1dd0"},
-    {file = "narwhals-1.14.0.tar.gz", hash = "sha256:950071645e6a79dfed18a82940a9ac83238f30b3c4a8f3986e01db39bd5155b6"},
+    {file = "narwhals-1.15.2-py3-none-any.whl", hash = "sha256:00d16ed1c4466b43ba37ef6799142340981e4ac7dcd7686e461d4955abcd921d"},
+    {file = "narwhals-1.15.2.tar.gz", hash = "sha256:bf32c4afc3b4e562be51d50a3ff4fcacd1e0c1d89dc4da1b818af81d7c28e0c7"},
 ]
 
 [[package]]
