@@ -850,7 +850,7 @@ def decode_context_from_units_all_timebins(session,params):
 # incorporate additional parameters
 # add option to decode from timebins
 # add option to use inputs with top decoding weights (use_coefs)
-def decode_context_with_linear_shift(session=None,params=None,trials=None,units=None,session_info=None,use_zarr=False, skip_existing=True):
+def decode_context_with_linear_shift(session=None,params=None,trials=None,units=None,session_info=None,use_zarr=False):
     
     decoder_results={}
 
@@ -903,11 +903,6 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     elif session_info is not None:
         session_id=str(session_info.id)
 
-    path = upath.UPath(savepath) / f"{session_id}_{filename}.pkl"
-    if skip_existing and path.exists():
-        print(f'Skipping {session_id} as {path} already exists and skip_existing=True')
-        return
-    
     ##Option to input session or trials/units/session_info directly
     ##note: inputting session may not work with Code Ocean
 
@@ -1221,8 +1216,10 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         print(f'finished {session_id} {aa}')
     #save results
     #make directory if does not exist
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(
+    if not upath.UPath(savepath).is_dir():
+        upath.UPath(savepath).mkdir(parents=True)
+
+    (upath.UPath(savepath) / f"{session_id}_{filename}.pkl").write_bytes(
         pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
     )
     if use_zarr:
