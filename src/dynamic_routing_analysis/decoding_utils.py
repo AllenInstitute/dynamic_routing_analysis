@@ -1869,6 +1869,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                         probe_name=''
                 else:
                     area_name=aa
+                    probe_name=''
+
                 #make corrected decoder confidence
                 shifts=decoder_results[session_id]['shifts']
                 areas=decoder_results[session_id]['areas']
