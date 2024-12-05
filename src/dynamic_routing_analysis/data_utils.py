@@ -5,11 +5,15 @@ import npc_lims
 import npc_sessions
 import numpy as np
 import pandas as pd
+import pynwb
 
 
 def load_trials_or_units(session, table_name):
     # convenience function to load trials or units from cache if available, 
     # otherwise from npc_sessions
+    if isinstance(session, pynwb.NWBFile):
+        return getattr(session, table_name)[:]
+    
     if table_name == 'trials':
         try:
             table=pd.read_parquet(
