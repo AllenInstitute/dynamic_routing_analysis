@@ -713,8 +713,10 @@ def decode_context_from_units(session,params):
             print(aa+' done')
 
     print(session.id+' done')
-
-    (upath.UPath(savepath) / filename).write_bytes(
+    
+    path = upath.UPath(savepath, filename)
+    path.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
         pickle.dumps(svc_results, protocol=pickle.HIGHEST_PROTOCOL)
     )
     svc_results={}
@@ -840,7 +842,9 @@ def decode_context_from_units_all_timebins(session,params):
             
     print(session.id+' done')
     
-    (upath.UPath(savepath) / f"{session.id}_{filename}").write_bytes(
+    path = upath.UPath(savepath, filename)
+    path.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
         pickle.dumps(svc_results, protocol=pickle.HIGHEST_PROTOCOL) 
     )
 
@@ -1215,11 +1219,9 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             
         print(f'finished {session_id} {aa}')
     #save results
-    #make directory if does not exist
-    if not upath.UPath(savepath).is_dir():
-        upath.UPath(savepath).mkdir(parents=True)
-
-    (upath.UPath(savepath) / f"{session_id}_{filename}.pkl").write_bytes(
+    path = upath.UPath(savepath, filename)
+    path.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
         pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
     )
     if use_zarr:
