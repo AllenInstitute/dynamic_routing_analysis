@@ -896,10 +896,12 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     else:
         return_results=False
     
-    if session is not None and session_info is None:
-        session_info=npc_lims.get_session_info(session)
-
-    session_id=str(session_info.id)
+    if session is not None:
+        session_id = session.session_id
+        if session_info is None:
+            session_info = npc_lims.get_session_info(session_id)
+    elif session_info is not None:
+        session_id=str(session_info.id)
 
     ##Option to input session or trials/units/session_info directly
     ##note: inputting session may not work with Code Ocean
