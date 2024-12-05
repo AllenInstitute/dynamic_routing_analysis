@@ -7,6 +7,7 @@ import time
 import npc_lims
 import numpy as np
 import pandas as pd
+import pynwb
 import upath
 import xarray as xr
 import zarr
@@ -895,7 +896,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     else:
         return_results=False
     
-    if session is not None:
+    if session is not None and session_info is None:
         session_info=npc_lims.get_session_info(session)
 
     session_id=str(session_info.id)
@@ -903,14 +904,12 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     ##Option to input session or trials/units/session_info directly
     ##note: inputting session may not work with Code Ocean
 
-    if session is not None:
-        try:
-            trials=pd.read_parquet(
-                npc_lims.get_cache_path('trials',session_id)
-            )
-        except:
-            print('no cached trials table, using npc_sessions')
-            trials = session.trials[:]
+    if trials is None and session is not None:
+        trials = data_utils.load_trials_or_units(session, 'trials')
+    elif trials is None:
+        trials=pd.read_parquet(
+            npc_lims.get_cache_path('trials',session_id)
+        )
 
     trials_original_index=trials.index.values
 
@@ -933,14 +932,13 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
 
     if input_data_type=='spikes':
         #make data array
-        if session is not None:
-            try:
-                units=pd.read_parquet(
-                    npc_lims.get_cache_path('units',session_id)
-                )
-            except:
-                print('no cached units table, using npc_sessions')
-                units = session.units[:]
+        if units is None and session is not None:
+            units = data_utils.load_trials_or_units(session, 'units')
+        elif units is None:
+            units=pd.read_parquet(
+                npc_lims.get_cache_path('units',session_id)
+            )
+
 
         #add probe to structure name
         structure_probe=spike_utils.get_structure_probe(units)
