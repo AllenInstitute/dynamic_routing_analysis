@@ -714,7 +714,7 @@ def decode_context_from_units(session,params):
 
     print(session.id+' done')
 
-    (upath.UPath(savepath) / f"{session.id}_{filename}").write_bytes(
+    (upath.UPath(savepath) / filename).write_bytes(
         pickle.dumps(svc_results, protocol=pickle.HIGHEST_PROTOCOL)
     )
     svc_results={}
@@ -1215,16 +1215,15 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             
         print(f'finished {session_id} {aa}')
     #save results
-    if use_zarr==False:
-        #make directory if does not exist
-        if not upath.UPath(savepath).is_dir():
-            upath.UPath(savepath).mkdir(parents=True)
+    #make directory if does not exist
+    if not upath.UPath(savepath).is_dir():
+        upath.UPath(savepath).mkdir(parents=True)
 
-        (upath.UPath(savepath) / f"{session_id}_{filename}.pkl").write_bytes(
-            pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
-        )
-    else:
-        print('use_zarr not implemented for raw decoding results')
+    (upath.UPath(savepath) / f"{session_id}_{filename}.pkl").write_bytes(
+        pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
+    )
+    if use_zarr:
+        print('use_zarr not implemented for raw decoding results - saved as .pkl')
         ### too many incompatible data types to save as zarr
         # Create a Zarr group
         # zarr_file = zarr.open(upath.UPath(savepath) /  (filename + '.zarr'), mode='w')
@@ -1470,7 +1469,6 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
 
     if return_table:
         return linear_shift_df
-    
 
 
 def compute_significant_decoding_by_area(all_decoder_results):
@@ -2409,7 +2407,6 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
     if return_table:
         return decoder_confidence_versus_response_type,decoder_confidence_dprime_by_block,decoder_confidence_by_switch,decoder_confidence_versus_trials_since_rewarded_target,decoder_confidence_before_after_target
-    
 
 
 def concat_decoder_summary_tables(dir,savepath):
@@ -2472,4 +2469,3 @@ def concat_decoder_summary_tables(dir,savepath):
             decoder_confidence_before_after_target_files.append(pd.read_pickle(p))
         decoder_confidence_before_after_target=pd.concat(decoder_confidence_before_after_target_files)
         decoder_confidence_before_after_target.to_pickle(upath.UPath(savepath) / ('decoder_confidence_before_after_target_'+str(nu)+'_units.pkl'))
-
