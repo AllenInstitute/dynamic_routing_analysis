@@ -1372,6 +1372,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                             probe_name=''
                     else:
                         area_name=aa
+                        probe_name=''
                     
                     ### LOOP THROUGH NUNITS TO APPEND TO DICT ###
                     
