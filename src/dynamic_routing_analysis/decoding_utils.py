@@ -1511,9 +1511,9 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
     except Exception as e:
         tb_str = traceback.format_exception(e, value=e, tb=e.__traceback__)
         tb_str=''.join(tb_str)
-        print(f'error with decoding results summary for {session_id}')
+        print(f'error with decoding results summary')
         print(tb_str)
-        logger.debug(f'error with decoding results summary for {session_id}')
+        logger.debug(f'error with decoding results summary')
         logger.debug(tb_str)
         return None
 
@@ -2470,9 +2470,9 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
     except Exception as e:
         tb_str = traceback.format_exception(e, value=e, tb=e.__traceback__)
         tb_str=''.join(tb_str)
-        print(f'error with trialwise decoding results summary for {session_id}')
+        print(f'error with trialwise decoding results summary')
         print(tb_str)
-        logger.debug(f'error with trialwise decoding results summary for {session_id}')
+        logger.debug(f'error with trialwise decoding results summary')
         logger.debug(tb_str)
         return None
 
