@@ -4,6 +4,7 @@ import logging
 import os
 import pickle
 import time
+import traceback
 
 import npc_lims
 import numpy as np
@@ -844,7 +845,8 @@ def decode_context_from_units_all_timebins(session,params):
     print(session.id+' done')
     
     path = upath.UPath(savepath, filename)
-    path.mkdir(parents=True, exist_ok=True)
+    if not upath.UPath(savepath).is_dir():
+        upath.UPath(savepath).mkdir(parents=True)
     path.write_bytes(
         pickle.dumps(svc_results, protocol=pickle.HIGHEST_PROTOCOL) 
     )
@@ -892,9 +894,10 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     # generate_labels=params['generate_labels']
 
     logger=logging.getLogger(__name__)
+    FORMAT = '%(asctime)s %(message)s'
     logging_savepath=os.path.join(savepath,'log.txt')
-    logging.basicConfig(filename=logging_savepath,level=logging.INFO)
-    logger.info('Starting decoding analysis')
+    logging.basicConfig(filename=logging_savepath,level=logging.DEBUG,format=FORMAT)
+    logger.debug('Starting decoding analysis')
     
     try:
 
@@ -1064,31 +1067,32 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             else:
                 areas=units['structure'].unique()
                 areas=np.concatenate([areas,['all']])
+
+                #add non-probe-specific area to areas
+                all_probe_areas=[]
+                if len(units.query('structure.str.contains("probe")'))>0:
+                    probe_areas=units.query('structure.str.contains("probe")')['structure'].unique()
+                    for pa in probe_areas:
+                        all_probe_areas.append([pa.split('_')[0]+'_all'])
+
+                general_areas=np.unique(np.array(all_probe_areas))
+                areas=np.concatenate([areas,general_areas])
+
+                #consolidate SC areas
+                for aa in areas:
+                    if aa in ['SCop','SCsg','SCzo']:
+                        if 'SCs' not in areas:
+                            areas=np.concatenate([areas,['SCs']])
+                    elif aa in ['SCig','SCiw','SCdg','SCdw']:
+                        if 'SCm' not in areas:
+                            areas=np.concatenate([areas,['SCm']])
+
         elif input_data_type=='facemap' or input_data_type=='LP':
             # areas = list(mean_trial_behav_SVD.keys())
             areas=[0]
 
-        #add non-probe-specific area to areas
-        all_probe_areas=[]
-        if len(units.query('structure.str.contains("probe")'))>0:
-            probe_areas=units.query('structure.str.contains("probe")')['structure'].unique()
-            for pa in probe_areas:
-                all_probe_areas.append([pa.split('_')[0]+'_all'])
-
-        general_areas=np.unique(np.array(all_probe_areas))
-        areas=np.concatenate([areas,general_areas])
-
-        #consolidate SC areas
-        for aa in areas:
-            if aa in ['SCop','SCsg','SCzo']:
-                if 'SCs' not in areas:
-                    areas=np.concatenate([areas,['SCs']])
-            elif aa in ['SCig','SCiw','SCdg','SCdw']:
-                if 'SCm' not in areas:
-                    areas=np.concatenate([areas,['SCm']])
-
         decoder_results[session_id]['areas'] = areas
-                
+        
         for aa in areas:
             #make shifted trial data array
             if input_data_type=='spikes':
@@ -1226,9 +1230,11 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                         break
                 
             print(f'finished {session_id} {aa}')
+
         #save results
-        path = upath.UPath(savepath, filename)
-        path.mkdir(parents=True, exist_ok=True)
+        path = upath.UPath(savepath, session_id+'_'+filename)
+        if not upath.UPath(savepath).is_dir():
+            upath.UPath(savepath).mkdir(parents=True)
         path.write_bytes(
             pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
         )
@@ -1250,22 +1256,25 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             return decoder_results
         
     except Exception as e:
+        tb_str = traceback.format_exception(e, value=e, tb=e.__traceback__)
+        tb_str=''.join(tb_str)
         print(f'error in session {session_id}')
-        print(e)
-        logger.error(f'error in session {session_id}')
-        logger.error(e)
+        print(tb_str)
+        logger.debug(f'error in session {session_id}')
+        logger.debug(tb_str)
         return None
 
 
 def concat_decoder_results(files,savepath=None,return_table=True,single_session=False,use_zarr=False):
 
     logger=logging.getLogger(__name__)
+    FORMAT = '%(asctime)s %(message)s'
     if savepath is None:
-        logging.basicConfig(filename=logging_savepath,level=logging.INFO)
+        logging.basicConfig(level=logging.DEBUG,format=FORMAT)
     else:
         logging_savepath=os.path.join(savepath,'log.txt')
-        logging.basicConfig(filename=logging_savepath,level=logging.INFO)
-    logger.info('Making decoder analysis summary tables')
+        logging.basicConfig(filename=logging_savepath,level=logging.DEBUG,format=FORMAT)
+    logger.debug('Making decoder analysis summary tables')
 
     try:
         use_half_shifts=False
@@ -1488,7 +1497,9 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                     print('saved decoder results table to:',savepath)
 
                 except Exception as e:
-                    print(e)
+                    tb_str = traceback.format_exception(e, value=e, tb=e.__traceback__)
+                    tb_str=''.join(tb_str)
+                    print(tb_str)
                     print('error saving linear shift df')
         
         del decoder_results
@@ -1498,10 +1509,12 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
             return linear_shift_df
         
     except Exception as e:
-        print(e)
-        print('error with decoding results')
-        logger.error(e)
-        logger.error('error with decoding results')
+        tb_str = traceback.format_exception(e, value=e, tb=e.__traceback__)
+        tb_str=''.join(tb_str)
+        print(f'error with decoding results summary for {session_id}')
+        print(tb_str)
+        logger.debug(f'error with decoding results summary for {session_id}')
+        logger.debug(tb_str)
         return None
 
 
@@ -1623,12 +1636,13 @@ def compute_significant_decoding_by_area(all_decoder_results):
 def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_units=None,single_session=False,use_zarr=False):
 
     logger=logging.getLogger(__name__)
+    FORMAT = '%(asctime)s %(message)s'
     if savepath is None:
-        logging.basicConfig(filename=logging_savepath,level=logging.INFO)
+        logging.basicConfig(level=logging.DEBUG,format=FORMAT)
     else:
         logging_savepath=os.path.join(savepath,'log.txt')
-        logging.basicConfig(filename=logging_savepath,level=logging.INFO)
-    logger.info('Making trialwise decoder analysis summary tables')
+        logging.basicConfig(filename=logging_savepath,level=logging.DEBUG,format=FORMAT)
+    logger.debug('Making trialwise decoder analysis summary tables')
 
     #load sessions as we go
     try:
@@ -2454,10 +2468,12 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
             return decoder_confidence_versus_response_type,decoder_confidence_dprime_by_block,decoder_confidence_by_switch,decoder_confidence_versus_trials_since_rewarded_target,decoder_confidence_before_after_target
         
     except Exception as e:
-        print(e)
-        print('error with decoding results')
-        logger.error(e)
-        logger.error('error with decoding results')
+        tb_str = traceback.format_exception(e, value=e, tb=e.__traceback__)
+        tb_str=''.join(tb_str)
+        print(f'error with trialwise decoding results summary for {session_id}')
+        print(tb_str)
+        logger.debug(f'error with trialwise decoding results summary for {session_id}')
+        logger.debug(tb_str)
         return None
 
 
