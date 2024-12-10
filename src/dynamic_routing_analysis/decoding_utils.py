@@ -892,8 +892,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     # generate_labels=params['generate_labels']
 
     logger=logging.getLogger(__name__)
-    logging.basicConfig(filename=logging_savepath,level=logging.INFO)
     logging_savepath=os.path.join(savepath,'log.txt')
+    logging.basicConfig(filename=logging_savepath,level=logging.INFO)
     logger.info('Starting decoding analysis')
     
     try:
