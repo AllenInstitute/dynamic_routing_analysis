@@ -1298,17 +1298,17 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
         session_id=str(list(decoder_results.keys())[0])
         session_info=npc_lims.get_session_info(session_id)
         project=str(session_info.project)
-        print('loading session: '+session_id)
+        logger.info('loading session: '+session_id)
         try:
             performance=pd.read_parquet(
                         npc_lims.get_cache_path('performance',session_info.id,version='any')
                     )
         except:
-            print('no cached performance table, skipping')
+            logger.info('no cached performance table, skipping')
             continue
 
         if session_info.is_annotated==False:
-            print('session not annotated, skipping')
+            logger.info('session not annotated, skipping')
             continue
 
         all_bal_acc[session_id]={}
@@ -1316,7 +1316,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
 
         nunits=decoder_results[session_id]['n_units']
         if nunits!=nunits_global:
-            print('WARNING, session '+session_id+' has different n_units; skipping')
+            logger.info('WARNING, session '+session_id+' has different n_units; skipping')
             continue
 
         shifts=decoder_results[session_id]['shifts']
@@ -1356,7 +1356,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                         if rr in decoder_results[session_id]['results'][aa]['shift'][nu].keys():
                             temp_bal_acc=[]
                         # else:
-                        #     print('n repeats invalid: '+str(rr))
+                        #     logger.info('n repeats invalid: '+str(rr))
                         #     continue
                             for sh in half_shift_inds:
                                 if sh in list(decoder_results[session_id]['results'][aa]['shift'][nu][rr].keys()):
@@ -1440,7 +1440,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                     linear_shift_dict['n_units'].append(np.nan)
                     linear_shift_dict['probe'].append(np.nan)
 
-        print(aa+' done')
+        logger.info(aa+' done')
     
     linear_shift_df=pd.DataFrame(linear_shift_dict)
 
@@ -1468,13 +1468,13 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                 else:
                     linear_shift_df.to_csv(upath.UPath(savepath / 'all_linear_shift_decoding_results.csv'))
 
-                print('saved decoder results table to:',savepath)
+                logger.info('saved decoder results table to:',savepath)
 
             except Exception as e:
                 tb_str = traceback.format_exception(e, value=e, tb=e.__traceback__)
                 tb_str=''.join(tb_str)
-                print(tb_str)
-                print('error saving linear shift df')
+                logger.info(tb_str)
+                logger.info('error saving linear shift df')
     
     del decoder_results
     gc.collect()
@@ -1800,7 +1800,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     npc_lims.get_cache_path('performance',session_id,version='any')
                     )
         except:
-            print('trials or performance not available; skipping session:',session_id)
+            logger.info('trials or performance not available; skipping session:',session_id)
             continue
 
         trials_since_rewarded_target=[]
@@ -1934,7 +1934,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 decision_function_shifts=np.vstack(decision_function_shifts)
                 predict_proba_shifts=np.vstack(predict_proba_shifts)
             except:
-                print(session_id,'failed to stack decision functions / predict_proba; skipping')
+                logger.info(session_id,'failed to stack decision functions / predict_proba; skipping')
                 continue
             
             # #normalize all decision function values to the stdev of all the nulls
@@ -2350,8 +2350,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
         total_time=time.time()-start_time
         session_time=time.time()-session_start_time
-        print('finished session:',session_id)
-        print('session time: ',session_time,' seconds;  total time:',total_time,' seconds')
+        logger.info('finished session:',session_id)
+        logger.info('session time: ',session_time,' seconds;  total time:',total_time,' seconds')
 
     decoder_confidence_versus_response_type_dict=decoder_confidence_versus_response_type.copy()
     decoder_confidence_dprime_by_block_dict=decoder_confidence_dprime_by_block.copy()
@@ -2412,7 +2412,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
             decoder_confidence_all_trials.to_pickle(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_all_trials'+n_units_str+'.pkl'))
             decoder_confidence_before_after_target.to_pickle(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_before_after_target'+n_units_str+'.pkl'))
 
-            print('saved '+n_units_str+' decoder confidence tables to:',savepath)
+            logger.info('saved '+n_units_str+' decoder confidence tables to:',savepath)
 
         del decoder_results
         gc.collect()
