@@ -1262,7 +1262,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         print(tb_str)
         logger.debug(f'error in session {session_id}')
         logger.debug(tb_str)
-        return None
+        if return_results:
+            return None
 
 
 def concat_decoder_results(files,savepath=None,return_table=True,single_session=False,use_zarr=False):
@@ -1515,7 +1516,8 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
         print(tb_str)
         logger.debug(f'error with decoding results summary')
         logger.debug(tb_str)
-        return None
+        if return_table:
+            return None
 
 
 def compute_significant_decoding_by_area(all_decoder_results):
@@ -2474,7 +2476,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         print(tb_str)
         logger.debug(f'error with trialwise decoding results summary')
         logger.debug(tb_str)
-        return None
+        if return_table:
+            return None,None,None,None,None
 
 
 def concat_decoder_summary_tables(dir,savepath):
