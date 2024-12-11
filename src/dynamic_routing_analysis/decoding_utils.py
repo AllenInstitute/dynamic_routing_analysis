@@ -20,6 +20,8 @@ from sklearn.preprocessing import RobustScaler, StandardScaler
 import dynamic_routing_analysis as dra
 from dynamic_routing_analysis import data_utils, spike_utils
 
+logger = logging.getLogger(__name__)
+
 
 # Dump the dictionary to the Zarr file
 def dump_dict_to_zarr(group, data):
