@@ -895,285 +895,325 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     # use_coefs=params['use_coefs']
     # generate_labels=params['generate_labels']
 
-    logger=logging.getLogger(__name__)
-    FORMAT = '%(asctime)s %(message)s'
-    logging_savepath=os.path.join(savepath,'log.txt')
-    logging.basicConfig(filename=logging_savepath,level=logging.DEBUG,format=FORMAT)
     logger.debug('Starting decoding analysis')
     
-    try:
+    if 'only_use_all_units' in params:
+        only_use_all_units=params['only_use_all_units']
+    else:
+        only_use_all_units=False
 
-        if 'only_use_all_units' in params:
-            only_use_all_units=params['only_use_all_units']
-        else:
-            only_use_all_units=False
+    if 'return_results' in params:
+        return_results=params['return_results']
+    else:
+        return_results=False
+    
+    if session is not None:
+        session_id = session.session_id
+        if session_info is None:
+            session_info = npc_lims.get_session_info(session_id)
+    elif session_info is not None:
+        session_id=str(session_info.id)
 
-        if 'return_results' in params:
-            return_results=params['return_results']
-        else:
-            return_results=False
-        
-        if session is not None:
-            session_id = session.session_id
-            if session_info is None:
-                session_info = npc_lims.get_session_info(session_id)
-        elif session_info is not None:
-            session_id=str(session_info.id)
+    ##Option to input session or trials/units/session_info directly
+    ##note: inputting session may not work with Code Ocean
 
-        ##Option to input session or trials/units/session_info directly
-        ##note: inputting session may not work with Code Ocean
+    if trials is None and session is not None:
+        trials = data_utils.load_trials_or_units(session, 'trials')
+    elif trials is None:
+        trials=pd.read_parquet(
+            npc_lims.get_cache_path('trials',session_id)
+        )
 
-        if trials is None and session is not None:
-            trials = data_utils.load_trials_or_units(session, 'trials')
-        elif trials is None:
-            trials=pd.read_parquet(
-                npc_lims.get_cache_path('trials',session_id)
+    trials_original_index=trials.index.values
+
+    if exclude_cue_trials:
+        trials=trials.query('is_reward_scheduled==False')
+        trials_original_index=trials.index.values
+        trials=trials.reset_index()
+
+    if 'predict' in params:
+        predict=params['predict']
+    else:
+        predict='context'
+
+    if predict=='vis_appropriate_response':
+        trials=trials.query('(is_vis_target and is_aud_context) or (is_aud_target and is_vis_context)')
+        trials_original_index=trials.index.values
+        trials=trials.reset_index()
+        # is_vis_appropriate_response=np.zeros(len(trials))
+        is_vis_appropriate_response=(trials['is_vis_target'].values & trials['is_response'].values) | (trials['is_aud_target'].values & ~trials['is_response'].values)
+
+    if input_data_type=='spikes':
+        #make data array
+        if units is None and session is not None:
+            units = data_utils.load_trials_or_units(session, 'units')
+        elif units is None:
+            units=pd.read_parquet(
+                npc_lims.get_cache_path('units',session_id)
             )
 
-        trials_original_index=trials.index.values
 
-        if exclude_cue_trials:
-            trials=trials.query('is_reward_scheduled==False')
-            trials_original_index=trials.index.values
-            trials=trials.reset_index()
+        #add probe to structure name
+        structure_probe=spike_utils.get_structure_probe(units)
+        for uu, unit in units.iterrows():
+            units.loc[units['unit_id']==unit['unit_id'],'structure']=structure_probe.loc[structure_probe['unit_id']==unit['unit_id'],'structure_probe']
+        
+        #make trial data array for baseline activity
+        trial_da = spike_utils.make_neuron_time_trials_tensor(units, trials, spikes_time_before, spikes_time_after, spikes_binsize)
 
-        if 'predict' in params:
-            predict=params['predict']
+    ### TODO: update to work with code ocean
+    elif input_data_type=='facemap':
+        # mean_trial_behav_SVD,mean_trial_behav_motion = load_facemap_data(session,session_info,trials,vid_angle)
+        mean_trial_behav_SVD = data_utils.load_facemap_data(session,session_info,trials,vid_angle_facemotion,keep_n_SVDs)
+
+    # Shailaja
+    elif input_data_type == 'LP':
+        mean_trial_behav_SVD = data_utils.load_LP_data(session, trials, vid_angle_LP, LP_parts_to_keep)
+
+
+    #make fake blocks for templeton sessions
+    if 'Templeton' in session_info.project:
+        start_time=trials['start_time'].iloc[0]
+        fake_context=np.full(len(trials), fill_value='nan')
+        fake_block_nums=np.full(len(trials), fill_value=np.nan)
+        block_context_names=['vis','aud']
+
+        if np.random.choice(block_context_names,1)=='vis':
+            block_contexts=['vis','aud','vis','aud','vis','aud']
         else:
-            predict='context'
+            block_contexts=['aud','vis','aud','vis','aud','vis']
 
-        if predict=='vis_appropriate_response':
-            trials=trials.query('(is_vis_target and is_aud_context) or (is_aud_target and is_vis_context)')
-            trials_original_index=trials.index.values
-            trials=trials.reset_index()
-            # is_vis_appropriate_response=np.zeros(len(trials))
-            is_vis_appropriate_response=(trials['is_vis_target'].values & trials['is_response'].values) | (trials['is_aud_target'].values & ~trials['is_response'].values)
+        for block in range(0,6):
+            block_start_time=start_time+block*10*60
+            block_end_time=start_time+(block+1)*10*60
+            block_trials=trials[:].query('start_time>=@block_start_time').index
+            fake_context[block_trials]=block_contexts[block]
+            fake_block_nums[block_trials]=block
+        trials['block_index']=fake_block_nums
+        trials['context_name']=fake_context
+
+    if central_section=='4_blocks':
+        #find middle 4 block labels
+        middle_4_block_trials=trials.query('block_index>0 and block_index<5')
+        middle_4_blocks=middle_4_block_trials.index.values
+
+        #find the number of trials to shift by, from -1 to +1 block
+        negative_shift=middle_4_blocks.min()
+        positive_shift=trials.index.max()-middle_4_blocks.max()
+        shifts=np.arange(-negative_shift,positive_shift+1)
+    elif central_section=='4_blocks_plus':
+        #find middle 4 block labels
+        first_block=trials.query('block_index==0').index.values
+        middle_of_first=first_block[np.ceil(len(first_block)/2).astype('int')]
+
+        last_block=trials.query('block_index==5').index.values
+        middle_of_last=last_block[np.ceil(len(last_block)/2).astype('int')]
+
+        middle_4_block_trials=trials.loc[middle_of_first:middle_of_last]
+        middle_4_blocks=middle_4_block_trials.index.values
+
+        #find the number of trials to shift by, from -1 to +1 block
+        negative_shift=middle_4_blocks.min()
+        positive_shift=trials.index.max()-middle_4_blocks.max()
+        shifts=np.arange(-negative_shift,positive_shift+1)
+
+    decoder_results[session_id]={}
+    decoder_results[session_id]['trials_original_index']=trials_original_index
+    decoder_results[session_id]['shifts'] = shifts
+    decoder_results[session_id]['middle_4_blocks'] = middle_4_blocks
+    decoder_results[session_id]['spikes_binsize'] = spikes_binsize
+    decoder_results[session_id]['spikes_time_before'] = spikes_time_before
+    decoder_results[session_id]['spikes_time_after'] = spikes_time_after
+    # decoder_results[session_id]['decoder_binsize'] = decoder_binsize
+    # decoder_results[session_id]['decoder_time_before'] = decoder_time_before
+    # decoder_results[session_id]['decoder_time_after'] = decoder_time_after
+    decoder_results[session_id]['input_data_type'] = input_data_type
+    decoder_results[session_id]['n_units'] = n_units_input
+    decoder_results[session_id]['n_repeats'] = n_repeats
+
+    import dataclasses
+    session_info=dataclasses.asdict(session_info)
+    for ii in session_info.keys():
+        if type(session_info[ii]) not in [int, str, bool, dict, list]:
+            session_info[ii]=str(session_info[ii])
+    
+    decoder_results[session_id]['session_info'] = session_info
+    #keep track of which cache path was used
+    try:
+        decoder_results[session_id]['trial_cache_path'] = str(npc_lims.get_cache_path('trials',session_id,version='any'))
+    except:
+        decoder_results[session_id]['trial_cache_path'] = ''
+    try:
+        decoder_results[session_id]['unit_cache_path'] = str(npc_lims.get_cache_path('units',session_id,version='any'))
+    except:
+        decoder_results[session_id]['unit_cache_path'] = ''
+
+    if input_data_type=='facemap':
+        decoder_results[session_id]['vid_angle'] = vid_angle_facemotion
+        
+    if input_data_type=='LP':
+        decoder_results[session_id]['vid_angle'] = vid_angle_LP
+    decoder_results[session_id]['trials'] = trials
+    decoder_results[session_id]['results'] = {}
+
+    
+    if input_data_type=='spikes':
+        if only_use_all_units:
+            areas=['all']
+        else:
+            areas=units['structure'].unique()
+            areas=np.concatenate([areas,['all']])
+
+            #add non-probe-specific area to areas
+            all_probe_areas=[]
+            if len(units.query('structure.str.contains("probe")'))>0:
+                probe_areas=units.query('structure.str.contains("probe")')['structure'].unique()
+                for pa in probe_areas:
+                    all_probe_areas.append([pa.split('_')[0]+'_all'])
+
+            general_areas=np.unique(np.array(all_probe_areas))
+            areas=np.concatenate([areas,general_areas])
+
+            #consolidate SC areas
+            for aa in areas:
+                if aa in ['SCop','SCsg','SCzo']:
+                    if 'SCs' not in areas:
+                        areas=np.concatenate([areas,['SCs']])
+                elif aa in ['SCig','SCiw','SCdg','SCdw']:
+                    if 'SCm' not in areas:
+                        areas=np.concatenate([areas,['SCm']])
+
+    elif input_data_type=='facemap' or input_data_type=='LP':
+        # areas = list(mean_trial_behav_SVD.keys())
+        areas=[0]
+
+    decoder_results[session_id]['areas'] = areas
+    
+    for aa in areas:
+        #make shifted trial data array
+        if input_data_type=='spikes':
+            if aa == 'all':
+                area_units=units
+            elif '_all' in aa:
+                temp_area=aa.split('_')[0]
+                possible_probe_areas=[temp_area+'_probeA',temp_area+'_probeB',temp_area+'_probeC',
+                                    temp_area+'_probeD',temp_area+'_probeE',temp_area+'_probeF']
+                area_units=units.query('structure in @possible_probe_areas')
+            elif aa=='SCs':
+                area_units=units.query('structure=="SCop" or structure=="SCsg" or structure=="SCzo"')
+            elif aa=='SCm':
+                area_units=units.query('structure=="SCig" or structure=="SCiw" or structure=="SCdg" or structure=="SCdw"')
+            else:
+                area_units=units.query('structure==@aa')
+
+            n_units=len(area_units)
+            if n_units<n_unit_threshold:
+                continue
+
+            area_unit_ids=area_units['unit_id'].values
+        
+        decoder_results[session_id]['results'][aa]={}
+        decoder_results[session_id]['results'][aa]['shift']={}
+        decoder_results[session_id]['results'][aa]['no_shift']={}
 
         if input_data_type=='spikes':
-            #make data array
-            if units is None and session is not None:
-                units = data_utils.load_trials_or_units(session, 'units')
-            elif units is None:
-                units=pd.read_parquet(
-                    npc_lims.get_cache_path('units',session_id)
-                )
-
-
-            #add probe to structure name
-            structure_probe=spike_utils.get_structure_probe(units)
-            for uu, unit in units.iterrows():
-                units.loc[units['unit_id']==unit['unit_id'],'structure']=structure_probe.loc[structure_probe['unit_id']==unit['unit_id'],'structure_probe']
             
-            #make trial data array for baseline activity
-            trial_da = spike_utils.make_neuron_time_trials_tensor(units, trials, spikes_time_before, spikes_time_after, spikes_binsize)
+            decoder_results[session_id]['results'][aa]['unit_ids']={}
+            decoder_results[session_id]['results'][aa]['n_units']={}
+            decoder_results[session_id]['results'][aa]['unit_ids']=area_units['unit_id'].values
+            decoder_results[session_id]['results'][aa]['n_units']=len(area_units)
 
-        ### TODO: update to work with code ocean
-        elif input_data_type=='facemap':
-            # mean_trial_behav_SVD,mean_trial_behav_motion = load_facemap_data(session,session_info,trials,vid_angle)
-            mean_trial_behav_SVD = data_utils.load_facemap_data(session,session_info,trials,vid_angle_facemotion,keep_n_SVDs)
+            #find mean ccf location of units
+            decoder_results[session_id]['results'][aa]['ccf_ap_mean']=area_units['ccf_ap'].mean()
+            decoder_results[session_id]['results'][aa]['ccf_dv_mean']=area_units['ccf_dv'].mean()
+            decoder_results[session_id]['results'][aa]['ccf_ml_mean']=area_units['ccf_ml'].mean()
 
-        # Shailaja
-        elif input_data_type == 'LP':
-            mean_trial_behav_SVD = data_utils.load_LP_data(session, trials, vid_angle_LP, LP_parts_to_keep)
+        #loop through repeats
+        for nunits in n_units_input:
+            if nunits!='all' and nunits>len(area_units):
+                continue
+            decoder_results[session_id]['results'][aa]['shift'][nunits]={}
+            decoder_results[session_id]['results'][aa]['no_shift'][nunits]={}
+            for rr in range(n_repeats):
+                decoder_results[session_id]['results'][aa]['shift'][nunits][rr]={}
+                decoder_results[session_id]['results'][aa]['no_shift'][nunits][rr]={}
 
+                if input_data_type=='spikes':
+                    if nunits=='all':
+                        sel_units=area_unit_ids
+                    else:
+                        sel_units=np.random.choice(area_unit_ids,nunits,replace=False)
+                elif input_data_type=='facemap':
+                    if nunits=='all':
+                        sel_units=np.arange(0,keep_n_SVDs)
+                    else:
+                        sel_units=np.random.choice(np.arange(0,keep_n_SVDs),nunits,replace=False)
 
-        #make fake blocks for templeton sessions
-        if 'Templeton' in session_info.project:
-            start_time=trials['start_time'].iloc[0]
-            fake_context=np.full(len(trials), fill_value='nan')
-            fake_block_nums=np.full(len(trials), fill_value=np.nan)
-            block_context_names=['vis','aud']
+                elif input_data_type=='LP':
+                    
+                    sel_units=np.arange(0, len(LP_parts_to_keep))
 
-            if np.random.choice(block_context_names,1)=='vis':
-                block_contexts=['vis','aud','vis','aud','vis','aud']
-            else:
-                block_contexts=['aud','vis','aud','vis','aud','vis']
+                decoder_results[session_id]['results'][aa]['shift'][nunits][rr]['sel_units']=sel_units
+                decoder_results[session_id]['results'][aa]['no_shift'][nunits][rr]['sel_units']=sel_units
 
-            for block in range(0,6):
-                block_start_time=start_time+block*10*60
-                block_end_time=start_time+(block+1)*10*60
-                block_trials=trials[:].query('start_time>=@block_start_time').index
-                fake_context[block_trials]=block_contexts[block]
-                fake_block_nums[block_trials]=block
-            trials['block_index']=fake_block_nums
-            trials['context_name']=fake_context
-
-        if central_section=='4_blocks':
-            #find middle 4 block labels
-            middle_4_block_trials=trials.query('block_index>0 and block_index<5')
-            middle_4_blocks=middle_4_block_trials.index.values
-
-            #find the number of trials to shift by, from -1 to +1 block
-            negative_shift=middle_4_blocks.min()
-            positive_shift=trials.index.max()-middle_4_blocks.max()
-            shifts=np.arange(-negative_shift,positive_shift+1)
-        elif central_section=='4_blocks_plus':
-            #find middle 4 block labels
-            first_block=trials.query('block_index==0').index.values
-            middle_of_first=first_block[np.ceil(len(first_block)/2).astype('int')]
-
-            last_block=trials.query('block_index==5').index.values
-            middle_of_last=last_block[np.ceil(len(last_block)/2).astype('int')]
-
-            middle_4_block_trials=trials.loc[middle_of_first:middle_of_last]
-            middle_4_blocks=middle_4_block_trials.index.values
-
-            #find the number of trials to shift by, from -1 to +1 block
-            negative_shift=middle_4_blocks.min()
-            positive_shift=trials.index.max()-middle_4_blocks.max()
-            shifts=np.arange(-negative_shift,positive_shift+1)
-
-        decoder_results[session_id]={}
-        decoder_results[session_id]['trials_original_index']=trials_original_index
-        decoder_results[session_id]['shifts'] = shifts
-        decoder_results[session_id]['middle_4_blocks'] = middle_4_blocks
-        decoder_results[session_id]['spikes_binsize'] = spikes_binsize
-        decoder_results[session_id]['spikes_time_before'] = spikes_time_before
-        decoder_results[session_id]['spikes_time_after'] = spikes_time_after
-        # decoder_results[session_id]['decoder_binsize'] = decoder_binsize
-        # decoder_results[session_id]['decoder_time_before'] = decoder_time_before
-        # decoder_results[session_id]['decoder_time_after'] = decoder_time_after
-        decoder_results[session_id]['input_data_type'] = input_data_type
-        decoder_results[session_id]['n_units'] = n_units_input
-        decoder_results[session_id]['n_repeats'] = n_repeats
-
-        import dataclasses
-        session_info=dataclasses.asdict(session_info)
-        for ii in session_info.keys():
-            if type(session_info[ii]) not in [int, str, bool, dict, list]:
-                session_info[ii]=str(session_info[ii])
-        
-        decoder_results[session_id]['session_info'] = session_info
-        #keep track of which cache path was used
-        try:
-            decoder_results[session_id]['trial_cache_path'] = str(npc_lims.get_cache_path('trials',session_id,version='any'))
-        except:
-            decoder_results[session_id]['trial_cache_path'] = ''
-        try:
-            decoder_results[session_id]['unit_cache_path'] = str(npc_lims.get_cache_path('units',session_id,version='any'))
-        except:
-            decoder_results[session_id]['unit_cache_path'] = ''
-
-        if input_data_type=='facemap':
-            decoder_results[session_id]['vid_angle'] = vid_angle_facemotion
-            
-        if input_data_type=='LP':
-            decoder_results[session_id]['vid_angle'] = vid_angle_LP
-        decoder_results[session_id]['trials'] = trials
-        decoder_results[session_id]['results'] = {}
-
-        
-        if input_data_type=='spikes':
-            if only_use_all_units:
-                areas=['all']
-            else:
-                areas=units['structure'].unique()
-                areas=np.concatenate([areas,['all']])
-
-                #add non-probe-specific area to areas
-                all_probe_areas=[]
-                if len(units.query('structure.str.contains("probe")'))>0:
-                    probe_areas=units.query('structure.str.contains("probe")')['structure'].unique()
-                    for pa in probe_areas:
-                        all_probe_areas.append([pa.split('_')[0]+'_all'])
-
-                general_areas=np.unique(np.array(all_probe_areas))
-                areas=np.concatenate([areas,general_areas])
-
-                #consolidate SC areas
-                for aa in areas:
-                    if aa in ['SCop','SCsg','SCzo']:
-                        if 'SCs' not in areas:
-                            areas=np.concatenate([areas,['SCs']])
-                    elif aa in ['SCig','SCiw','SCdg','SCdw']:
-                        if 'SCm' not in areas:
-                            areas=np.concatenate([areas,['SCm']])
-
-        elif input_data_type=='facemap' or input_data_type=='LP':
-            # areas = list(mean_trial_behav_SVD.keys())
-            areas=[0]
-
-        decoder_results[session_id]['areas'] = areas
-        
-        for aa in areas:
-            #make shifted trial data array
-            if input_data_type=='spikes':
-                if aa == 'all':
-                    area_units=units
-                elif '_all' in aa:
-                    temp_area=aa.split('_')[0]
-                    possible_probe_areas=[temp_area+'_probeA',temp_area+'_probeB',temp_area+'_probeC',
-                                        temp_area+'_probeD',temp_area+'_probeE',temp_area+'_probeF']
-                    area_units=units.query('structure in @possible_probe_areas')
-                elif aa=='SCs':
-                    area_units=units.query('structure=="SCop" or structure=="SCsg" or structure=="SCzo"')
-                elif aa=='SCm':
-                    area_units=units.query('structure=="SCig" or structure=="SCiw" or structure=="SCdg" or structure=="SCdw"')
+                #run once with all trials and no shifts
+                if predict=='context':
+                    labels=trials['context_name'].values
+                elif predict=='vis_appropriate_response':
+                    labels=is_vis_appropriate_response
+                input_data=trial_da.sel(unit_id=sel_units).mean(dim='time').values.T
+                if crossval=='5_fold_constant':
+                    skf = StratifiedKFold(n_splits=5,shuffle=True,random_state=165482)
+                    train_test_split = skf.split(np.zeros(len(labels)), labels)
                 else:
-                    area_units=units.query('structure==@aa')
+                    train_test_split=None
+                decoder_results[session_id]['results'][aa]['no_shift'][nunits][rr] = decoder_helper(
+                    input_data=input_data,
+                    labels=labels,
+                    decoder_type=decoder_type,
+                    crossval=crossval,
+                    crossval_index=None,
+                    labels_as_index=labels_as_index,
+                    train_test_split_input=train_test_split)
 
-                n_units=len(area_units)
-                if n_units<n_unit_threshold:
-                    continue
-
-                area_unit_ids=area_units['unit_id'].values
-            
-            decoder_results[session_id]['results'][aa]={}
-            decoder_results[session_id]['results'][aa]['shift']={}
-            decoder_results[session_id]['results'][aa]['no_shift']={}
-
-            if input_data_type=='spikes':
-                
-                decoder_results[session_id]['results'][aa]['unit_ids']={}
-                decoder_results[session_id]['results'][aa]['n_units']={}
-                decoder_results[session_id]['results'][aa]['unit_ids']=area_units['unit_id'].values
-                decoder_results[session_id]['results'][aa]['n_units']=len(area_units)
-
-                #find mean ccf location of units
-                decoder_results[session_id]['results'][aa]['ccf_ap_mean']=area_units['ccf_ap'].mean()
-                decoder_results[session_id]['results'][aa]['ccf_dv_mean']=area_units['ccf_dv'].mean()
-                decoder_results[session_id]['results'][aa]['ccf_ml_mean']=area_units['ccf_ml'].mean()
-
-            #loop through repeats
-            for nunits in n_units_input:
-                if nunits!='all' and nunits>len(area_units):
-                    continue
-                decoder_results[session_id]['results'][aa]['shift'][nunits]={}
-                decoder_results[session_id]['results'][aa]['no_shift'][nunits]={}
-                for rr in range(n_repeats):
-                    decoder_results[session_id]['results'][aa]['shift'][nunits][rr]={}
-                    decoder_results[session_id]['results'][aa]['no_shift'][nunits][rr]={}
-
-                    if input_data_type=='spikes':
-                        if nunits=='all':
-                            sel_units=area_unit_ids
-                        else:
-                            sel_units=np.random.choice(area_unit_ids,nunits,replace=False)
-                    elif input_data_type=='facemap':
-                        if nunits=='all':
-                            sel_units=np.arange(0,keep_n_SVDs)
-                        else:
-                            sel_units=np.random.choice(np.arange(0,keep_n_SVDs),nunits,replace=False)
-
-                    elif input_data_type=='LP':
-                        
-                        sel_units=np.arange(0, len(LP_parts_to_keep))
-
-                    decoder_results[session_id]['results'][aa]['shift'][nunits][rr]['sel_units']=sel_units
-                    decoder_results[session_id]['results'][aa]['no_shift'][nunits][rr]['sel_units']=sel_units
-
-                    #run once with all trials and no shifts
+                #loop through shifts
+                for sh,shift in enumerate(shifts):
+                    
                     if predict=='context':
-                        labels=trials['context_name'].values
+                        labels=middle_4_block_trials['context_name'].values
                     elif predict=='vis_appropriate_response':
-                        labels=is_vis_appropriate_response
-                    input_data=trial_da.sel(unit_id=sel_units).mean(dim='time').values.T
+                        labels=is_vis_appropriate_response[middle_4_blocks]
+
                     if crossval=='5_fold_constant':
                         skf = StratifiedKFold(n_splits=5,shuffle=True,random_state=165482)
                         train_test_split = skf.split(np.zeros(len(labels)), labels)
                     else:
                         train_test_split=None
-                    decoder_results[session_id]['results'][aa]['no_shift'][nunits][rr] = decoder_helper(
+
+                    if input_data_type=='spikes':
+                        shifted_trial_da = trial_da.sel(trials=middle_4_blocks+shift,unit_id=sel_units).mean(dim='time').values
+                        input_data=shifted_trial_da.T
+
+                    elif input_data_type=='facemap' or input_data_type == 'LP':
+                        trials_used=middle_4_blocks+shift
+                        shift_exists=[]
+                        for tt in trials_used:
+                            if tt<mean_trial_behav_SVD[aa].shape[1]:
+                                shift_exists.append(True)
+                            else:
+                                shift_exists.append(False)
+                        shift_exists=np.array(shift_exists)
+                        trials_used=trials_used[shift_exists]
+
+                        SVD=mean_trial_behav_SVD[aa][:,trials_used]
+                        input_data=SVD.T
+
+                        if np.sum(np.isnan(input_data))>0:
+                            incl_inds=~np.isnan(input_data).any(axis=1)
+                            input_data=input_data[incl_inds,:]
+                            labels=labels[incl_inds]
+
+                    decoder_results[session_id]['results'][aa]['shift'][nunits][rr][sh] = decoder_helper(
                         input_data=input_data,
                         labels=labels,
                         decoder_type=decoder_type,
@@ -1181,102 +1221,40 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                         crossval_index=None,
                         labels_as_index=labels_as_index,
                         train_test_split_input=train_test_split)
-
-                    #loop through shifts
-                    for sh,shift in enumerate(shifts):
                         
-                        if predict=='context':
-                            labels=middle_4_block_trials['context_name'].values
-                        elif predict=='vis_appropriate_response':
-                            labels=is_vis_appropriate_response[middle_4_blocks]
+                if nunits=='all':
+                    break
+            
+        logger.info(f'finished {session_id} {aa}')
 
-                        if crossval=='5_fold_constant':
-                            skf = StratifiedKFold(n_splits=5,shuffle=True,random_state=165482)
-                            train_test_split = skf.split(np.zeros(len(labels)), labels)
-                        else:
-                            train_test_split=None
+    #save results
+    path = upath.UPath(savepath, session_id+'_'+filename)
+    if not upath.UPath(savepath).is_dir():
+        upath.UPath(savepath).mkdir(parents=True)
+    path.write_bytes(
+        pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
+    )
+    if use_zarr:
+        logger.info('use_zarr not implemented for raw decoding results - saved as .pkl')
+        ### too many incompatible data types to save as zarr
+        # Create a Zarr group
+        # zarr_file = zarr.open(upath.UPath(savepath) /  (filename + '.zarr'), mode='w')
+        # dump_dict_to_zarr(group=zarr_file, data=decoder_results)
 
-                        if input_data_type=='spikes':
-                            shifted_trial_da = trial_da.sel(trials=middle_4_blocks+shift,unit_id=sel_units).mean(dim='time').values
-                            input_data=shifted_trial_da.T
-
-                        elif input_data_type=='facemap' or input_data_type == 'LP':
-                            trials_used=middle_4_blocks+shift
-                            shift_exists=[]
-                            for tt in trials_used:
-                                if tt<mean_trial_behav_SVD[aa].shape[1]:
-                                    shift_exists.append(True)
-                                else:
-                                    shift_exists.append(False)
-                            shift_exists=np.array(shift_exists)
-                            trials_used=trials_used[shift_exists]
-
-                            SVD=mean_trial_behav_SVD[aa][:,trials_used]
-                            input_data=SVD.T
-
-                            if np.sum(np.isnan(input_data))>0:
-                                incl_inds=~np.isnan(input_data).any(axis=1)
-                                input_data=input_data[incl_inds,:]
-                                labels=labels[incl_inds]
-
-                        decoder_results[session_id]['results'][aa]['shift'][nunits][rr][sh] = decoder_helper(
-                            input_data=input_data,
-                            labels=labels,
-                            decoder_type=decoder_type,
-                            crossval=crossval,
-                            crossval_index=None,
-                            labels_as_index=labels_as_index,
-                            train_test_split_input=train_test_split)
-                            
-                    if nunits=='all':
-                        break
-                
-            print(f'finished {session_id} {aa}')
-
-        #save results
-        path = upath.UPath(savepath, session_id+'_'+filename)
-        if not upath.UPath(savepath).is_dir():
-            upath.UPath(savepath).mkdir(parents=True)
-        path.write_bytes(
-            pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
-        )
-        if use_zarr:
-            print('use_zarr not implemented for raw decoding results - saved as .pkl')
-            ### too many incompatible data types to save as zarr
-            # Create a Zarr group
-            # zarr_file = zarr.open(upath.UPath(savepath) /  (filename + '.zarr'), mode='w')
-            # dump_dict_to_zarr(group=zarr_file, data=decoder_results)
-
-        print(f'finished {session_id}')
-        # print(f'time elapsed: {time.time()-start_time}')
-        del decoder_results
-        del trial_da
-        del units
-        del trials
-        gc.collect()
-        if return_results:
-            return decoder_results
-        
-    except Exception as e:
-        tb_str = traceback.format_exception(e, value=e, tb=e.__traceback__)
-        tb_str=''.join(tb_str)
-        print(f'error in session {session_id}')
-        print(tb_str)
-        logger.debug(f'error in session {session_id}')
-        logger.debug(tb_str)
-        if return_results:
-            return None
+    logger.info(f'finished {session_id}')
+    # logger.info(f'time elapsed: {time.time()-start_time}')
+    del decoder_results
+    del trial_da
+    del units
+    del trials
+    gc.collect()
+    if return_results:
+        return decoder_results
+    
 
 
 def concat_decoder_results(files,savepath=None,return_table=True,single_session=False,use_zarr=False):
 
-    logger=logging.getLogger(__name__)
-    FORMAT = '%(asctime)s %(message)s'
-    if savepath is None:
-        logging.basicConfig(level=logging.DEBUG,format=FORMAT)
-    else:
-        logging_savepath=os.path.join(savepath,'log.txt')
-        logging.basicConfig(filename=logging_savepath,level=logging.DEBUG,format=FORMAT)
     logger.debug('Making decoder analysis summary tables')
 
     try:
@@ -1639,13 +1617,6 @@ def compute_significant_decoding_by_area(all_decoder_results):
 
 def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_units=None,single_session=False,use_zarr=False):
 
-    logger=logging.getLogger(__name__)
-    FORMAT = '%(asctime)s %(message)s'
-    if savepath is None:
-        logging.basicConfig(level=logging.DEBUG,format=FORMAT)
-    else:
-        logging_savepath=os.path.join(savepath,'log.txt')
-        logging.basicConfig(filename=logging_savepath,level=logging.DEBUG,format=FORMAT)
     logger.debug('Making trialwise decoder analysis summary tables')
 
     #load sessions as we go
@@ -2542,3 +2513,4 @@ def concat_decoder_summary_tables(dir,savepath):
             decoder_confidence_before_after_target_files.append(pd.read_pickle(p))
         decoder_confidence_before_after_target=pd.concat(decoder_confidence_before_after_target_files)
         decoder_confidence_before_after_target.to_pickle(upath.UPath(savepath) / ('decoder_confidence_before_after_target_'+str(nu)+'_units.pkl'))
+
