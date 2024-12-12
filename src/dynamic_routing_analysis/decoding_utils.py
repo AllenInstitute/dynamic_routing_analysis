@@ -38,7 +38,7 @@ def dump_dict_to_zarr(group, data):
             try:
                 group[key] = value
             except:
-                print(f'Could not save {key} of type {type(value)}')
+                logger.warning(f'Could not save {key} of type {type(value)} to zarr {group}')
 
 # 'linearSVC' or 'LDA' or 'RandomForest'
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
@@ -1255,7 +1255,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
 
 def concat_decoder_results(files,savepath=None,return_table=True,single_session=False,use_zarr=False):
 
-    logger.debug('Making decoder analysis summary tables')
+    logger.info(f'Making decoder analysis summary tables with input arguments: {locals()}') # keep this on first line of function
 
     use_half_shifts=False
     n_repeats=25
@@ -1440,8 +1440,9 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                     linear_shift_dict['n_units'].append(np.nan)
                     linear_shift_dict['probe'].append(np.nan)
 
-        logger.info(aa+' done')
-    
+        logger.info(f"{session_id} | area: {aa} | Finished")
+    logger.info(f"{session_id} | Finished concatenating decoding results")
+
     linear_shift_df=pd.DataFrame(linear_shift_dict)
 
     if use_zarr==True:
@@ -1451,31 +1452,23 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                 'linear_shift_summary_table':linear_shift_dict,
                 },
         }
-
-        zarr_file = zarr.open(files[0], mode='w')
+        path = files[0] # TODO @egmcbride - shouldn't this be `savepath`?
+        logger.info(f'Saving concatenated decoder results to zarr file: {path}')
+        zarr_file = zarr.open(path, mode='w') 
 
         dump_dict_to_zarr(zarr_file, results)
 
     elif use_zarr==False:
         if savepath is not None:
-            try:
-                if not upath.UPath(savepath).is_dir():
-                    upath.UPath(savepath).mkdir(parents=True)
+            if not upath.UPath(savepath).is_dir():
+                upath.UPath(savepath).mkdir(parents=True)
 
-                if single_session:
-                    linear_shift_df.to_csv(upath.UPath(savepath / (session_id+'_linear_shift_decoding_results.csv')))
-                    
-                else:
-                    linear_shift_df.to_csv(upath.UPath(savepath / 'all_linear_shift_decoding_results.csv'))
+            logger.info(f'Saving decoder results table to: {savepath}')
+            if single_session:
+                linear_shift_df.to_csv(upath.UPath(savepath / (session_id+'_linear_shift_decoding_results.csv')))
+            else:
+                linear_shift_df.to_csv(upath.UPath(savepath / 'all_linear_shift_decoding_results.csv'))
 
-                logger.info('saved decoder results table to:',savepath)
-
-            except Exception as e:
-                tb_str = traceback.format_exception(e, value=e, tb=e.__traceback__)
-                tb_str=''.join(tb_str)
-                logger.info(tb_str)
-                logger.info('error saving linear shift df')
-    
     del decoder_results
     gc.collect()
 
@@ -1601,7 +1594,7 @@ def compute_significant_decoding_by_area(all_decoder_results):
 
 def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_units=None,single_session=False,use_zarr=False):
 
-    logger.debug('Making trialwise decoder analysis summary tables')
+    logger.info(f'Making trialwise decoder analysis summary tables with input arguments {locals()}') # keep this on first line of function
 
     #load sessions as we go
     use_half_shifts=False
