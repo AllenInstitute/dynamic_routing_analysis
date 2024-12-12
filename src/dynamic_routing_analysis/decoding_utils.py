@@ -895,7 +895,6 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     # use_coefs=params['use_coefs']
     # generate_labels=params['generate_labels']
 
-    logger.debug('Starting decoding analysis')
     
     if 'only_use_all_units' in params:
         only_use_all_units=params['only_use_all_units']
@@ -913,6 +912,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             session_info = npc_lims.get_session_info(session_id)
     elif session_info is not None:
         session_id=str(session_info.id)
+    logger.info(f'{session_id} | Parameters parsed. Starting decoding analysis with linear shift')
 
     ##Option to input session or trials/units/session_info directly
     ##note: inputting session may not work with Code Ocean
@@ -1225,17 +1225,19 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                 if nunits=='all':
                     break
             
-        logger.info(f'finished {session_id} {aa}')
+        logger.info(f'{session_id} | {aa} | Finished decoding with linear shift')
+    logger.info(f'{session_id} | Finished all decoding with linear shift')
 
     #save results
     path = upath.UPath(savepath, session_id+'_'+filename)
     if not upath.UPath(savepath).is_dir():
         upath.UPath(savepath).mkdir(parents=True)
+    logger.info(f'{session_id} | Saving raw decoding results to {path}')
     path.write_bytes(
         pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
     )
     if use_zarr:
-        logger.info('use_zarr not implemented for raw decoding results - saved as .pkl')
+        logger.warning('use_zarr not implemented for raw decoding results - saved as .pkl')
         ### too many incompatible data types to save as zarr
         # Create a Zarr group
         # zarr_file = zarr.open(upath.UPath(savepath) /  (filename + '.zarr'), mode='w')
