@@ -847,8 +847,7 @@ def decode_context_from_units_all_timebins(session,params):
     print(session.id+' done')
     
     path = upath.UPath(savepath, filename)
-    if not upath.UPath(savepath).is_dir():
-        upath.UPath(savepath).mkdir(parents=True)
+    path.mkdir(parents=True, exist_ok=True)
     path.write_bytes(
         pickle.dumps(svc_results, protocol=pickle.HIGHEST_PROTOCOL) 
     )
@@ -1229,9 +1228,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     logger.info(f'{session_id} | Finished all decoding')
 
     #save results
-    path = upath.UPath(savepath, session_id+'_'+filename)
-    if not upath.UPath(savepath).is_dir():
-        upath.UPath(savepath).mkdir(parents=True)
+    path = upath.UPath(savepath, filename)
+    path.mkdir(parents=True, exist_ok=True)
     logger.info(f'{session_id} | Saving raw decoding results to {path}')
     path.write_bytes(
         pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
