@@ -7,7 +7,17 @@
     "editor.formatOnPaste": true,
     "editor.formatOnType": true,
     "editor.codeActionsOnSave": {
-        "source.organizeImports": true,
-        "source.fixAll": true
+        "source.organizeImports": "explicit",
+        "source.fixAll": "explicit"
     },
+    "workbench.colorCustomizations": {
+        "commandCenter.border": "#e7e7e799",
+        "panel.border": "#6b77e6",
+        "sash.hoverBorder": "#6b77e6",
+        "titleBar.activeBackground": "#3f4fdf",
+        "titleBar.activeForeground": "#e7e7e7",
+        "titleBar.inactiveBackground": "#3f4fdf99",
+        "titleBar.inactiveForeground": "#e7e7e799"
+    },
+    "peacock.color": "#3f4fdf",
 }
