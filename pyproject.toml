@@ -5,6 +5,7 @@ description = "Tools for accessing, processing and presenting data from Dynamic 
 authors = [
     { name = "Ben Hardcastle", email = "ben.hardcastle@alleninstitute.org" },
     { name = "Ethan McBride", email = "ethan.mcbride@alleninstitute.org" },
+    { name = "Shailaja Akella", email = "shailaja.akella@alleninstitute.org" },
 ]
 dependencies = [
     "numpy>=1.24.4",
