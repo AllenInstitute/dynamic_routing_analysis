@@ -25,6 +25,7 @@ dependencies = [
     "shapely>=2.0.6",
     "geopandas>=1.0.1",
     "altair[all]>=5.4.1",
+    "iblatlas>=0.5.4",
 ]
 requires-python = ">=3.9"
 readme = "README.md"
