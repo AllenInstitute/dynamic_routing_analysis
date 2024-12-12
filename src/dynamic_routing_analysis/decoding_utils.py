@@ -1791,7 +1791,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     npc_lims.get_cache_path('performance',session_id,version='any')
                     )
         except:
-            logger.info(f'{session_id} | trials or performance not available; skipping session')
+            logger.info(f'{session_id} | trials or performance not available from cache; skipping session')
             continue
 
         trials_since_rewarded_target=[]
