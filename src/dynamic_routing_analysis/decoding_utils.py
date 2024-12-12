@@ -1241,9 +1241,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         # zarr_file = zarr.open(upath.UPath(savepath) /  (filename + '.zarr'), mode='w')
         # dump_dict_to_zarr(group=zarr_file, data=decoder_results)
 
-    logger.info(f'finished {session_id}')
     # logger.info(f'time elapsed: {time.time()-start_time}')
-    del decoder_results
     del trial_da
     del units
     del trials
