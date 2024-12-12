@@ -1791,7 +1791,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     npc_lims.get_cache_path('performance',session_id,version='any')
                     )
         except:
-            logger.info('trials or performance not available; skipping session:',session_id)
+            logger.info(f'{session_id} | trials or performance not available; skipping session')
             continue
 
         trials_since_rewarded_target=[]
@@ -1925,7 +1925,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 decision_function_shifts=np.vstack(decision_function_shifts)
                 predict_proba_shifts=np.vstack(predict_proba_shifts)
             except:
-                logger.info(session_id,'failed to stack decision functions / predict_proba; skipping')
+                logger.info(f'{session_id} | failed to stack decision functions / predict_proba; skipping')
                 continue
             
             # #normalize all decision function values to the stdev of all the nulls
@@ -2341,8 +2341,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
         total_time=time.time()-start_time
         session_time=time.time()-session_start_time
-        logger.info('finished session:',session_id)
-        logger.info('session time: ',session_time,' seconds;  total time:',total_time,' seconds')
+        logger.info(f'{session_id} | finished session')
+        logger.info(f'{session_id} | session time: {session_time} seconds;  total time: {total_time} seconds')
 
     decoder_confidence_versus_response_type_dict=decoder_confidence_versus_response_type.copy()
     decoder_confidence_dprime_by_block_dict=decoder_confidence_dprime_by_block.copy()
@@ -2403,7 +2403,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
             decoder_confidence_all_trials.to_pickle(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_all_trials'+n_units_str+'.pkl'))
             decoder_confidence_before_after_target.to_pickle(upath.UPath(savepath) / (temp_session_str+'decoder_confidence_before_after_target'+n_units_str+'.pkl'))
 
-            logger.info('saved '+n_units_str+' decoder confidence tables to:',savepath)
+            logger.info(f'saved {n_units_str} decoder confidence tables to: {savepath}')
 
         del decoder_results
         gc.collect()
