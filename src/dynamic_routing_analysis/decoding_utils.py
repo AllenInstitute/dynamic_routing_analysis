@@ -912,7 +912,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             session_info = npc_lims.get_session_info(session_id)
     elif session_info is not None:
         session_id=str(session_info.id)
-    logger.info(f'{session_id} | Parameters parsed. Starting decoding analysis with linear shift')
+    logger.info(f'{session_id} | Parameters parsed. Starting decoding analysis')
 
     ##Option to input session or trials/units/session_info directly
     ##note: inputting session may not work with Code Ocean
@@ -1225,8 +1225,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                 if nunits=='all':
                     break
             
-        logger.info(f'{session_id} | {aa} | Finished decoding with linear shift')
-    logger.info(f'{session_id} | Finished all decoding with linear shift')
+        logger.info(f'{session_id} | area: {aa} | Finished decoding')
+    logger.info(f'{session_id} | Finished all decoding')
 
     #save results
     path = upath.UPath(savepath, session_id+'_'+filename)
