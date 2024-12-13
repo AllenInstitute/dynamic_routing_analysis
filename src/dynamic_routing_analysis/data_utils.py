@@ -14,11 +14,11 @@ vid_angle_npc_names={
 }
 
 def load_trials_or_units(session, table_name):
-    # convenience function to load trials or units from cache if available, 
+    # convenience function to load trials or units from cache if available,
     # otherwise from npc_sessions
     if isinstance(session, pynwb.NWBFile):
         return getattr(session, table_name)[:]
-    
+
     if table_name == 'trials':
         try:
             table=pd.read_parquet(
@@ -163,7 +163,7 @@ def load_facemap_data(session,session_info=None,trials=None,vid_angle=None,keep_
                     trial_start_frame=int(stim_start_frame-time_before*fps)
                     trial_end_frame=int(stim_start_frame+time_after*fps)
                     if trial_start_frame<facemap_info['motSVD'][rr][:,0].shape[0] and trial_end_frame<facemap_info['motSVD'][rr][:,0].shape[0]:
-                        behav_SVD_by_trial[rr][:,:,tt] = facemap_info['motSVD'][rr][trial_start_frame:trial_end_frame,:keep_n_SVDs]    
+                        behav_SVD_by_trial[rr][:,:,tt] = facemap_info['motSVD'][rr][trial_start_frame:trial_end_frame,:keep_n_SVDs]
                         behav_motion_by_trial[rr][:,tt] = facemap_info['motion'][rr][trial_start_frame:trial_end_frame]
                     else:
                         break
@@ -213,26 +213,18 @@ def load_facemap_data(session,session_info=None,trials=None,vid_angle=None,keep_
 def load_LP_data(session, trials=None, vid_angle=None, LP_parts_to_keep=None):
     if not vid_angle:
         raise ValueError("vid_angle must be specified")
-    
+
     def zscore(x):
         return (x - np.nanmean(x)) / np.nanstd(x)
 
-    def part_info(part, df, temp_error, pca_error):
-        confidence = df[part + '_likelihood'].values.astype('float')
+    def part_info_LP(part, df, temp_error):
+        confidence = df[part_name + '_likelihood'].values.astype('float')
+        temp_norm = df[part_name + '_temporal_norm'].values.astype('float')
         x = df[part + '_x'].values.astype('float')
         y = df[part + '_y'].values.astype('float')
 
-        ids_set_nan = []
-        for i in range(10, len(confidence) - 10):
-            if np.nanmean(confidence[i - 10:i]) < 0.95 or np.nanmean(confidence[i:i + 10]) < 0.95:
-                ids_set_nan.append(i)
-
-        if len(np.array(ids_set_nan)) > 0:
-            x[np.array(ids_set_nan)] = np.nan
-            y[np.array(ids_set_nan)] = np.nan
-
-        x[(confidence < 0.98) | (temp_error > np.nanmean(temp_error) + 3*np.nanstd(temp_error)) | (pca_error > 30)] = np.nan
-        y[(confidence < 0.98) | (temp_error > np.nanmean(temp_error) + 3*np.nanstd(temp_error))  | (pca_error > 30)] = np.nan
+        x[(confidence < 0.98) | (temp_error > np.nanmean(temp_error) + 3*np.nanstd(temp_error))] = np.nan
+        y[(confidence < 0.98) | (temp_error > np.nanmean(temp_error) + 3*np.nanstd(temp_error))] = np.nan
 
         x = pd.Series(x).interpolate(limit_direction='both', method = 'nearest').to_numpy()
         y = pd.Series(y).interpolate(limit_direction='both', method = 'nearest').to_numpy()
@@ -245,7 +237,7 @@ def load_LP_data(session, trials=None, vid_angle=None, LP_parts_to_keep=None):
 
     vid_angle_idx = {
         'behavior': 0,
-        'face': 3,
+        'face': 1,
     }
     camera_idx = vid_angle_idx[vid_angle]
     if isinstance(session, pynwb.NWBFile):
@@ -267,22 +259,19 @@ def load_LP_data(session, trials=None, vid_angle=None, LP_parts_to_keep=None):
         for part_no, part_name in enumerate(LP_parts_to_keep):
             if f"{part_name}_x" not in df.columns:
                 continue
-            x, y = part_info(part_name, df, df[f"{part_name}_error"].values.astype('float'),
+            x, y = part_info_LP(part_name, df, df[f"{part_name}_error"].values.astype('float'),
                             df[f"{part_name}_temporal_norm"].values.astype('float'))
             LP_traces.append(x)
             LP_traces.append(y)
         if not LP_traces:
             raise ValueError(f"None of requested LP parts found for {vid_angle} camera: {LP_parts_to_keep}")
     else:
-        df = session._LPFaceParts[camera_idx][:]
-        df_temp_error = session._LPFaceParts[camera_idx + 1][:]
-        df_pca_error = session._LPFaceParts[camera_idx + 2][:]
+        df = session._lp[camera_idx][:]
         cam_frames = df['timestamps'].values.astype('float')
 
         LP_traces = []
         for part_no, part_name in enumerate(LP_parts_to_keep):
-            x, y = part_info(part_name, df, df_temp_error[part_name].values.astype('float'),
-                            df_pca_error[part_name].values.astype('float'))
+            x, y = part_info_LP(part_name, df)
             LP_traces.append(x)
             LP_traces.append(y)
 
