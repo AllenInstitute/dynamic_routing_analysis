@@ -2431,6 +2431,8 @@ def concat_decoder_summary_tables(dir,savepath):
     #find different n_units
     n_units=[]
     for col in decoder_results_summary.filter(like='true_accuracy_').columns.values:
+        if 'no_shift' in col:
+            continue
         if len(col.split('_'))==3:
             temp_n_units=col.split('_')[2]
             try:
