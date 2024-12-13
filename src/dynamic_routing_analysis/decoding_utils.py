@@ -717,7 +717,8 @@ def decode_context_from_units(session,params):
             print(aa+' done')
 
     print(session.id+' done')
-    
+    if session_id not in filename:
+        filename=session_id+'_'+filename
     path = upath.UPath(savepath, filename)
     path.mkdir(parents=True, exist_ok=True)
     path.write_bytes(
@@ -845,7 +846,8 @@ def decode_context_from_units_all_timebins(session,params):
             print(aa+' done')
             
     print(session.id+' done')
-    
+    if session_id not in filename:
+        filename=session_id+'_'+filename
     path = upath.UPath(savepath, filename)
     path.mkdir(parents=True, exist_ok=True)
     path.write_bytes(
@@ -1228,6 +1230,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     logger.info(f'{session_id} | Finished all decoding')
 
     #save results
+    if session_id not in filename:
+        filename=session_id+'_'+filename
     path = upath.UPath(savepath, filename)
     path.mkdir(parents=True, exist_ok=True)
     logger.info(f'{session_id} | Saving raw decoding results to {path}')
