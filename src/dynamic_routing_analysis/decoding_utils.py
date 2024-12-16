@@ -22,6 +22,9 @@ from dynamic_routing_analysis import data_utils, spike_utils
 
 logger = logging.getLogger(__name__)
 
+class NotEnoughBlocksError(Exception):
+    pass
+
 
 # Dump the dictionary to the Zarr file
 def dump_dict_to_zarr(group, data):
@@ -992,6 +995,10 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             fake_block_nums[block_trials]=block
         trials['block_index']=fake_block_nums
         trials['context_name']=fake_context
+
+    n_unique_blocks=len(trials['block_index'].unique())
+    if n_unique_blocks<6:
+        raise NotEnoughBlocksError('Not enough blocks ('+str(n_unique_blocks)+') in session '+session_id)
 
     if central_section=='4_blocks':
         #find middle 4 block labels
