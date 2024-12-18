@@ -45,21 +45,48 @@ def dump_dict_to_zarr(group, data):
 
 # 'linearSVC' or 'LDA' or 'RandomForest'
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
-                   crossval_index=None,labels_as_index=False,train_test_split_input=None):
+                   crossval_index=None,labels_as_index=False,train_test_split_input=None,
+                   regularization=None,penalty=None,solver=None):
     #helper function to decode labels from input data using different decoder models
 
     if decoder_type=='linearSVC':
         from sklearn.svm import LinearSVC
-        clf=LinearSVC(max_iter=5000,dual='auto',class_weight='balanced')
+        if regularization is not None:
+            regularization = 1.0
+        if penalty is not None:
+            penalty = 'l2'
+        if solver is not None:
+            logger.warning('Solver not used for LinearSVC')
+        clf=LinearSVC(max_iter=5000,dual='auto',class_weight='balanced',
+                      C=regularization,penalty=penalty)
     elif decoder_type=='LDA':
         from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-        clf=LinearDiscriminantAnalysis(solver='svd')
+        if solver is not None:
+            solver = 'svd'
+        if regularization is not None:
+            logger.warning('Regularization not used for LDA')
+        if penalty is not None:
+            logger.warning('Penalty not used for LDA')
+        clf=LinearDiscriminantAnalysis(solver=solver)
     elif decoder_type=='RandomForest':
         from sklearn.ensemble import RandomForestClassifier
+        if regularization is not None:
+            logger.warning('Regularization not used for RandomForest')
+        if penalty is not None:
+            logger.warning('Penalty not used for RandomForest')
+        if solver is not None:
+            logger.warning('Solver not used for RandomForest')
         clf=RandomForestClassifier(class_weight='balanced')
     elif decoder_type=='LogisticRegression':
         from sklearn.linear_model import LogisticRegression
-        clf=LogisticRegression(max_iter=5000,class_weight='balanced')
+        if regularization is not None:
+            regularization = 1.0
+        if penalty is not None:
+            penalty = 'l2'
+        if solver is not None:
+            solver = 'lbfgs'
+        clf=LogisticRegression(max_iter=5000,class_weight='balanced',
+                               C=regularization,penalty=penalty,solver=solver)
 
     output={}
 
