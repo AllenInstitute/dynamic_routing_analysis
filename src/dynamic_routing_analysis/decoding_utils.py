@@ -1261,6 +1261,332 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         return decoder_results
     
 
+def decode_stimulus_across_context(session=None,params=None,trials=None,units=None,session_info=None):
+    
+    decoder_results={}
+
+    input_data_type=params['input_data_type']
+    # central_section=params['central_section']
+    exclude_cue_trials=params['exclude_cue_trials']
+    n_unit_threshold=params['n_unit_threshold']
+
+    n_units_input=params['n_units']
+    n_repeats=params['n_repeats']
+    spikes_binsize=params['spikes_binsize']
+    spikes_time_before=params['spikes_time_before']
+    spikes_time_after=params['spikes_time_after']
+
+    savepath=params['savepath']
+    filename=params['filename']
+    # crossval=params['crossval']
+    labels_as_index=params['labels_as_index']
+    decoder_type=params['decoder_type']
+
+    if 'only_use_all_units' in params:
+        only_use_all_units=params['only_use_all_units']
+    else:
+        only_use_all_units=False
+
+    if 'return_results' in params:
+        return_results=params['return_results']
+    else:
+        return_results=False
+
+    if session is not None:
+        session_id = session.session_id
+        if session_info is None:
+            session_info = npc_lims.get_session_info(session_id)
+    elif session_info is not None:
+        session_id=str(session_info.id)
+    logger.info(f'{session_id} | Parameters parsed. Starting decoding analysis')
+
+    if trials is None and session is not None:
+        trials = data_utils.load_trials_or_units(session, 'trials')
+    elif trials is None:
+        trials=pd.read_parquet(
+            npc_lims.get_cache_path('trials',session_id)
+        )
+
+    trials_original_index=trials.index.values
+
+    if exclude_cue_trials:
+        trials=trials.query('is_reward_scheduled==False')
+        trials_original_index=trials.index.values
+        trials=trials.reset_index()
+
+    #make data array
+    if units is None and session is not None:
+        units = data_utils.load_trials_or_units(session, 'units')
+    elif units is None:
+        units=pd.read_parquet(
+            npc_lims.get_cache_path('units',session_id)
+        )
+
+    #add probe to structure name
+    structure_probe=spike_utils.get_structure_probe(units)
+    for uu, unit in units.iterrows():
+        units.loc[units['unit_id']==unit['unit_id'],'structure']=structure_probe.loc[structure_probe['unit_id']==unit['unit_id'],'structure_probe']
+    
+    #make trial data array for baseline activity
+    trial_da = spike_utils.make_neuron_time_trials_tensor(units, trials, spikes_time_before, spikes_time_after, spikes_binsize)
+
+    #make fake blocks for templeton sessions
+    if 'Templeton' in session_info.project:
+        start_time=trials['start_time'].iloc[0]
+        fake_context=np.full(len(trials), fill_value='nan')
+        fake_block_nums=np.full(len(trials), fill_value=np.nan)
+        block_context_names=['vis','aud']
+
+        if np.random.choice(block_context_names,1)=='vis':
+            block_contexts=['vis','aud','vis','aud','vis','aud']
+        else:
+            block_contexts=['aud','vis','aud','vis','aud','vis']
+
+        for block in range(0,6):
+            block_start_time=start_time+block*10*60
+            block_end_time=start_time+(block+1)*10*60
+            block_trials=trials[:].query('start_time>=@block_start_time').index
+            fake_context[block_trials]=block_contexts[block]
+            fake_block_nums[block_trials]=block
+        trials['block_index']=fake_block_nums
+        trials['context_name']=fake_context
+
+    decoder_results[session_id]={}
+    decoder_results[session_id]['trials_original_index']=trials_original_index
+    decoder_results[session_id]['spikes_binsize'] = spikes_binsize
+    decoder_results[session_id]['spikes_time_before'] = spikes_time_before
+    decoder_results[session_id]['spikes_time_after'] = spikes_time_after
+    decoder_results[session_id]['input_data_type'] = input_data_type
+    decoder_results[session_id]['n_units'] = n_units_input
+    decoder_results[session_id]['n_repeats'] = n_repeats
+
+    import dataclasses
+    session_info=dataclasses.asdict(session_info)
+    for ii in session_info.keys():
+        if type(session_info[ii]) not in [int, str, bool, dict, list]:
+            session_info[ii]=str(session_info[ii])
+
+    decoder_results[session_id]['session_info'] = session_info
+
+    if only_use_all_units:
+        areas=['all']
+    else:
+        areas=units['structure'].unique()
+        areas=np.concatenate([areas,['all']])
+
+        #add non-probe-specific area to areas
+        all_probe_areas=[]
+        if len(units.query('structure.str.contains("probe")'))>0:
+            probe_areas=units.query('structure.str.contains("probe")')['structure'].unique()
+            for pa in probe_areas:
+                all_probe_areas.append([pa.split('_')[0]+'_all'])
+
+        general_areas=np.unique(np.array(all_probe_areas))
+        areas=np.concatenate([areas,general_areas])
+
+        #consolidate SC areas
+        for aa in areas:
+            if aa in ['SCop','SCsg','SCzo']:
+                if 'SCs' not in areas:
+                    areas=np.concatenate([areas,['SCs']])
+            elif aa in ['SCig','SCiw','SCdg','SCdw']:
+                if 'SCm' not in areas:
+                    areas=np.concatenate([areas,['SCm']])
+
+    decoder_results[session_id]['areas'] = areas
+    decoder_results[session_id]['results'] = {}
+
+    for aa in areas:
+        if aa == 'all':
+            area_units=units
+        elif '_all' in aa:
+            temp_area=aa.split('_')[0]
+            possible_probe_areas=[temp_area+'_probeA',temp_area+'_probeB',temp_area+'_probeC',
+                                temp_area+'_probeD',temp_area+'_probeE',temp_area+'_probeF']
+            area_units=units.query('structure in @possible_probe_areas')
+        elif aa=='SCs':
+            area_units=units.query('structure=="SCop" or structure=="SCsg" or structure=="SCzo"')
+        elif aa=='SCm':
+            area_units=units.query('structure=="SCig" or structure=="SCiw" or structure=="SCdg" or structure=="SCdw"')
+        else:
+            area_units=units.query('structure==@aa')
+
+        n_units=len(area_units)
+        if n_units<n_unit_threshold:
+            continue
+
+        area_unit_ids=area_units['unit_id'].values
+    
+        decoder_results[session_id]['results'][aa]={}
+        
+        decoder_results[session_id]['results'][aa]['predict_vis_stim_vis_context']={}
+        decoder_results[session_id]['results'][aa]['predict_vis_stim_aud_context']={}
+        decoder_results[session_id]['results'][aa]['predict_aud_stim_aud_context']={}
+        decoder_results[session_id]['results'][aa]['predict_aud_stim_vis_context']={}
+        decoder_results[session_id]['results'][aa]['unit_ids']={}
+        decoder_results[session_id]['results'][aa]['n_units']={}
+        decoder_results[session_id]['results'][aa]['unit_ids']=area_units['unit_id'].values
+        decoder_results[session_id]['results'][aa]['n_units']=len(area_units)
+
+        #find mean ccf location of units
+        decoder_results[session_id]['results'][aa]['ccf_ap_mean']=area_units['ccf_ap'].mean()
+        decoder_results[session_id]['results'][aa]['ccf_dv_mean']=area_units['ccf_dv'].mean()
+        decoder_results[session_id]['results'][aa]['ccf_ml_mean']=area_units['ccf_ml'].mean()
+
+        #loop through repeats
+        for nunits in n_units_input:
+            if nunits!='all' and nunits>len(area_units):
+                continue
+            decoder_results[session_id]['results'][aa]['predict_vis_stim_vis_context'][nunits]={}
+            decoder_results[session_id]['results'][aa]['predict_vis_stim_aud_context'][nunits]={}
+            decoder_results[session_id]['results'][aa]['predict_aud_stim_aud_context'][nunits]={}
+            decoder_results[session_id]['results'][aa]['predict_aud_stim_vis_context'][nunits]={}
+
+            for rr in range(n_repeats):
+                decoder_results[session_id]['results'][aa]['predict_vis_stim_vis_context'][nunits][rr]={}
+                decoder_results[session_id]['results'][aa]['predict_vis_stim_aud_context'][nunits][rr]={}
+                decoder_results[session_id]['results'][aa]['predict_aud_stim_aud_context'][nunits][rr]={}
+                decoder_results[session_id]['results'][aa]['predict_aud_stim_vis_context'][nunits][rr]={}
+
+                if nunits=='all':
+                    sel_units=area_unit_ids
+                else:
+                    sel_units=np.random.choice(area_unit_ids,nunits,replace=False)
+
+                decoder_results[session_id]['results'][aa]['predict_vis_stim_vis_context'][nunits][rr]['sel_units']=sel_units
+                decoder_results[session_id]['results'][aa]['predict_vis_stim_aud_context'][nunits][rr]['sel_units']=sel_units
+                decoder_results[session_id]['results'][aa]['predict_aud_stim_aud_context'][nunits][rr]['sel_units']=sel_units
+                decoder_results[session_id]['results'][aa]['predict_aud_stim_vis_context'][nunits][rr]['sel_units']=sel_units
+
+                #decode visual stimuli in visual context, 5-fold crossval
+                vis_stim_vis_context_trials=trials.query('is_vis_stim and is_vis_context')
+                labels=vis_stim_vis_context_trials['stim_name'].values
+                input_data=trial_da.sel(trials=vis_stim_vis_context_trials.index,unit_id=sel_units).mean(dim='time').values.T
+
+                decoder_results[session_id]['results'][aa]['predict_vis_stim_vis_context']['trial_idx']=vis_stim_vis_context_trials.index.values
+                decoder_results[session_id]['results'][aa]['predict_vis_stim_vis_context'][nunits][rr] = decoder_helper(
+                    input_data=input_data,
+                    labels=labels,
+                    decoder_type=decoder_type,
+                    crossval='5_fold',
+                    crossval_index=None,
+                    labels_as_index=labels_as_index)
+                
+                #decode visual stimuli in auditory context, train on vis context, test on aud context
+                #also split vis stim aud context trials into 5 folds;
+                #train on vis context train set fold, test on aud context test set folds
+                vis_stim_trials=trials.query('is_vis_stim')
+                vis_stim_trial_original_index=vis_stim_trials.index.values
+                vis_stim_trials=vis_stim_trials.reset_index()
+
+                labels=vis_stim_trials['stim_name'].values
+                input_data=trial_da.sel(trials=vis_stim_trials.index,unit_id=sel_units).mean(dim='time').values.T
+
+                vis_stim_vis_context_trials=vis_stim_trials.query('is_vis_stim and is_vis_context')
+                skf = StratifiedKFold(n_splits=5,shuffle=True)
+                train_test_split_vis_stim_vis_context = skf.split(np.zeros(len(vis_stim_vis_context_trials)), vis_stim_vis_context_trials['stim_name'])
+
+                vis_stim_aud_context_trials=vis_stim_trials.query('is_vis_stim and is_aud_context')
+                skf = StratifiedKFold(n_splits=5,shuffle=True)
+                train_test_split_vis_stim_aud_context = skf.split(np.zeros(len(vis_stim_aud_context_trials)), vis_stim_aud_context_trials['stim_name'])
+
+                train=[]
+                for train_index, test_index in train_test_split_vis_stim_vis_context:
+                    train.append(vis_stim_vis_context_trials.index.values[train_index])
+                test=[]
+                for train_index, test_index in train_test_split_vis_stim_aud_context:
+                    test.append(vis_stim_aud_context_trials.index.values[test_index])
+
+                # train=[vis_stim_trials.reset_index().query('is_vis_context').index.values]
+                # test=[vis_stim_trials.reset_index().query('is_aud_context').index.values]
+
+                train_test_split=zip(train,test)
+                decoder_results[session_id]['results'][aa]['predict_vis_stim_aud_context']['trial_idx']=vis_stim_trial_original_index
+                decoder_results[session_id]['results'][aa]['predict_vis_stim_aud_context'][nunits][rr] = decoder_helper(
+                    input_data=input_data,
+                    labels=labels,
+                    decoder_type=decoder_type,
+                    crossval='5_fold_constant',
+                    crossval_index=None,
+                    labels_as_index=labels_as_index,
+                    train_test_split_input=train_test_split)
+
+                #decode auditory stimuli in auditory context, 5-fold crossval
+                aud_stim_aud_context_trials=trials.query('is_aud_stim and is_aud_context')
+                labels=aud_stim_aud_context_trials['stim_name'].values
+                input_data=trial_da.sel(trials=aud_stim_aud_context_trials.index,unit_id=sel_units).mean(dim='time').values.T
+
+                decoder_results[session_id]['results'][aa]['predict_aud_stim_aud_context']['trial_idx']=aud_stim_aud_context_trials.index.values
+                decoder_results[session_id]['results'][aa]['predict_aud_stim_aud_context'][nunits][rr] = decoder_helper(
+                    input_data=input_data,
+                    labels=labels,
+                    decoder_type=decoder_type,
+                    crossval='5_fold',
+                    crossval_index=None,
+                    labels_as_index=labels_as_index)
+                
+                #decode auditory stimuli in visual context, train on aud context, test on vis context
+                aud_stim_trials=trials.query('is_aud_stim')
+                aud_stim_trial_original_index=aud_stim_trials.index.values
+                aud_stim_trials=aud_stim_trials.reset_index()
+                labels=aud_stim_trials['stim_name'].values
+                input_data=trial_da.sel(trials=aud_stim_trials.index,unit_id=sel_units).mean(dim='time').values.T
+
+                aud_stim_aud_context_trials=aud_stim_trials.query('is_aud_stim and is_aud_context')
+                skf = StratifiedKFold(n_splits=5,shuffle=True)
+                train_test_split_aud_stim_aud_context = skf.split(np.zeros(len(aud_stim_aud_context_trials)), aud_stim_aud_context_trials['stim_name'])
+
+                aud_stim_vis_context_trials=aud_stim_trials.query('is_aud_stim and is_vis_context')
+                skf = StratifiedKFold(n_splits=5,shuffle=True)
+                train_test_split_aud_stim_vis_context = skf.split(np.zeros(len(aud_stim_vis_context_trials)), aud_stim_vis_context_trials['stim_name'])
+
+                train=[]
+                for train_index, test_index in train_test_split_aud_stim_aud_context:
+                    train.append(aud_stim_aud_context_trials.index.values[train_index])
+                test=[]
+                for train_index, test_index in train_test_split_aud_stim_vis_context:
+                    test.append(aud_stim_vis_context_trials.index.values[test_index])
+
+                # train=[aud_stim_trials.reset_index().query('is_aud_context').index.values]
+                # test=[aud_stim_trials.reset_index().query('is_vis_context').index.values]
+
+                train_test_split=zip(train,test)
+                decoder_results[session_id]['results'][aa]['predict_aud_stim_vis_context']['trial_idx']=aud_stim_trial_original_index
+                decoder_results[session_id]['results'][aa]['predict_aud_stim_vis_context'][nunits][rr] = decoder_helper(
+                    input_data=input_data,
+                    labels=labels,
+                    decoder_type=decoder_type,
+                    crossval='5_fold_constant',
+                    crossval_index=None,
+                    labels_as_index=labels_as_index,
+                    train_test_split_input=train_test_split)
+
+                if nunits=='all':
+                    break
+                
+        logger.info(f'{session_id} | area: {aa} | Finished decoding')
+    logger.info(f'{session_id} | Finished all decoding')
+
+    #save results
+    if session_id not in filename:
+        filename=session_id+'_'+filename
+    path = upath.UPath(savepath, filename)
+    path.mkdir(parents=True, exist_ok=True)
+    logger.info(f'{session_id} | Saving raw decoding results to {path}')
+    path.write_bytes(
+        pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
+    )
+
+    del trial_da
+    del units
+    del trials
+    gc.collect()
+    if return_results:
+        return decoder_results
+
+    if return_results:
+        return decoder_results           
+        
 
 def concat_decoder_results(files,savepath=None,return_table=True,single_session=False,use_zarr=False):
 
