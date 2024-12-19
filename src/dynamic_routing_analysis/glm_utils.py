@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__) # debug < info < warning < error
 
+np.random.seed(0)
 
 class Ridge:
     def __init__(self, lam=None, W=None):
@@ -29,6 +30,7 @@ class Ridge:
         try:
             if self.lam == 0:
                 self.W = np.dot(np.linalg.inv(np.dot(X.T, X)), np.dot(X.T, y))
+                self.W = self.W if ~np.isnan(np.sum(self.W)) else np.zeros(self.W.shape) # if weights contain NaNs, set to zeros
             else:
                 self.W = np.dot(np.linalg.inv(np.dot(X.T, X) + self.lam * np.eye(X.shape[-1])),
                                 np.dot(X.T, y))
@@ -43,6 +45,8 @@ class Ridge:
         except Exception as e:
             print("Unexpected error encountered:", e)
             raise  # Re-raise the exception to propagate unexpected errors
+
+        assert ~np.isnan(np.sum(self.W)), 'Weights contain NaNs'
 
         self.mean_r2 = self.score(X, y)
 
@@ -96,6 +100,7 @@ def nested_train_and_test(design_mat, spike_counts, L2_grid, folds_outer=10, fol
             search = GridSearchCV(model, {'lam': np.array(L2_grid)}, cv=cv_inner, refit=True,
                               n_jobs=1)
         except LinAlgError:
+            logger.info(f"Fold {k} failed due to a linear algebra error. Skipping fold.")
             continue
 
         result = search.fit(X_train, y_train)
@@ -109,6 +114,11 @@ def nested_train_and_test(design_mat, spike_counts, L2_grid, folds_outer=10, fol
         test_mean_score = best_model.score(X_test, y_test)
         test_r2[:, k] = best_model.r2
 
+
+    if np.sum(test_r2) == 0:
+        raise LinAlgError("Test cv$R^2$ values were never updated")
+
+    # Train the model on the entire dataset with the median lambda value
     lam = np.median(lams)
     model = Ridge(lam=lam).fit(X, y)
     weights = model.W
@@ -155,7 +165,7 @@ def simple_train_and_test(design_mat, spike_counts, lam, folds_outer=10):
         try:
             model.fit(X_train, y_train)
         except LinAlgError:
-            logger.info("")
+            logger.info(f"Fold {k} failed due to a linear algebra error. Skipping fold.")
             continue
 
         train_mean_score = model.score(X_train, y_train)
@@ -163,7 +173,9 @@ def simple_train_and_test(design_mat, spike_counts, lam, folds_outer=10):
         test_mean_score = model.score(X_test, y_test)
         test_r2[:, k] = model.r2
 
-    # check if train and test are empty. raise LinAlgError
+    # check if test are empty. raise LinAlgError
+    if np.sum(test_r2) == 0:
+        raise LinAlgError("Test cv$R^2$ values were never updated")
 
     # Train the model on the entire dataset with the median lambda value
     model = Ridge(lam=np.median(lam))
@@ -200,9 +212,15 @@ def process_unit(unit_no, design_mat, fit, run_params, function):
             cv_var_train, cv_var_test, _, _ = simple_train_and_test(
                 design_mat, fit_cell, lam=L2_value, folds_outer=run_params['n_outer_folds']
             )
+            assert np.sum(cv_var_test)!= 0, 'cv_var_test is all zeros'
+            assert cv_var_test.shape[1] == run_params['n_outer_folds'], 'cv_var_test length is not equal to n_outer_folds'
+
             # Store results for this unit and L2 value
             unit_train_cv[L2_index] = np.nanmean(cv_var_train)  # Fixed axis issue
             unit_test_cv[L2_index] = np.nanmean(cv_var_test)  # Fixed axis issue
+
+        assert np.sum(unit_test_cv)!= 0, 'unit_test_cv is all zeros'
+        assert unit_test_cv.shape[0] == len(fit['L2_grid']), 'unit_test_cv length is not equal to L2_grid'
 
         return unit_no, unit_train_cv, unit_test_cv
 
@@ -257,8 +275,8 @@ def evaluate_ridge(fit, design_mat, run_params):
     '''
 
     spike_counts = fit['spike_count_arr']['spike_counts']
-    x_is_continuous = [run_params['kernels'][kernel_name.rsplit('_', 1)[0]]['type'] == 'continuous'
-                       for kernel_name in design_mat.weights.values]
+    # x_is_continuous = [run_params['kernels'][kernel_name.rsplit('_', 1)[0]]['type'] == 'continuous'
+    #                    for kernel_name in design_mat.weights.values]
     num_units = spike_counts.shape[1]
 
     if run_params['use_fixed_penalty']:
@@ -316,12 +334,12 @@ def evaluate_ridge(fit, design_mat, run_params):
                 test_cv[:, L2_index] = np.nanmean(cv_var_test, axis=1)
                 test_cv[:, L2_index] = np.nanmean(cv_var_test, axis=1)
 
-        fit['avg_L2_regularization'] = np.mean([fit['L2_grid'][x] for x in np.argmax(test_cv, 1)])
-        fit['cell_L2_regularization'] = [fit['L2_grid'][x] for x in np.argmax(test_cv, 1)]
+        fit['avg_L2_regularization'] = np.mean([fit['L2_grid'][x] for x in np.nanargmax(test_cv, 1)])
+        fit['cell_L2_regularization'] = [fit['L2_grid'][x] for x in np.nanargmax(test_cv, 1)]
         fit['L2_test_cv'] = test_cv
         fit['L2_train_cv'] = train_cv
-        fit['L2_at_grid_min'] = [x == 0 for x in np.argmax(test_cv, 1)]
-        fit['L2_at_grid_max'] = [x == (len(fit['L2_grid']) - 1) for x in np.argmax(test_cv, 1)]
+        fit['L2_at_grid_min'] = [x == 0 for x in np.nanargmax(test_cv, 1)]
+        fit['L2_at_grid_max'] = [x == (len(fit['L2_grid']) - 1) for x in np.nanargmax(test_cv, 1)]
     else:
         if run_params['L2_grid_type'] == 'log':
             fit['L2_grid'] = np.array([0] + list(np.geomspace(run_params['L2_grid_range'][0],
@@ -493,29 +511,3 @@ def clean_r2_vals(x):
 def get_timestamp():
     t = time.localtime()
     return time.strftime('%Y-%m-%d: %H:%M:%S') + ' '
-
-
-
-# def set_kernel_length(trials, units_table, feature_func=None,
-#                       time_before=None, time_after=None, bin_size=None,
-#                       kernel_lengths=None, kernel_conditions=None):
-#     if not kernel_lengths:
-#         kernel_lengths = [0.1, 0.25, 0.5, 1, 1.5]
-#     if not time_before:
-#         time_before = 2
-#     if not time_after:
-#         time_after = 3
-#     if not bin_size:
-#         bin_size = 0.025
-#
-#     n_units = len(units_table)
-#     r2 = np.zeros((len(kernel_lengths), n_units)) + np.nan
-#     for k, kernel_length in enumerate(kernel_lengths):
-#         if kernel_conditions:
-#             X = feature_func(trials, time_before, time_after, kernel_length, bin_size, kernel_conditions)
-#         else:
-#             X = feature_func(trials, time_before, time_after, kernel_length, bin_size)
-#         X = np.hstack((np.ones((X.shape[0], 1)), X))
-#         r2_k, weights_k = train_and_test(X, spike_counts, folds_outer=5, folds_inner=3)
-#         r2[k, :] = r2_k
-#     return kernel_lengths[np.argmax(np.nanmedian(r2, axis=1))], np.nanmedian(r2, axis=1)
