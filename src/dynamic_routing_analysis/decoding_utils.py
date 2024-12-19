@@ -51,9 +51,9 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
     if decoder_type=='linearSVC':
         from sklearn.svm import LinearSVC
-        if regularization is not None:
+        if regularization is None:
             regularization = 1.0
-        if penalty is not None:
+        if penalty is None:
             penalty = 'l2'
         if solver is not None:
             logger.warning('Solver not used for LinearSVC')
@@ -61,7 +61,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                       C=regularization,penalty=penalty)
     elif decoder_type=='LDA':
         from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-        if solver is not None:
+        if solver is None:
             solver = 'svd'
         if regularization is not None:
             logger.warning('Regularization not used for LDA')
@@ -79,11 +79,11 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         clf=RandomForestClassifier(class_weight='balanced')
     elif decoder_type=='LogisticRegression':
         from sklearn.linear_model import LogisticRegression
-        if regularization is not None:
+        if regularization is None:
             regularization = 1.0
-        if penalty is not None:
+        if penalty is None:
             penalty = 'l2'
-        if solver is not None:
+        if solver is None:
             solver = 'lbfgs'
         clf=LogisticRegression(max_iter=5000,class_weight='balanced',
                                C=regularization,penalty=penalty,solver=solver)
@@ -1844,6 +1844,8 @@ def compute_significant_decoding_by_area(all_decoder_results):
     #determine different numbers of units from all_decoder_results
     n_units=[]
     for col in all_decoder_results.filter(like='true_accuracy').columns.values:
+        if 'no_shift' in col:
+            continue
         if len(col.split('_'))>2:
             n_units.append('_'+col.split('_')[2])
         else:
