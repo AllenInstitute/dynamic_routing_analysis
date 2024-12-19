@@ -926,6 +926,18 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     # use_coefs=params['use_coefs']
     # generate_labels=params['generate_labels']
 
+    if 'regularization' in params:
+        regularization=params['regularization']
+    else:
+        regularization=None
+    if 'penalty' in params:
+        penalty=params['penalty']
+    else:
+        penalty=None
+    if 'solver' in params:
+        solver=params['solver']
+    else:
+        solver=None
     
     if 'only_use_all_units' in params:
         only_use_all_units=params['only_use_all_units']
@@ -1209,7 +1221,10 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                     crossval=crossval,
                     crossval_index=None,
                     labels_as_index=labels_as_index,
-                    train_test_split_input=train_test_split)
+                    train_test_split_input=train_test_split,
+                    regularization=regularization,
+                    penalty=penalty,
+                    solver=solver)
 
                 #loop through shifts
                 for sh,shift in enumerate(shifts):
@@ -1255,7 +1270,10 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                         crossval=crossval,
                         crossval_index=None,
                         labels_as_index=labels_as_index,
-                        train_test_split_input=train_test_split)
+                        train_test_split_input=train_test_split,
+                        regularization=regularization,
+                        penalty=penalty,
+                        solver=solver)
                         
                 if nunits=='all':
                     break
@@ -1308,6 +1326,19 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
     # crossval=params['crossval']
     labels_as_index=params['labels_as_index']
     decoder_type=params['decoder_type']
+
+    if 'regularization' in params:
+        regularization=params['regularization']
+    else:
+        regularization=None
+    if 'penalty' in params:
+        penalty=params['penalty']
+    else:
+        penalty=None
+    if 'solver' in params:
+        solver=params['solver']
+    else:
+        solver=None
 
     if 'only_use_all_units' in params:
         only_use_all_units=params['only_use_all_units']
@@ -1497,7 +1528,10 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
                     decoder_type=decoder_type,
                     crossval='5_fold',
                     crossval_index=None,
-                    labels_as_index=labels_as_index)
+                    labels_as_index=labels_as_index,
+                    regularization=regularization,
+                    penalty=penalty,
+                    solver=solver)
                 
                 #decode visual stimuli in auditory context, train on vis context, test on aud context
                 #also split vis stim aud context trials into 5 folds;
@@ -1536,7 +1570,10 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
                     crossval='5_fold_constant',
                     crossval_index=None,
                     labels_as_index=labels_as_index,
-                    train_test_split_input=train_test_split)
+                    train_test_split_input=train_test_split,
+                    regularization=regularization,
+                    penalty=penalty,
+                    solver=solver)
 
                 #decode auditory stimuli in auditory context, 5-fold crossval
                 aud_stim_aud_context_trials=trials.query('is_aud_stim and is_aud_context')
@@ -1550,7 +1587,10 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
                     decoder_type=decoder_type,
                     crossval='5_fold',
                     crossval_index=None,
-                    labels_as_index=labels_as_index)
+                    labels_as_index=labels_as_index,
+                    regularization=regularization,
+                    penalty=penalty,
+                    solver=solver)
                 
                 #decode auditory stimuli in visual context, train on aud context, test on vis context
                 aud_stim_trials=trials.query('is_aud_stim')
@@ -1586,7 +1626,10 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
                     crossval='5_fold_constant',
                     crossval_index=None,
                     labels_as_index=labels_as_index,
-                    train_test_split_input=train_test_split)
+                    train_test_split_input=train_test_split,
+                    regularization=regularization,
+                    penalty=penalty,
+                    solver=solver)
 
                 if nunits=='all':
                     break
