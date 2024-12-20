@@ -1077,6 +1077,13 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     decoder_results[session_id]['input_data_type'] = input_data_type
     decoder_results[session_id]['n_units'] = n_units_input
     decoder_results[session_id]['n_repeats'] = n_repeats
+    decoder_results[session_id]['crossval'] = crossval
+    decoder_results[session_id]['labels_as_index'] = labels_as_index
+    decoder_results[session_id]['decoder_type'] = decoder_type
+    decoder_results[session_id]['regularization'] = regularization
+    decoder_results[session_id]['penalty'] = penalty
+    decoder_results[session_id]['solver'] = solver
+    decoder_results[session_id]['only_use_all_units'] = only_use_all_units
 
     import dataclasses
     session_info=dataclasses.asdict(session_info)
@@ -1417,6 +1424,12 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
     decoder_results[session_id]['input_data_type'] = input_data_type
     decoder_results[session_id]['n_units'] = n_units_input
     decoder_results[session_id]['n_repeats'] = n_repeats
+    decoder_results[session_id]['labels_as_index'] = labels_as_index
+    decoder_results[session_id]['decoder_type'] = decoder_type
+    decoder_results[session_id]['regularization'] = regularization
+    decoder_results[session_id]['penalty'] = penalty
+    decoder_results[session_id]['solver'] = solver
+    decoder_results[session_id]['only_use_all_units'] = only_use_all_units
 
     import dataclasses
     session_info=dataclasses.asdict(session_info)
