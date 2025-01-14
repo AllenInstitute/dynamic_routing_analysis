@@ -4,6 +4,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import numpy as np
 from numpy.linalg import LinAlgError
+from sklearn.cluster import KMeans
 from sklearn.model_selection import GridSearchCV, KFold
 from tqdm import tqdm
 
@@ -187,7 +188,7 @@ def simple_train_and_test(design_mat, spike_counts, lam, folds_outer=10):
 
 
 # Define function to process a single unit
-def process_unit(unit_no, design_mat, fit, run_params, function):
+def process_unit(unit_no, design_mat, fit, run_params):
     """
     Process a single unit for optimization or fitting.
 
@@ -196,61 +197,35 @@ def process_unit(unit_no, design_mat, fit, run_params, function):
     - design_mat: ndarray, the design matrix for the model.
     - fit: dict, contains fitting parameters (e.g., spike counts, L2 grid, regularization).
     - run_params: dict, contains runtime parameters (e.g., number of folds, no_nested_CV).
-    - function: str, either 'optimize' or 'fit'.
 
     Returns:
     - Tuple with results depending on the specified function.
     """
     fit_cell = fit['spike_count_arr']['spike_counts'][:, unit_no].reshape(-1, 1)
 
-    if function == 'optimize':
-        # Temporary storage for results
-        unit_train_cv = np.zeros(len(fit['L2_grid']))
-        unit_test_cv = np.zeros(len(fit['L2_grid']))
-
-        for L2_index, L2_value in enumerate(fit['L2_grid']):
-            cv_var_train, cv_var_test, _, _ = simple_train_and_test(
-                design_mat, fit_cell, lam=L2_value, folds_outer=run_params['n_outer_folds']
-            )
-            assert np.sum(cv_var_test)!= 0, 'cv_var_test is all zeros'
-            assert cv_var_test.shape[1] == run_params['n_outer_folds'], 'cv_var_test length is not equal to n_outer_folds'
-
-            # Store results for this unit and L2 value
-            unit_train_cv[L2_index] = np.nanmean(cv_var_train)  # Fixed axis issue
-            unit_test_cv[L2_index] = np.nanmean(cv_var_test)  # Fixed axis issue
-
-        assert np.sum(unit_test_cv)!= 0, 'unit_test_cv is all zeros'
-        assert unit_test_cv.shape[0] == len(fit['L2_grid']), 'unit_test_cv length is not equal to L2_grid'
-
-        return unit_no, unit_train_cv, unit_test_cv
-
-    elif function == 'fit':
-        if run_params['no_nested_CV']:
-            lam_value = fit['cell_L2_regularization'][unit_no]
-        elif 'cell_L2_regularization_nested' in run_params.keys():
-            lam_value = fit['cell_L2_regularization_nested'][unit_no]
-        else:
-            # If nested CV is enabled, use nested_train_and_test
-            cv_train, cv_test, weights, prediction, lams = nested_train_and_test(
-                design_mat,
-                fit_cell,
-                L2_grid=fit['L2_grid'],
-                folds_outer=run_params['n_outer_folds'],
-                folds_inner=run_params['n_inner_folds']
-            )
-            return unit_no, cv_train, cv_test, weights, prediction, lams
-
-        # Perform simple training and testing for regular cases
-        cv_train, cv_test, weights, prediction = simple_train_and_test(
+    if run_params['no_nested_CV']:
+        lam_value = fit['cell_L2_regularization'][unit_no]
+    elif 'cell_L2_regularization_nested' in run_params.keys():
+        lam_value = fit['cell_L2_regularization_nested'][unit_no]
+    else:
+        # If nested CV is enabled, use nested_train_and_test
+        cv_train, cv_test, weights, prediction, lams = nested_train_and_test(
             design_mat,
             fit_cell,
-            lam=lam_value,
-            folds_outer=run_params['n_outer_folds']
+            L2_grid=fit['L2_grid'],
+            folds_outer=run_params['n_outer_folds'],
+            folds_inner=run_params['n_inner_folds']
         )
-        return unit_no, cv_train, cv_test, weights, prediction
+        return unit_no, cv_train, cv_test, weights, prediction, lams
 
-    else:
-        raise ValueError(f"Invalid function type: {function}. Expected 'optimize' or 'fit'.")
+    # Perform simple training and testing for regular cases
+    cv_train, cv_test, weights, prediction = simple_train_and_test(
+        design_mat,
+        fit_cell,
+        lam=lam_value,
+        folds_outer=run_params['n_outer_folds']
+    )
+    return unit_no, cv_train, cv_test, weights, prediction
 
 
 def evaluate_ridge(fit, design_mat, run_params):
@@ -294,45 +269,15 @@ def evaluate_ridge(fit, design_mat, run_params):
         train_cv = np.full((num_units, len(fit['L2_grid'])), np.nan)
         test_cv = np.full((num_units, len(fit['L2_grid'])), np.nan)
 
-        if run_params['optimize_penalty_by_cell']:
-            print(get_timestamp() + ': optimizing penalty by cell')
-            with ProcessPoolExecutor(max_workers=10) as executor:
-                futures = {
-                    executor.submit(process_unit, unit_no, design_mat.copy(), fit.copy(), run_params,'optimize'): unit_no
-                    for unit_no in range(num_units)
-                }
-                for future in tqdm(as_completed(futures), total=num_units, desc='Processing units in parallel'):
-                    try:
-                        unit_no, unit_train_cv, unit_test_cv = future.result()
-                    except LinAlgError:
-                        logger.info(f"{unit_no}")
-                        continue
-                    train_cv[unit_no, :] = unit_train_cv
-                    test_cv[unit_no, :] = unit_test_cv
-
-        elif run_params['optimize_penalty_by_area']:
-            print(get_timestamp() + ': optimizing L2 penalty by area')
-            areas = np.unique(fit['spike_count_arr']['structure'])
-            for area in areas:
-                unit_ids = np.where(fit['spike_count_arr']['structure'] == area)[0]
-                fit_area = spike_counts[:, unit_ids]
-                for L2_index, L2_value in tqdm(enumerate(fit['L2_grid']),
-                                               total=len(fit['L2_grid']), desc=area):
-                    cv_var_train, cv_var_test, _, _, = simple_train_and_test(design_mat, fit_area,
-                                                                             lam=L2_value,
-                                                                             folds_outer=run_params['n_outer_folds'])
-                    train_cv[unit_ids, L2_index] = np.nanmean(cv_var_train, axis=1)
-                    test_cv[unit_ids, L2_index] = np.nanmean(cv_var_test, axis=1)
-        else:
-            print(get_timestamp() + ': optimizing L2 penalty for all cells')
-            for L2_index, L2_value in enumerate(fit['L2_grid']):
-                cv_var_train, cv_var_test, _, _, = simple_train_and_test(design_mat,
-                                                                         spike_counts,
-                                                                         lam=L2_value,
-                                                                         folds_outer=run_params['n_outer_folds'])
-                train_cv[:, L2_index] = np.nanmean(cv_var_train, axis=1)
-                test_cv[:, L2_index] = np.nanmean(cv_var_test, axis=1)
-                test_cv[:, L2_index] = np.nanmean(cv_var_test, axis=1)
+        print(get_timestamp() + ': optimizing L2 penalty for all cells')
+        for L2_index, L2_value in enumerate(fit['L2_grid']):
+            cv_var_train, cv_var_test, _, _, = simple_train_and_test(design_mat,
+                                                                        spike_counts,
+                                                                        lam=L2_value,
+                                                                        folds_outer=run_params['n_outer_folds'])
+            train_cv[:, L2_index] = np.nanmean(cv_var_train, axis=1)
+            test_cv[:, L2_index] = np.nanmean(cv_var_test, axis=1)
+            test_cv[:, L2_index] = np.nanmean(cv_var_test, axis=1)
 
         fit['avg_L2_regularization'] = np.mean([fit['L2_grid'][x] for x in np.nanargmax(test_cv, 1)])
         fit['cell_L2_regularization'] = [fit['L2_grid'][x] for x in np.nanargmax(test_cv, 1)]
@@ -340,6 +285,7 @@ def evaluate_ridge(fit, design_mat, run_params):
         fit['L2_train_cv'] = train_cv
         fit['L2_at_grid_min'] = [x == 0 for x in np.nanargmax(test_cv, 1)]
         fit['L2_at_grid_max'] = [x == (len(fit['L2_grid']) - 1) for x in np.nanargmax(test_cv, 1)]
+
     else:
         if run_params['L2_grid_type'] == 'log':
             fit['L2_grid'] = np.array([0] + list(np.geomspace(run_params['L2_grid_range'][0],
@@ -384,7 +330,7 @@ def evaluate_models(fit, design_mat, run_params):
             print(get_timestamp() + ': fitting each cell')
             with ProcessPoolExecutor(max_workers=10) as executor:
                 futures = {
-                    executor.submit(process_unit, unit_no, design_mat.copy(), fit.copy(), run_params, 'fit'): unit_no
+                    executor.submit(process_unit, unit_no, design_mat.copy(), fit.copy(), run_params): unit_no
                     for unit_no in range(num_units)
                 }
                 for future in tqdm(as_completed(futures), total=num_units, desc='progress'):
@@ -400,7 +346,7 @@ def evaluate_models(fit, design_mat, run_params):
             for area in tqdm(areas, total=len(areas), desc='progress'):
                 unit_ids = np.where(fit['spike_count_arr']['structure'] == area)[0]
                 fit_area = spike_counts[:, unit_ids]
-                L2_value = np.unique(np.take(fit['cell_L2_regularization'], unit_ids))[0]
+                L2_value = np.nanmedian(np.take(fit['cell_L2_regularization'], unit_ids))
                 cv_train, cv_test, weights, prediction = simple_train_and_test(design_mat, fit_area,
                                                                                lam=L2_value,
                                                                                folds_outer=run_params['n_outer_folds'])
@@ -408,9 +354,25 @@ def evaluate_models(fit, design_mat, run_params):
                 cv_var_test[unit_ids] = cv_test
                 all_weights[:, unit_ids] = weights
                 all_prediction[:, unit_ids] = prediction
+
+        elif run_params['optimize_penalty_by_firing_rate']:
+            rate_clusters = fit['spike_count_arr']['rate_clusters']
+            print(get_timestamp() + ': fitting units by firing rate')
+            for cluster in tqdm(np.unique(rate_clusters), total=len(np.unique(rate_clusters)), desc='progress'):
+                unit_ids = np.where(rate_clusters == cluster)[0]
+                fit_rate = spike_counts[:, unit_ids]
+                L2_value = np.nanmedian(np.take(fit['cell_L2_regularization'], unit_ids))[0]
+                cv_train, cv_test, weights, prediction = simple_train_and_test(design_mat, fit_rate,
+                                                                               lam=L2_value,
+                                                                               folds_outer=run_params['n_outer_folds'])
+                cv_var_train[unit_ids] = cv_train
+                cv_var_test[unit_ids] = cv_test
+                all_weights[:, unit_ids] = weights
+                all_prediction[:, unit_ids] = prediction
+
         else:
             print(get_timestamp() + ': fitting all units')
-            L2_value = np.unique(np.array(fit['cell_L2_regularization']))[0]
+            L2_value = np.nanmedian(np.array(fit['cell_L2_regularization']))
             cv_var_train, cv_var_test, all_weights, all_prediction = simple_train_and_test(design_mat,
                                                                                            spike_counts,
                                                                                            lam=L2_value,
@@ -422,7 +384,7 @@ def evaluate_models(fit, design_mat, run_params):
             print(get_timestamp() + ': fitting each cell')
             with ProcessPoolExecutor(max_workers=10) as executor:
                 futures = {
-                    executor.submit(process_unit, unit_no, design_mat.copy(), fit.copy(), run_params, 'fit'): unit_no
+                    executor.submit(process_unit, unit_no, design_mat.copy(), fit.copy(), run_params): unit_no
                     for unit_no in range(num_units)
                 }
                 for future in tqdm(as_completed(futures), total=num_units, desc='progress'):
@@ -446,6 +408,20 @@ def evaluate_models(fit, design_mat, run_params):
                 all_weights[unit_ids] = weights
                 all_prediction[unit_ids] = prediction
 
+        elif run_params['optimize_penalty_by_firing_rate']:
+            rate_clusters = fit['spike_count_arr']['rate_clusters']
+            for cluster in tqdm(np.unique(rate_clusters), total=len(np.unique(rate_clusters)), desc='progress'):
+                unit_ids = np.where(rate_clusters == cluster)[0]
+                fit_rate = spike_counts[:, unit_ids]
+                L2_value = np.unique(np.take(fit['cell_L2_regularization_nested'], unit_ids), axis=0)
+                cv_train, cv_test, weights, prediction = simple_train_and_test(design_mat, fit_rate,
+                                                                               lam=L2_value,
+                                                                               folds_outer=run_params['n_outer_folds'])
+                cv_var_train[unit_ids] = cv_train
+                cv_var_test[unit_ids] = cv_test
+                all_weights[unit_ids] = weights
+                all_prediction[unit_ids] = prediction
+
         else:
             L2_value = np.unique(np.array(fit['cell_L2_regularization_nested']), axis=0)
             cv_var_train, cv_var_test, all_weights, all_prediction = \
@@ -458,7 +434,7 @@ def evaluate_models(fit, design_mat, run_params):
             print(get_timestamp() + ': fitting each cell')
             with ProcessPoolExecutor(max_workers=10) as executor:
                 futures = {
-                    executor.submit(process_unit, unit_no, design_mat.copy(), fit.copy(), run_params, 'fit'): unit_no
+                    executor.submit(process_unit, unit_no, design_mat.copy(), fit.copy(), run_params): unit_no
                     for unit_no in range(num_units)
                 }
                 for future in tqdm(as_completed(futures), total=num_units, desc='progress'):
@@ -476,6 +452,23 @@ def evaluate_models(fit, design_mat, run_params):
                 fit_area = spike_counts[:, unit_ids]
                 cv_train, cv_test, weights, prediction, lams = \
                     nested_train_and_test(design_mat, fit_area, L2_grid=fit['L2_grid'],
+                                          folds_outer=run_params['n_outer_folds'],
+                                          folds_inner=run_params['n_inner_folds'])
+
+                cv_var_train[unit_ids] = cv_train
+                cv_var_test[unit_ids] = cv_test
+                all_weights[:, unit_ids] = weights
+                all_prediction[:, unit_ids] = prediction
+                cell_L2_regularization_nested[unit_ids] = lams
+
+        elif run_params['optimize_penalty_by_firing_rate']:
+            rate_clusters = KMeans(n_clusters = run_params['num_rate_clusters'], random_state = 0).fit(fit['spike_count_arr']['firing_rate'].reshape(-1,1)).labels_
+            fit['spike_count_arr']['rate_clusters'] = rate_clusters
+            for cluster in tqdm(np.unique(rate_clusters), total=len(np.unique(rate_clusters)), desc='progress'):
+                unit_ids = np.where(rate_clusters == cluster)[0]
+                fit_rate = spike_counts[:, unit_ids]
+                cv_train, cv_test, weights, prediction, lams = \
+                    nested_train_and_test(design_mat, fit_rate, L2_grid=fit['L2_grid'],
                                           folds_outer=run_params['n_outer_folds'],
                                           folds_inner=run_params['n_inner_folds'])
 
