@@ -356,12 +356,12 @@ def evaluate_models(fit, design_mat, run_params):
                 all_prediction[:, unit_ids] = prediction
 
         elif run_params['optimize_penalty_by_firing_rate']:
-            rate_clusters = fit['spike_count_arr']['rate_clusters']
+            rate_clusters = KMeans(n_clusters = run_params['num_rate_clusters'], random_state = 0).fit(fit['spike_count_arr']['firing_rate'].reshape(-1,1)).labels_
             print(get_timestamp() + ': fitting units by firing rate')
             for cluster in tqdm(np.unique(rate_clusters), total=len(np.unique(rate_clusters)), desc='progress'):
                 unit_ids = np.where(rate_clusters == cluster)[0]
                 fit_rate = spike_counts[:, unit_ids]
-                L2_value = np.nanmedian(np.take(fit['cell_L2_regularization'], unit_ids))[0]
+                L2_value = np.nanmedian(np.take(fit['cell_L2_regularization'], unit_ids))
                 cv_train, cv_test, weights, prediction = simple_train_and_test(design_mat, fit_rate,
                                                                                lam=L2_value,
                                                                                folds_outer=run_params['n_outer_folds'])
