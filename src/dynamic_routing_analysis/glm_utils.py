@@ -253,6 +253,7 @@ def evaluate_ridge(fit, design_mat, run_params):
     # x_is_continuous = [run_params['kernels'][kernel_name.rsplit('_', 1)[0]]['type'] == 'continuous'
     #                    for kernel_name in design_mat.weights.values]
     num_units = spike_counts.shape[1]
+    T = spike_counts.shape[0]
 
     if run_params['use_fixed_penalty']:
         print(get_timestamp() + 'Using a hard-coded regularization value')
@@ -266,13 +267,21 @@ def evaluate_ridge(fit, design_mat, run_params):
             fit['L2_grid'] = np.array([0] + list(np.linspace(run_params['L2_grid_range'][0],
                                          run_params['L2_grid_range'][1], num=run_params['L2_grid_num'])))
 
+        T_optimize = int(run_params['optimize_on'] * T)
+        samples_optimize = np.random.choice(T, T_optimize, replace=False)
+        design_mat_optimize = design_mat.copy()
+        design_mat_optimize = design_mat_optimize.isel(timestamps=samples_optimize)
+        design_mat_optimize['weights'] = design_mat.weights
+        design_mat_optimize['timestamps'] = design_mat.timestamps[samples_optimize]
+        spike_counts_optimize = spike_counts[samples_optimize, :]
+
         train_cv = np.full((num_units, len(fit['L2_grid'])), np.nan)
         test_cv = np.full((num_units, len(fit['L2_grid'])), np.nan)
 
         print(get_timestamp() + ': optimizing L2 penalty for all cells')
         for L2_index, L2_value in enumerate(fit['L2_grid']):
-            cv_var_train, cv_var_test, _, _, = simple_train_and_test(design_mat,
-                                                                        spike_counts,
+            cv_var_train, cv_var_test, _, _, = simple_train_and_test(design_mat_optimize,
+                                                                        spike_counts_optimize,
                                                                         lam=L2_value,
                                                                         folds_outer=run_params['n_outer_folds'])
             train_cv[:, L2_index] = np.nanmean(cv_var_train, axis=1)
