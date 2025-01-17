@@ -1215,7 +1215,12 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                     labels=trials['context_name'].values
                 elif predict=='vis_appropriate_response':
                     labels=is_vis_appropriate_response
-                input_data=trial_da.sel(unit_id=sel_units).mean(dim='time').values.T
+
+                if input_data_type=='spikes':
+                    input_data=trial_da.sel(unit_id=sel_units).mean(dim='time').values.T
+                elif input_data_type=='facemap' or input_data_type == 'LP':
+                    input_data=mean_trial_behav_SVD[aa][sel_units].T
+
                 if crossval=='5_fold_constant':
                     skf = StratifiedKFold(n_splits=5,shuffle=True,random_state=165482)
                     train_test_split = skf.split(np.zeros(len(labels)), labels)
