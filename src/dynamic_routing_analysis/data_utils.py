@@ -214,22 +214,26 @@ def load_LP_data(session, trials=None, vid_angle=None, LP_parts_to_keep=None):
     if not vid_angle:
         raise ValueError("vid_angle must be specified")
 
+    def eu_dist(x, y):
+        return np.sqrt((x) ** 2 + (492 - y) ** 2)
+
     def zscore(x):
         return (x - np.nanmean(x)) / np.nanstd(x)
 
-    def part_info_LP(part, df, temp_error):
+    def part_info_LP(part, df):
         confidence = df[part_name + '_likelihood'].values.astype('float')
-        temp_norm = df[part_name + '_temporal_norm'].values.astype('float')
+        temp_error = df[part_name + '_temporal_norm'].values.astype('float')
         x = df[part + '_x'].values.astype('float')
         y = df[part + '_y'].values.astype('float')
 
         x[(confidence < 0.98) | (temp_error > np.nanmean(temp_error) + 3*np.nanstd(temp_error))] = np.nan
         y[(confidence < 0.98) | (temp_error > np.nanmean(temp_error) + 3*np.nanstd(temp_error))] = np.nan
 
-        x = pd.Series(x).interpolate(limit_direction='both', method = 'nearest').to_numpy()
-        y = pd.Series(y).interpolate(limit_direction='both', method = 'nearest').to_numpy()
+        xy = eu_dist(x, y)
 
-        return zscore(x), zscore(492 - y)
+        xy = pd.Series(xy).interpolate(limit_direction='both', method = 'nearest').to_numpy()
+
+        return xy
 
     # function to load lightning pose parts from npc_sessions
     if LP_parts_to_keep is None:
@@ -259,10 +263,9 @@ def load_LP_data(session, trials=None, vid_angle=None, LP_parts_to_keep=None):
         for part_no, part_name in enumerate(LP_parts_to_keep):
             if f"{part_name}_x" not in df.columns:
                 continue
-            x, y = part_info_LP(part_name, df, df[f"{part_name}_error"].values.astype('float'),
-                            df[f"{part_name}_temporal_norm"].values.astype('float'))
-            LP_traces.append(x)
-            LP_traces.append(y)
+            xy = part_info_LP(part_name, df)
+            LP_traces.append(xy)
+
         if not LP_traces:
             raise ValueError(f"None of requested LP parts found for {vid_angle} camera: {LP_parts_to_keep}")
     else:
@@ -271,9 +274,8 @@ def load_LP_data(session, trials=None, vid_angle=None, LP_parts_to_keep=None):
 
         LP_traces = []
         for part_no, part_name in enumerate(LP_parts_to_keep):
-            x, y = part_info_LP(part_name, df)
-            LP_traces.append(x)
-            LP_traces.append(y)
+            xy = part_info_LP(part_name, df)
+            LP_traces.append(xy)
 
     LP_info = {
         'LP_traces': np.array(LP_traces).T
@@ -290,7 +292,7 @@ def load_LP_data(session, trials=None, vid_angle=None, LP_parts_to_keep=None):
     rr = 0
     LP_traces = np.asarray(LP_info['LP_traces'][:, :])
 
-    behav_SVD_by_trial[rr] = np.zeros((int((time_before + time_after) * fps), len(LP_parts_to_keep)*2, len(trials)))
+    behav_SVD_by_trial[rr] = np.zeros((int((time_before + time_after) * fps), len(LP_parts_to_keep), len(trials)))
     behav_SVD_by_trial[rr][:] = np.nan
 
     for tt, stimStartTime in enumerate(trials[:]['stim_start_time']):
