@@ -424,7 +424,8 @@ def process_spikes(units_table, run_params, fit):
         'unit_id': units_table.unit_id.values,
         'structure': units_table.structure.values,
         'location': units_table.location.values,
-        'quality':  units_table.good_unit.values
+        'quality':  units_table.good_unit.values,
+        'firing_rate': units_table.firing_rate.values
     }
     fit['spike_count_arr'] = spike_count_arr
 
