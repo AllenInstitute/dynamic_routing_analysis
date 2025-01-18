@@ -2593,7 +2593,8 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
             decoder_confidence_all_trials['trial_index'].append(trials['original_index'].values)
             decoder_confidence_all_trials['confidence'].append(confidence_all_trials)
             decoder_confidence_all_trials['predict_proba'].append(predict_proba_all_trials)
-            decoder_confidence_all_trials['n_units'].append(decoder_results[session_id]['results'][aa]['n_units'])
+            if 'n_units' in decoder_results[session_id]['results'][aa].keys():
+                decoder_confidence_all_trials['n_units'].append(decoder_results[session_id]['results'][aa]['n_units'])
 
             # 'ccf_ap_mean', 'ccf_dv_mean', 'ccf_ml_mean'
             if 'ccf_ap_mean' in decoder_results[session_id]['results'][aa].keys():
