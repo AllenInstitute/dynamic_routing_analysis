@@ -1,23 +1,17 @@
 import gc
-import glob
 import logging
-import os
 import pickle
 import time
-import traceback
 
 import npc_lims
 import numpy as np
 import pandas as pd
-import pynwb
 import upath
-import xarray as xr
 import zarr
 from sklearn.metrics import balanced_accuracy_score, classification_report
-from sklearn.model_selection import RepeatedStratifiedKFold, StratifiedKFold
-from sklearn.preprocessing import RobustScaler, StandardScaler
+from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import RobustScaler
 
-import dynamic_routing_analysis as dra
 from dynamic_routing_analysis import data_utils, spike_utils
 
 logger = logging.getLogger(__name__)
@@ -105,7 +99,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         y_dec_func=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
     else:
         y_dec_func=np.full(len(y), fill_value=np.nan)
- 
+
     if type(y[0])==bool:
         ypred=np.full(len(y), fill_value=False)
         ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value=False)
@@ -117,7 +111,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
 
     tidx_used=[]
-    
+
     coefs=[]
     classes=[]
     intercept=[]
@@ -156,7 +150,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             use_trnum=np.min(cond_count)
             for cc in conds:
                 cond_inds=np.where(y[not_block_inds]==cc)[0]
-                subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))   
+                subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))
             subset_ind=np.sort(np.hstack(subset_ind))
             train.append(not_block_inds[subset_ind])
 
@@ -203,7 +197,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             test.append(np.where(np.isin(block_number,test_blocks[bb]))[0])
 
         train_test_split=zip(train,test)
-        
+
     elif crossval=='5_fold':
         skf = StratifiedKFold(n_splits=5,shuffle=True)
         train_test_split = skf.split(input_data, labels)
@@ -214,7 +208,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         train_test_split = train_test_split_input
 
     for train,test in train_test_split:
-        
+
         clf.fit(X[train],y[train])
         prediction=clf.predict(X[test])
         cr_dict_train.append(classification_report(y[train], clf.predict(X[train]), output_dict=True))
@@ -268,7 +262,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     output['intercept']=intercept
     output['params']=params
     output['balanced_accuracy_test']=np.nanmean(balanced_accuracy_test)
-    
+
     output['pred_label_train']=ypred_train
     output['true_label_train']=ytrue_train
 
@@ -289,10 +283,10 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
 def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,labels_as_index=False):
     #original function to decode labels from input data using linearSVC, no longer used
-    
+
     # clean input data
-    
-    
+
+
     from sklearn import svm
     output={}
 
@@ -312,7 +306,7 @@ def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,la
         y_dec_func=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
     else:
         y_dec_func=np.full(len(y), fill_value=np.nan)
- 
+
     if type(y[0])==bool:
         ypred=np.full(len(y), fill_value=False)
     elif type(y[0])==str:
@@ -321,7 +315,7 @@ def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,la
         ypred=np.full(len(y), fill_value=np.nan)
 
     tidx_used=[]
-    
+
     coefs=[]
     classes=[]
     intercept=[]
@@ -355,7 +349,7 @@ def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,la
             use_trnum=np.min(cond_count)
             for cc in conds:
                 cond_inds=np.where(y[not_block_inds]==cc)[0]
-                subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))   
+                subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))
             subset_ind=np.sort(np.hstack(subset_ind))
             train.append(not_block_inds[subset_ind])
 
@@ -402,7 +396,7 @@ def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,la
             test.append(np.where(np.isin(block_number,test_blocks[bb]))[0])
 
         train_test_split=zip(train,test)
-        
+
     elif crossval=='5_fold':
         skf = StratifiedKFold(n_splits=5,shuffle=True)
         train_test_split = skf.split(input_data, labels)
@@ -410,7 +404,7 @@ def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,la
     for train,test in train_test_split:
         clf=svm.LinearSVC(max_iter=5000,dual='auto',class_weight='balanced')
         # clf=svm.SVC(class_weight='balanced',kernel='linear',probability=True)
-        
+
         clf.fit(X[train],y[train])
         prediction=clf.predict(X[test])
         decision_function=clf.decision_function(X[test])
@@ -449,7 +443,7 @@ def linearSVC_decoder(input_data,labels,crossval='5_fold',crossval_index=None,la
     output['intercept']=intercept
     output['params']=params
     output['balanced_accuracy']=balanced_accuracy
-    
+
     output['pred_label_train']=np.hstack(ypred_train)
     output['true_label_train']=np.hstack(ytrue_train)
     output['cr_train']=cr_dict_train
@@ -697,7 +691,7 @@ def decode_context_from_units(session,params):
                                 cond_inds=np.where(pred_var==cc)[0]
                                 # if len(cond_inds)<use_trnum:
                                 #     use_trnum=len(cond_inds)
-                                subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))   
+                                subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))
                             subset_ind=np.sort(np.hstack(subset_ind))
                         else:
                             subset_ind=np.arange(0,len(trial_sel))
@@ -780,7 +774,7 @@ def decode_context_from_units_all_timebins(session,params):
     timebin_da,timebins_table=spike_utils.make_neuron_timebins_matrix(units, trials, binsize)
 
     area_counts=units['structure'].value_counts()
-    
+
     # predict=['stim_ids','block_ids','trial_response']
     predict=['block_ids']
 
@@ -791,7 +785,7 @@ def decode_context_from_units_all_timebins(session,params):
     svc_results['min_n_units']=u_min
     svc_results['n_repeats']=n_repeats
     svc_results['balance_labels']=balance_labels
-    
+
     #loop through different labels to predict
     for p in predict:
         svc_results[p]={}
@@ -807,7 +801,7 @@ def decode_context_from_units_all_timebins(session,params):
         pred_var = timebins_table['context'].values
 
         area_sel = ['all']+list(area_counts[area_counts>=u_min].index)
-        
+
         #loop through areas
         for aa in area_sel:
             if aa=='all':
@@ -816,14 +810,14 @@ def decode_context_from_units_all_timebins(session,params):
                 unit_sel = units[:].query('structure==@aa').index.values
             svc_results[p][aa]={}
             svc_results[p][aa]['n_units']=len(unit_sel)
-            
+
             # since time bins are observatinos here, no need to loop through diff time bins
             # keep the index for analysis consistency
             tt=0
             svc_results[p][aa][tt]={}
             for u_idx,u_num in enumerate(n_units):
                 svc_results[p][aa][tt][u_idx]={}
-                
+
                 #loop through repeats
                 for nn in range(0,n_repeats):
 
@@ -851,7 +845,7 @@ def decode_context_from_units_all_timebins(session,params):
                             cond_inds=np.where(pred_var==cc)[0]
                             # if len(cond_inds)<use_trnum:
                             #     use_trnum=len(cond_inds)
-                            subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))   
+                            subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))
                         subset_ind=np.sort(np.hstack(subset_ind))
                     else:
                         subset_ind=np.arange(0,len(pred_var))
@@ -871,17 +865,17 @@ def decode_context_from_units_all_timebins(session,params):
 
                     svc_results[p][aa][tt][u_idx][nn]['trial_sel_idx']=subset_ind
                     svc_results[p][aa][tt][u_idx][nn]['unit_sel_idx']=unit_subset
-                    
+
 
             print(aa+' done')
-            
+
     print(session.id+' done')
     if session_id not in filename:
         filename=session_id+'_'+filename
     path = upath.UPath(savepath, filename)
     path.mkdir(parents=True, exist_ok=True)
     path.write_bytes(
-        pickle.dumps(svc_results, protocol=pickle.HIGHEST_PROTOCOL) 
+        pickle.dumps(svc_results, protocol=pickle.HIGHEST_PROTOCOL)
     )
 
     svc_results={}
@@ -891,7 +885,7 @@ def decode_context_from_units_all_timebins(session,params):
 # add option to decode from timebins
 # add option to use inputs with top decoding weights (use_coefs)
 def decode_context_with_linear_shift(session=None,params=None,trials=None,units=None,session_info=None,use_zarr=False):
-    
+
     decoder_results={}
 
     input_data_type=params['input_data_type']
@@ -938,7 +932,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         solver=params['solver']
     else:
         solver=None
-    
+
     if 'only_use_all_units' in params:
         only_use_all_units=params['only_use_all_units']
     else:
@@ -948,7 +942,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         return_results=params['return_results']
     else:
         return_results=False
-    
+
     if session is not None:
         session_id = session.session_id
         if session_info is None:
@@ -1000,7 +994,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         structure_probe=spike_utils.get_structure_probe(units)
         for uu, unit in units.iterrows():
             units.loc[units['unit_id']==unit['unit_id'],'structure']=structure_probe.loc[structure_probe['unit_id']==unit['unit_id'],'structure_probe']
-        
+
         #make trial data array for baseline activity
         trial_da = spike_utils.make_neuron_time_trials_tensor(units, trials, spikes_time_before, spikes_time_after, spikes_binsize)
 
@@ -1090,7 +1084,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     for ii in session_info.keys():
         if type(session_info[ii]) not in [int, str, bool, dict, list]:
             session_info[ii]=str(session_info[ii])
-    
+
     decoder_results[session_id]['session_info'] = session_info
     #keep track of which cache path was used
     try:
@@ -1104,13 +1098,13 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
 
     if input_data_type=='facemap':
         decoder_results[session_id]['vid_angle'] = vid_angle_facemotion
-        
+
     if input_data_type=='LP':
         decoder_results[session_id]['vid_angle'] = vid_angle_LP
     decoder_results[session_id]['trials'] = trials
     decoder_results[session_id]['results'] = {}
 
-    
+
     if input_data_type=='spikes':
         if only_use_all_units:
             areas=['all']
@@ -1142,7 +1136,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         areas=[0]
 
     decoder_results[session_id]['areas'] = areas
-    
+
     for aa in areas:
         #make shifted trial data array
         if input_data_type=='spikes':
@@ -1165,13 +1159,13 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                 continue
 
             area_unit_ids=area_units['unit_id'].values
-        
+
         decoder_results[session_id]['results'][aa]={}
         decoder_results[session_id]['results'][aa]['shift']={}
         decoder_results[session_id]['results'][aa]['no_shift']={}
 
         if input_data_type=='spikes':
-            
+
             decoder_results[session_id]['results'][aa]['unit_ids']={}
             decoder_results[session_id]['results'][aa]['n_units']={}
             decoder_results[session_id]['results'][aa]['unit_ids']=area_units['unit_id'].values
@@ -1204,7 +1198,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                         sel_units=np.random.choice(np.arange(0,keep_n_SVDs),nunits,replace=False)
 
                 elif input_data_type=='LP':
-                    
+
                     sel_units=np.arange(0, len(LP_parts_to_keep))
 
                 decoder_results[session_id]['results'][aa]['shift'][nunits][rr]['sel_units']=sel_units
@@ -1240,7 +1234,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
 
                 #loop through shifts
                 for sh,shift in enumerate(shifts):
-                    
+
                     if predict=='context':
                         labels=middle_4_block_trials['context_name'].values
                     elif predict=='vis_appropriate_response':
@@ -1286,10 +1280,10 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                         regularization=regularization,
                         penalty=penalty,
                         solver=solver)
-                        
+
                 if nunits=='all':
                     break
-            
+
         logger.info(f'{session_id} | area: {aa} | Finished decoding')
     logger.info(f'{session_id} | Finished all decoding')
 
@@ -1300,7 +1294,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     path.mkdir(parents=True, exist_ok=True)
     logger.info(f'{session_id} | Saving raw decoding results to {path}')
     path.write_bytes(
-        pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
+        pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL)
     )
     if use_zarr:
         logger.warning('use_zarr not implemented for raw decoding results - saved as .pkl')
@@ -1316,10 +1310,10 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     gc.collect()
     if return_results:
         return decoder_results
-    
+
 
 def decode_stimulus_across_context(session=None,params=None,trials=None,units=None,session_info=None):
-    
+
     decoder_results={}
 
     input_data_type=params['input_data_type']
@@ -1396,7 +1390,7 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
     structure_probe=spike_utils.get_structure_probe(units)
     for uu, unit in units.iterrows():
         units.loc[units['unit_id']==unit['unit_id'],'structure']=structure_probe.loc[structure_probe['unit_id']==unit['unit_id'],'structure_probe']
-    
+
     #make trial data array for baseline activity
     trial_da = spike_utils.make_neuron_time_trials_tensor(units, trials, spikes_time_before, spikes_time_after, spikes_binsize)
 
@@ -1492,9 +1486,9 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
             continue
 
         area_unit_ids=area_units['unit_id'].values
-    
+
         decoder_results[session_id]['results'][aa]={}
-        
+
         decoder_results[session_id]['results'][aa]['predict_vis_stim_vis_context']={}
         decoder_results[session_id]['results'][aa]['predict_vis_stim_aud_context']={}
         decoder_results[session_id]['results'][aa]['predict_aud_stim_aud_context']={}
@@ -1550,7 +1544,7 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
                     regularization=regularization,
                     penalty=penalty,
                     solver=solver)
-                
+
                 #decode visual stimuli in auditory context, train on vis context, test on aud context
                 #also split vis stim aud context trials into 5 folds;
                 #train on vis context train set fold, test on aud context test set folds
@@ -1609,7 +1603,7 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
                     regularization=regularization,
                     penalty=penalty,
                     solver=solver)
-                
+
                 #decode auditory stimuli in visual context, train on aud context, test on vis context
                 aud_stim_trials=trials.query('is_aud_stim')
                 aud_stim_trial_original_index=aud_stim_trials.index.values
@@ -1651,7 +1645,7 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
 
                 if nunits=='all':
                     break
-                
+
         logger.info(f'{session_id} | area: {aa} | Finished decoding')
     logger.info(f'{session_id} | Finished all decoding')
 
@@ -1662,7 +1656,7 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
     path.mkdir(parents=True, exist_ok=True)
     logger.info(f'{session_id} | Saving raw decoding results to {path}')
     path.write_bytes(
-        pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL) 
+        pickle.dumps(decoder_results, protocol=pickle.HIGHEST_PROTOCOL)
     )
 
     del trial_da
@@ -1673,8 +1667,8 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
         return decoder_results
 
     if return_results:
-        return decoder_results           
-        
+        return decoder_results
+
 
 def concat_decoder_results(files,savepath=None,return_table=True,single_session=False,use_zarr=False):
 
@@ -1690,7 +1684,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
         'session_id':[],
         'project':[],
         'area':[],
-        
+
         'ccf_ap_mean':[],
         'ccf_dv_mean':[],
         'ccf_ml_mean':[],
@@ -1700,7 +1694,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
         'n_good_blocks':[],
     }
 
-    if type(files) is not list: 
+    if type(files) is not list:
         files=[files]
     #assume first file has same nunits as all others
     decoder_results=pickle.loads(upath.UPath(files[0]).read_bytes())
@@ -1808,12 +1802,12 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
                 else:
                     area_name=aa
                     probe_name=''
-                
+
                 ### LOOP THROUGH NUNITS TO APPEND TO DICT ###
-                
+
                 for nu in nunits:
                     if nu in all_bal_acc[session_id][aa].keys():
-    
+
                         true_acc_ind=np.where(half_shifts==0)[0][0]
                         null_acc_ind=np.where(half_shifts!=0)[0]
                         true_accuracy=all_bal_acc[session_id][aa][nu][true_acc_ind]
@@ -1877,7 +1871,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
         }
         path = files[0] # TODO @egmcbride - shouldn't this be `savepath`?
         logger.info(f'Saving concatenated decoder results to zarr file: {path}')
-        zarr_file = zarr.open(path, mode='w') 
+        zarr_file = zarr.open(path, mode='w')
 
         dump_dict_to_zarr(zarr_file, results)
 
@@ -1929,7 +1923,7 @@ def compute_significant_decoding_by_area(all_decoder_results):
         frac_sig_DR['n_expts_DR'].append(len(DR_linear_shift_df.query('area==@area')))
         for nu in n_units:
             frac_sig_DR['frac_sig_DR'+nu].append(np.mean(DR_linear_shift_df.query('area==@area')['p_value'+nu]<p_threshold))
-        
+
     frac_sig_DR_df=pd.DataFrame(frac_sig_DR)
     #diff from null
     diff_from_null_DR={
@@ -1944,8 +1938,8 @@ def compute_significant_decoding_by_area(all_decoder_results):
         diff_from_null_DR['true_accuracy_sem_DR'+nu]=[]
         diff_from_null_DR['null_median_DR'+nu]=[]
         diff_from_null_DR['null_median_sem_DR'+nu]=[]
-        
-                          
+
+
     for area in DR_linear_shift_df['area'].unique():
         diff_from_null_DR['area'].append(area)
         diff_from_null_DR['n_expts_DR'].append(len(DR_linear_shift_df.query('area==@area')))
@@ -1959,7 +1953,7 @@ def compute_significant_decoding_by_area(all_decoder_results):
             diff_from_null_DR['true_accuracy_DR'+nu].append(DR_linear_shift_df.query('area==@area')['true_accuracy'+nu].median())
             diff_from_null_DR['true_accuracy_sem_DR'+nu].append(DR_linear_shift_df.query('area==@area')['true_accuracy'+nu].sem())
             diff_from_null_DR['null_median_DR'+nu].append(DR_linear_shift_df.query('area==@area')['null_accuracy_median'+nu].median())
-            diff_from_null_DR['null_median_sem_DR'+nu].append(DR_linear_shift_df.query('area==@area')['null_accuracy_median'+nu].sem())      
+            diff_from_null_DR['null_median_sem_DR'+nu].append(DR_linear_shift_df.query('area==@area')['null_accuracy_median'+nu].sem())
 
     diff_from_null_DR_df=pd.DataFrame(diff_from_null_DR)
 
@@ -1978,7 +1972,7 @@ def compute_significant_decoding_by_area(all_decoder_results):
         frac_sig_Templ['n_expts_Templ'].append(len(Templeton_linear_shift_df.query('area==@area')))
         for nu in n_units:
             frac_sig_Templ['frac_sig_Templ'+nu].append(np.mean(Templeton_linear_shift_df.query('area==@area')['p_value'+nu]<p_threshold))
-        
+
     frac_sig_Templ_df=pd.DataFrame(frac_sig_Templ)
     #diff from null
     diff_from_null_Templ={
@@ -2008,7 +2002,7 @@ def compute_significant_decoding_by_area(all_decoder_results):
             diff_from_null_Templ['true_accuracy_sem_Templ'+nu].append(Templeton_linear_shift_df.query('area==@area')['true_accuracy'+nu].sem())
             diff_from_null_Templ['null_median_Templ'+nu].append(Templeton_linear_shift_df.query('area==@area')['null_accuracy_median'+nu].median())
             diff_from_null_Templ['null_median_sem_Templ'+nu].append(Templeton_linear_shift_df.query('area==@area')['null_accuracy_median'+nu].sem())
-        
+
     diff_from_null_Templ_df=pd.DataFrame(diff_from_null_Templ)
 
     all_frac_sig_df=pd.merge(frac_sig_DR_df,frac_sig_Templ_df,on='area',how='outer')
@@ -2237,7 +2231,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
         for tt,trial in trials.iterrows():
             #track trials/time since last bit of information, exclude trials after non-responses to targets
-            
+
             if non_response_flag==True:
                 trials_since_last_information_no_targets.append(np.nan)
                 time_since_last_information_no_targets.append(np.nan)
@@ -2279,7 +2273,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         trials_middle=trials.iloc[decoder_results[session_id]['middle_4_blocks']]
         trials_middle=trials_middle.reset_index()
         trials_middle.loc[:,'id']=trials_middle.index.values
-        
+
         areas=list(decoder_results[session_id]['results'].keys())
 
         ##loop through areas##
@@ -2313,7 +2307,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
             decision_function_shifts=[]
             predict_proba_shifts=[]
-            
+
             confidence_all_trials=[]
             predict_proba_all_trials=[]
 
@@ -2322,13 +2316,13 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 temp_proba_shifts=[]
                 for rr in range(n_repeats):
                     if n_units is not None:
-                        
+
                         if n_units=='all' and rr>0:
                             continue
                         if sh in list(decoder_results[session_id]['results'][aa]['shift'][n_units][rr].keys()):
                             temp_shifts.append(decoder_results[session_id]['results'][aa]['shift'][n_units][rr][sh]['decision_function'])
                             temp_proba_shifts.append(decoder_results[session_id]['results'][aa]['shift'][n_units][rr][sh]['predict_proba'][:,1])
-                            
+
                         if sh==0:
                             confidence_all_trials.append(decoder_results[session_id]['results'][aa]['no_shift'][n_units][rr]['decision_function'])
                             predict_proba_all_trials.append(decoder_results[session_id]['results'][aa]['no_shift'][n_units][rr]['predict_proba'][:,1])
@@ -2347,14 +2341,14 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
             predict_proba_all_trials=np.nanmean(np.vstack(predict_proba_all_trials),axis=0)
 
             # true_label=decoder_results[session_id]['results'][aa]['shift'][np.where(shifts==0)[0][0]]['true_label']
-            
+
             try:
                 decision_function_shifts=np.vstack(decision_function_shifts)
                 predict_proba_shifts=np.vstack(predict_proba_shifts)
             except:
                 logger.info(f'{session_id} | failed to stack decision functions / predict_proba; skipping')
                 continue
-            
+
             # #normalize all decision function values to the stdev of all the nulls
             # decision_function_shifts=decision_function_shifts/np.nanstd(decision_function_shifts[:])
 
@@ -2386,12 +2380,12 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                                         and is_response==True and is_reward_scheduled==False)').index.values
             aud_FA_idx=trials_middle.query('(is_correct==False and is_target==True and is_vis_context==False \
                                         and is_response==True and is_reward_scheduled==False)').index.values
-            
+
             correct_vis_idx=trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False').index.values
             incorrect_vis_idx=trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False').index.values
             correct_aud_idx=trials_middle.query('is_correct==True and is_target==True and is_reward_scheduled==False').index.values
             incorrect_aud_idx=trials_middle.query('is_correct==False and is_target==True and is_reward_scheduled==False').index.values
-            
+
             #find average confidence per hit, fa, cr
             vis_HIT_mean=np.nanmean(corrected_decision_function[vis_HIT_idx])
             aud_HIT_mean=np.nanmean(corrected_decision_function[aud_HIT_idx])
@@ -2417,7 +2411,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
             correct_null_mean=np.nanmean(np.hstack([null_decision_function[correct_vis_idx],-null_decision_function[correct_aud_idx]]))
             incorrect_null_mean=np.nanmean(np.hstack([null_decision_function[incorrect_vis_idx],-null_decision_function[incorrect_aud_idx]]))
-            
+
             CR_all_null_mean=np.nanmean(np.hstack([null_decision_function[vis_CR_idx],-null_decision_function[aud_CR_idx]]))
             FA_all_null_mean=np.nanmean(np.hstack([null_decision_function[vis_FA_idx],-null_decision_function[aud_FA_idx]]))
             HIT_all_null_mean=np.nanmean(np.hstack([null_decision_function[vis_HIT_idx],-null_decision_function[aud_HIT_idx]]))
@@ -2619,7 +2613,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 elif block_trials['is_aud_context'].values[0]:
                     multiplier=-1
                     additive=1
-                
+
                 block_dprime=performance.query('block_index==@bb')['cross_modal_dprime'].values[0]
                 block_mean=np.nanmean(corrected_decision_function[block_trials.index.values])*multiplier
                 block_mean_null=np.nanmean(null_decision_function[block_trials.index.values])*multiplier
@@ -2747,7 +2741,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                 decoder_confidence_before_after_target['non_rewarded_target_plus_one'].append(np.nan)
             if len(non_response_non_rewarded_target_trials)>0:
                 decoder_confidence_before_after_target['non_response_non_rewarded_target'].append(sign_corrected_decision_function[non_response_non_rewarded_target_trials])
-                decoder_confidence_before_after_target['non_response_non_rewarded_target_plus_one'].append(sign_corrected_decision_function[non_response_non_rewarded_target_trials_plus_one])        
+                decoder_confidence_before_after_target['non_response_non_rewarded_target_plus_one'].append(sign_corrected_decision_function[non_response_non_rewarded_target_trials_plus_one])
             else:
                 decoder_confidence_before_after_target['non_response_non_rewarded_target'].append(np.nan)
                 decoder_confidence_before_after_target['non_response_non_rewarded_target_plus_one'].append(np.nan)
@@ -2777,7 +2771,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
     decoder_confidence_versus_trials_since_rewarded_target_dict=decoder_confidence_versus_trials_since_rewarded_target.copy()
     decoder_confidence_all_trials_dict=decoder_confidence_all_trials.copy()
     decoder_confidence_before_after_target_dict=decoder_confidence_before_after_target.copy()
-    
+
     decoder_confidence_versus_response_type=pd.DataFrame(decoder_confidence_versus_response_type)
     decoder_confidence_dprime_by_block=pd.DataFrame(decoder_confidence_dprime_by_block)
     decoder_confidence_by_switch=pd.DataFrame(decoder_confidence_by_switch)
