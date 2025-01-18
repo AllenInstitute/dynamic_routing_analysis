@@ -233,7 +233,7 @@ def load_LP_data(session, trials=None, vid_angle=None, LP_parts_to_keep=None):
 
         xy = pd.Series(xy).interpolate(limit_direction='both', method = 'nearest').to_numpy()
 
-        return xy
+        return np.nan_to_num(xy)
 
     # function to load lightning pose parts from npc_sessions
     if LP_parts_to_keep is None:
