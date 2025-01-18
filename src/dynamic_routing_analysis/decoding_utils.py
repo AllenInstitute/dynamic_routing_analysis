@@ -870,8 +870,8 @@ def decode_context_from_units_all_timebins(session,params):
             print(aa+' done')
 
     print(session.id+' done')
-    if session_id not in filename:
-        filename=session_id+'_'+filename
+    if session.id not in filename:
+        filename=session.id+'_'+filename
     path = upath.UPath(savepath, filename)
     path.mkdir(parents=True, exist_ok=True)
     path.write_bytes(
@@ -1304,9 +1304,10 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         # dump_dict_to_zarr(group=zarr_file, data=decoder_results)
 
     # logger.info(f'time elapsed: {time.time()-start_time}')
-    del trial_da
-    del units
-    del trials
+    for var in ('trial_da','units','trials'):
+        if var in locals():
+            del var
+
     gc.collect()
     if return_results:
         return decoder_results
