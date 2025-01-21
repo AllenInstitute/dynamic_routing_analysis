@@ -305,6 +305,6 @@ def load_LP_data(session, trials=None, vid_angle=None, LP_parts_to_keep=None):
             else:
                 break
 
-    mean_trial_behav_SVD[rr] = np.nanmedian(behav_SVD_by_trial[rr], axis=0)
+    mean_trial_behav_SVD[rr] = np.nan_to_num(np.nanmedian(behav_SVD_by_trial[rr], axis=0))
 
     return mean_trial_behav_SVD
