@@ -2279,7 +2279,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
         ##loop through areas##
         for aa in areas:
-            if n_units not in decoder_results[session_id]['results'][aa]['shift'].keys():
+            if 'n_units' not in decoder_results[session_id]['results'][aa]['shift'].keys():
                 continue
             if type(aa)==str:
                 if '_probe' in aa:
