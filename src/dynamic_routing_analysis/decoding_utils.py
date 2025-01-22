@@ -2779,10 +2779,12 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
     decoder_confidence_by_switch=pd.DataFrame(decoder_confidence_by_switch)
     decoder_confidence_versus_trials_since_rewarded_target=pd.DataFrame(decoder_confidence_versus_trials_since_rewarded_target)
 
-    logger.info(f'{decoder_confidence_all_trials.keys()}')
-    for key in decoder_confidence_all_trials.keys():
-        logger.info(f'{key} | {decoder_confidence_all_trials[key].shape}')
-    decoder_confidence_all_trials=pd.DataFrame(decoder_confidence_all_trials)
+    try:
+        decoder_confidence_all_trials=pd.DataFrame(decoder_confidence_all_trials)
+    except:
+        k = {key: len(decoder_confidence_all_trials[key]) for key in decoder_confidence_all_trials.keys()}
+        logger.error(f'error converting decoder_confidence_all_trials to dataframe: {k}')
+        raise
     decoder_confidence_before_after_target=pd.DataFrame(decoder_confidence_before_after_target)
 
     if savepath is not None:
