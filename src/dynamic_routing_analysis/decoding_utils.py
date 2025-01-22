@@ -1159,6 +1159,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                 continue
 
             area_unit_ids=area_units['unit_id'].values
+        else:
+            area_units = [0]
 
         decoder_results[session_id]['results'][aa]={}
         decoder_results[session_id]['results'][aa]['shift']={}
@@ -1175,6 +1177,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             decoder_results[session_id]['results'][aa]['ccf_ap_mean']=area_units['ccf_ap'].mean()
             decoder_results[session_id]['results'][aa]['ccf_dv_mean']=area_units['ccf_dv'].mean()
             decoder_results[session_id]['results'][aa]['ccf_ml_mean']=area_units['ccf_ml'].mean()
+
 
         #loop through repeats
         for nunits in n_units_input:
@@ -2200,7 +2203,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
         session_start_time=time.time()
         decoder_results=pickle.loads(upath.UPath(file).read_bytes())
-            
+
         session_id=list(decoder_results.keys())[0]
         session_info=npc_lims.get_session_info(session_id)
         session_id_str=str(session_id)
