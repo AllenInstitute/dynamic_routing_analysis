@@ -2187,7 +2187,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         'ccf_dv_mean':[],
         'ccf_ml_mean':[],
         'n_units':[],
-        }
+    }
 
     start_time=time.time()
 
@@ -2200,11 +2200,14 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
         session_start_time=time.time()
         decoder_results=pickle.loads(upath.UPath(file).read_bytes())
+            
         session_id=list(decoder_results.keys())[0]
         session_info=npc_lims.get_session_info(session_id)
         session_id_str=str(session_id)
         project=str(session_info.project)
         #load session
+
+
         try:
             trials=pd.read_parquet(
                     npc_lims.get_cache_path('trials',session_id,version='any')
@@ -2280,7 +2283,16 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
         ##loop through areas##
         for aa in areas:
             if 'n_units' not in decoder_results[session_id]['results'][aa]['shift'].keys():
+                for key in (
+                    'ccf_ap_mean',
+                    'ccf_dv_mean',
+                    'ccf_ml_mean',
+                    'n_units',
+                ):
+                    if key in decoder_confidence_all_trials:
+                        del decoder_confidence_all_trials[key]
                 continue
+
             if type(aa)==str:
                 if '_probe' in aa:
                     area_name=aa.split('_probe')[0]
