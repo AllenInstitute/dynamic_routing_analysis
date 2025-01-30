@@ -335,7 +335,12 @@ def define_kernels(run_params):
 
         for key, length in input_window_lengths_updated.items():
             if key in kernels:
-                kernels[key]['length'] = length
+                if kernels[key]['length'] == np.abs(kernels[key]['offset']):
+                    kernels[key]['length'] = length
+                    kernels[key]['offset'] = np.sign(kernels[key]['offset'])*length
+                else:
+                    kernels[key]['length'] = length
+                    kernels[key]['offset'] = np.sign(kernels[key]['offset'])*length/2
             else:
                 raise KeyError(f"Key {key} not found in kernels.")
 
