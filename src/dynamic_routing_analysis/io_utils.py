@@ -135,7 +135,7 @@ def get_data_from_npc_sessions(session_id):
         raise FileNotFoundError(f"Failed to load data from DynamicRoutingSession: {e}")
 
 
-def get_session_data(session_id, version='0.0.259'):
+def get_session_data(session_id, version='0.0.260'):
 
     '''
 
