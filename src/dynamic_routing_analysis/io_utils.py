@@ -328,7 +328,12 @@ def define_kernels(run_params):
     # Update kernel lengths based on run_params
     input_window_lengths = run_params.get('input_window_lengths', {})
     if input_window_lengths:
-        for key, length in input_window_lengths.items():
+        input_window_lengths_updated = {}
+        for super_key in input_window_lengths.keys():
+            for sub_key in categories.get(super_key, [super_key]):
+                input_window_lengths_updated[sub_key] = input_window_lengths[super_key]
+
+        for key, length in input_window_lengths_updated.items():
             if key in kernels:
                 kernels[key]['length'] = length
             else:
