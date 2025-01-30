@@ -319,7 +319,7 @@ def define_kernels(run_params):
         for drop_key in drop_keys:
             sub_keys = categories.get(drop_key, [drop_key])
             for sub_key in sub_keys:
-                print(get_timestamp() + f': dropping {sub_key}')
+                logger.info(get_timestamp() + f': dropping {sub_key}')
                 selected_keys.remove(sub_key)
 
     # Build kernels dictionary based on selected keys
@@ -604,7 +604,7 @@ def add_kernel_by_label(kernel_name, design, run_params, session, fit, behavior_
         fit             the fit object for this model
     '''
 
-    print(get_timestamp() + '    Adding kernel: ' + kernel_name)
+    logger.info(get_timestamp() + '    Adding kernel: ' + kernel_name)
 
     try:
         kernel_function = globals().get(run_params['kernels'][kernel_name]['function_call'])
@@ -622,8 +622,8 @@ def add_kernel_by_label(kernel_name, design, run_params, session, fit, behavior_
             input_x = standardize_inputs(input_x)
 
     except Exception as e:
-        print(get_timestamp() + f"Exception: {e}")
-        print('Attempting to continue without this kernel.')
+        logger.warning(get_timestamp() + f"Exception: {e}")
+        logger.warning('Attempting to continue without this kernel.')
 
         fit['failed_kernels'].add(kernel_name)
         fit['kernel_error_dict'][kernel_name] = {
@@ -925,7 +925,7 @@ def get_timestamp():
 
 def orthogonalize_this_kernel(this_kernel, y):
     mat_to_ortho = np.concatenate((y.reshape(-1, 1), this_kernel.reshape(-1, 1)), axis=1)
-    print(get_timestamp() + '                 : ' + 'othogonalizing against context')
+    logger.info(get_timestamp() + '                 : ' + 'othogonalizing against context')
     Q, R = np.linalg.qr(mat_to_ortho)
     return Q[:, 1]
 
@@ -942,13 +942,13 @@ def standardize_inputs(timeseries, mean_center=True, unit_variance=True, max_val
             'Cannot perform max_value standardization and mean_center or unit_variance standardizations together.')
 
     if mean_center:
-        print(get_timestamp() + '                 : ' + 'mean centering')
+        logger.info(get_timestamp() + '                 : ' + 'mean centering')
         timeseries = timeseries - np.mean(timeseries)  # mean center
     if unit_variance:
-        print(get_timestamp() + '                 : ' + 'standardized to unit variance')
+        logger.info(get_timestamp() + '                 : ' + 'standardized to unit variance')
         timeseries = timeseries / np.std(timeseries)
     if max_value is not None:
-        print(get_timestamp() + '                 : ' + 'normalized by max value: ' + str(max_value))
+        logger.info(get_timestamp() + '                 : ' + 'normalized by max value: ' + str(max_value))
         timeseries = timeseries / max_value
 
     return timeseries
