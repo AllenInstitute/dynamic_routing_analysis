@@ -69,10 +69,9 @@ class RunParams:
 
 
 
-def get_data_from_npc_sessions(session_id):
+def get_session_data(session):
     """Fetch data from DynamicRoutingSession if files are not found."""
     try:
-        session = npc_sessions.DynamicRoutingSession(session_id)
         trials = session.trials[:]
         dprimes = np.array(session.performance.cross_modal_dprime[:])
         epoch = session.epochs[:]
@@ -86,10 +85,9 @@ def get_data_from_npc_sessions(session_id):
         raise FileNotFoundError(f"Failed to load data from DynamicRoutingSession: {e}")
 
 
-def get_session_data(session_id, version='0.0.260'):
+def get_session_data_from_cache(session_id, version='0.0.260'):
 
     '''
-
     :param session_id: ecephys session_id
     :param version: cache version
     :return: session object (if found), units_table, trials table,
