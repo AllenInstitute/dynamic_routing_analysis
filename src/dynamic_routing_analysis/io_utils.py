@@ -36,52 +36,7 @@ class RunParams:
             "trial_start_time": -2,
             "trial_stop_time": 3,
             "intercept": True,
-
-            "method": 'ridge_regression',  # ['ridge_regression', 'lasso_regression', ...]
-
-            "no_nested_CV": False,
-            "optimize_on": 0.3,
-            "n_outer_folds": 5,
-            "n_inner_folds": 5,
-            "optimize_penalty_by_cell": False,
-            "optimize_penalty_by_area": False,
-            "optimize_penalty_by_firing_rate": False,
-            "optimize_penalty_by_best_units": False, # TO DO
-            "best_unit_cvr2_cut_off": 0.05, # TO DO
-            "use_fixed_penalty": False,
-            "num_rate_clusters": 5,
-
-            # RIDGE + ELASTIC NET
-            "L2_grid_type": 'log',
-            "L2_grid_range": [1, 2**12],
-            "L2_grid_num": 13,
-            "L2_fixed_lambda": None,
-
-            # LASSO
-            "L1_grid_type": 'log',
-            "L1_grid_range": [10**-6, 10**-2],
-            "L1_grid_num": 13,
-            "L1_fixed_lambda": None,
-
-            "cell_regularization": None,
-            "cell_regularization_nested": None,
-
-            # ELASTIC NET
-            "L1_ratio_grid_range": [0.1, 0.9],
-            "L1_ratio_grid_num": 9,
-            "L1_ratio_fixed": None,
-            "cell_L1_ratio": None,
-            "cell_L1_ratio_nested": None,
-
-            # RRR
-            "rank_grid_num": 10,
-            "rank_fixed": None,
-            "cell_rank": None,
-            "cell_rank_nested": None,
-
-            "fullmodel_fitted": False,
-
-            "model_label": "fullmodel"
+            "model_label": 'fullmodel'
         }
 
     def update_metric(self, key, value):
@@ -101,10 +56,6 @@ class RunParams:
 
     def validate_params(self):
         """Validation logic to ensure parameters are consistent."""
-        # Example validation
-        if self.run_params["method"] not in ['ridge_regression', 'lasso_regression',
-                                             'elastic_net_regression', 'reduced_rank_regression']:
-            raise ValueError(f"Invalid method: {self.run_params['method']}")
 
         if self.run_params["time_of_interest"] not in ['trial', 'full_trial', 'spontaneous_trial',
                                                         'quiescent', 'spontaneous_quiescent',
