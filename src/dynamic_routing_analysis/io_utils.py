@@ -67,8 +67,6 @@ class RunParams:
             raise ValueError(f"Invalid spike_bin_width: {self.run_params['spike_bin_width']}")
 
 
-
-
 def get_session_data(session):
     """Fetch data from DynamicRoutingSession if files are not found."""
     try:
@@ -120,7 +118,7 @@ def get_session_data_from_cache(session_id, version='0.0.260'):
     except FileNotFoundError:
         # Attempt to load data from DynamicRoutingSession as a fallback
         logger.warning(f"File not found for session_id {session_id}. Attempting fallback.")
-        return get_data_from_npc_sessions(session_id)
+        return get_session_data(session_id)
 
     except Exception as e:
         raise FileNotFoundError(f"Unexpected error occurred: {e}")
