@@ -30,7 +30,7 @@ class RunParams:
             "spike_bin_width": 0.025,
             "areas_to_include": None,
             "areas_to_exclude": None,
-            "orthogonalize_against_context": ['LP_features'],
+            "orthogonalize_against_context": ['facial_features'],
             "quiescent_start_time": -1.5,
             "quiescent_stop_time": 0,
             "trial_start_time": -2,
@@ -187,16 +187,16 @@ def define_kernels(run_params):
                      'num_weights': None, 'dropout': True, 'text': 'non-target stim in aud context'},
         'sound2_aud': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
                        'num_weights': None, 'dropout': True, 'text': 'non-target stim in aud context'},
-        'nose': {'function_call': 'LP_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
+        'nose': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
                  'orthogonalize': None, 'num_weights': None, 'dropout': True,
                  'text': 'Z-scored Euclidean displacement of nose movements'},
-        'ears': {'function_call': 'LP_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
+        'ears': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
                  'orthogonalize': None, 'num_weights': None, 'dropout': True,
                  'text': 'Z-scored Euclidean displacement of ear movements'},
-        'jaw': {'function_call': 'LP_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
+        'jaw': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
                 'orthogonalize': None, 'num_weights': None, 'dropout': True,
                 'text': 'Z-scored Euclidean displacement of jaw movements'},
-        'whisker_pad': {'function_call': 'LP_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
+        'whisker_pad': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
                         'orthogonalize': None, 'num_weights': None, 'dropout': True,
                         'text': 'Z-scored Euclidean displacement of whisker pad movements'},
         'licks': {'function_call': 'licks', 'type': 'discrete', 'length': 1, 'offset': -0.5, 'orthogonalize': None,
@@ -228,7 +228,7 @@ def define_kernels(run_params):
         'movements': ['ears', 'nose', 'jaw', 'whisker_pad', 'running', 'pupil', 'licks'],
         'movements_no_licks': ['ears', 'nose', 'jaw', 'whisker_pad', 'running', 'pupil'],
         'choice': ['hit', 'miss', 'correct_reject', 'false_alarm'],
-        'LP_features': ['ears', 'nose', 'jaw', 'whisker_pad']
+        'facial_features': ['ears', 'nose', 'jaw', 'whisker_pad']
     }
 
     # Initialize selected keys list
@@ -650,7 +650,7 @@ def licks(kernel_name, session, fit, behavior_info):
     return this_kernel
 
 
-def LP_features(kernel_name, session, fit, behavior_info):
+def facial_features(kernel_name, session, fit, behavior_info):
     def eu_dist_for_LP(x_c, y_c):
         return np.sqrt(x_c ** 2 + y_c ** 2)
 
