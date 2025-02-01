@@ -52,6 +52,7 @@ class RunParams:
 
     def get_params(self):
         """Retrieve the run_params dictionary."""
+        self.define_kernels()
         return self.run_params
 
     def validate_params(self):
@@ -65,6 +66,147 @@ class RunParams:
 
         if self.run_params["spike_bin_width"] <= 0:
             raise ValueError(f"Invalid spike_bin_width: {self.run_params['spike_bin_width']}")
+
+    def define_kernels(self):
+        '''
+            Returns kernel info for input variables
+        '''
+
+        # Define master kernel list
+        master_kernels_list = {
+            'intercept': {'function_call': 'intercept', 'type': 'discrete', 'length': 0, 'offset': 0,
+                        'orthogonalize': None, 'num_weights': None, 'dropout': True, 'text': 'constant value'},
+            'vis1_vis': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
+                        'num_weights': None, 'dropout': True, 'text': 'target stim in rewarded context'},
+            'sound1_vis': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
+                        'num_weights': None, 'dropout': True, 'text': 'target stim in non-rewarded context'},
+            'vis2_vis': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
+                        'num_weights': None, 'dropout': True, 'text': 'non-target stim in vis context'},
+            'sound2_vis': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
+                        'num_weights': None, 'dropout': True, 'text': 'non-target stim in vis context'},
+            'vis1_aud': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
+                        'num_weights': None, 'dropout': True, 'text': 'target stim in non-rewarded context'},
+            'sound1_aud': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
+                        'num_weights': None, 'dropout': True, 'text': 'target stim in rewarded context'},
+            'vis2_aud': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
+                        'num_weights': None, 'dropout': True, 'text': 'non-target stim in aud context'},
+            'sound2_aud': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
+                        'num_weights': None, 'dropout': True, 'text': 'non-target stim in aud context'},
+            'nose': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
+                    'orthogonalize': None, 'num_weights': None, 'dropout': True,
+                    'text': 'Z-scored Euclidean displacement of nose movements'},
+            'ears': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
+                    'orthogonalize': None, 'num_weights': None, 'dropout': True,
+                    'text': 'Z-scored Euclidean displacement of ear movements'},
+            'jaw': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
+                    'orthogonalize': None, 'num_weights': None, 'dropout': True,
+                    'text': 'Z-scored Euclidean displacement of jaw movements'},
+            'whisker_pad': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
+                            'orthogonalize': None, 'num_weights': None, 'dropout': True,
+                            'text': 'Z-scored Euclidean displacement of whisker pad movements'},
+            'licks': {'function_call': 'licks', 'type': 'discrete', 'length': 1, 'offset': -0.5, 'orthogonalize': None,
+                    'num_weights': None, 'dropout': True, 'text': 'lick responses'},
+            'running': {'function_call': 'running', 'type': 'continuous', 'length': 1, 'offset': -0.5,
+                        'orthogonalize': None, 'num_weights': None, 'dropout': True, 'text': 'Z-scored running speed'},
+            'pupil': {'function_call': 'pupil', 'type': 'continuous', 'length': 1, 'offset': -0.5, 'orthogonalize': None,
+                    'num_weights': None, 'dropout': True, 'text': 'Z-scored pupil diameter'},
+            'hit': {'function_call': 'choice', 'type': 'discrete', 'length': 3, 'offset': -1.5, 'orthogonalize': None,
+                    'num_weights': None, 'dropout': True, 'text': 'lick to GO trial'},
+            'miss': {'function_call': 'choice', 'type': 'discrete', 'length': 3, 'offset': -1.5, 'orthogonalize': None,
+                    'num_weights': None, 'dropout': True, 'text': 'no lick to GO trial'},
+            'correct_reject': {'function_call': 'choice', 'type': 'discrete', 'length': 3, 'offset': -1.5,
+                            'orthogonalize': None, 'num_weights': None, 'dropout': True,
+                            'text': 'no lick to NO-GO trial'},
+            'false_alarm': {'function_call': 'choice', 'type': 'discrete', 'length': 3, 'offset': -1.5,
+                            'orthogonalize': None, 'num_weights': None, 'dropout': True, 'text': 'lick to NO-GO trial'},
+            'context': {'function_call': 'context', 'type': 'discrete', 'length': 0, 'offset': 0, 'orthogonalize': None,
+                        'num_weights': None, 'dropout': True, 'text': 'block-wise context'},
+            'session_time': {'function_call': 'session_time', 'type': 'continuous', 'length': 0, 'offset': 0,
+                            'orthogonalize': None, 'num_weights': None, 'dropout': True,
+                            'text': 'z-scored time in session'}
+        }
+
+        # Define categories for input variables
+        categories = {
+            'stimulus': ['vis1_vis', 'sound1_vis', 'vis2_vis', 'sound2_vis', 'vis1_aud', 'sound1_aud', 'vis2_aud',
+                        'sound2_aud'],
+            'movements': ['ears', 'nose', 'jaw', 'whisker_pad', 'running', 'pupil', 'licks'],
+            'movements_no_licks': ['ears', 'nose', 'jaw', 'whisker_pad', 'running', 'pupil'],
+            'choice': ['hit', 'miss', 'correct_reject', 'false_alarm'],
+            'facial_features': ['ears', 'nose', 'jaw', 'whisker_pad']
+        }
+
+        # Initialize selected keys list
+        selected_keys = []
+
+        # Determine selected input variables based on run_params
+        time_of_interest = self.run_params.get('time_of_interest', '')
+        input_variables = self.run_params.get('input_variables', [])
+
+        # Choose input variables based on 'time_of_interest'
+        if not input_variables:
+            if 'trial' in time_of_interest or time_of_interest == 'full':
+                selected_keys = categories['stimulus'] + categories['movements'] + categories['choice'] + ['context',
+                                                                                                        'session_time']
+            elif 'quiescent' in time_of_interest:
+                selected_keys = categories['movements_no_licks'] + ['context', 'session_time']
+            elif 'spontaneous' in time_of_interest:
+                selected_keys = categories['movements_no_licks'] + ['session_time']
+        else:
+            # Extend selected_keys with input variables
+            for input_variable in input_variables:
+                selected_keys.extend(categories.get(input_variable, [input_variable]))
+
+        # Add intercept if required
+        if self.run_params.get('intercept', False) and 'intercept' not in selected_keys:
+            selected_keys.append('intercept')
+
+        # Log error if no input variables are selected
+        if not selected_keys:
+            raise ValueError("No input variables selected!") # raise value error .
+
+        # remove drop variables if any
+        drop_keys = self.run_params.get('drop_variables', [])
+        if drop_keys and self.run_params['model_label'] != 'fullmodel':
+            for drop_key in drop_keys:
+                sub_keys = categories.get(drop_key, [drop_key])
+                for sub_key in sub_keys:
+                    logger.info(get_timestamp() + f': dropping {sub_key}')
+                    selected_keys.remove(sub_key)
+
+        # Build kernels dictionary based on selected keys
+        kernels = {key: master_kernels_list[key] for key in selected_keys}
+
+        # Update kernel lengths based on run_params
+        input_window_lengths = self.run_params.get('input_window_lengths', {})
+        if input_window_lengths:
+            input_window_lengths_updated = {}
+            for super_key in input_window_lengths.keys():
+                for sub_key in categories.get(super_key, [super_key]):
+                    input_window_lengths_updated[sub_key] = input_window_lengths[super_key]
+
+            for key, length in input_window_lengths_updated.items():
+                if key in kernels:
+                    if kernels[key]['length'] == np.abs(kernels[key]['offset']):
+                        kernels[key]['length'] = length
+                        kernels[key]['offset'] = np.sign(kernels[key]['offset'])*length
+                    else:
+                        kernels[key]['length'] = length
+                        kernels[key]['offset'] = np.sign(kernels[key]['offset'])*length/2
+                else:
+                    raise KeyError(f"Key {key} not found in kernels.")
+
+        # Update orthogonalization keys
+        input_ortho_keys = self.run_params.get('orthogonalize_against_context', [])
+        if input_ortho_keys:
+            ortho_keys = []
+            for input_variable in input_ortho_keys:
+                ortho_keys.extend(categories.get(input_variable, [input_variable]))
+            for key in ortho_keys:
+                if key in kernels:
+                    kernels[key]['orthogonalize'] = True
+
+        self.run_params['kernels'] = kernels
 
 
 def get_session_data(session):
@@ -160,148 +302,6 @@ def setup_trials_table(run_params, trials_table):
     # TO-DO: find out how? Find out what else to include in the trials table.
 
     return trials_table
-
-
-def define_kernels(run_params):
-    '''
-        Returns kernel info for input variables
-    '''
-
-    # Define master kernel list
-    master_kernels_list = {
-        'intercept': {'function_call': 'intercept', 'type': 'discrete', 'length': 0, 'offset': 0,
-                      'orthogonalize': None, 'num_weights': None, 'dropout': True, 'text': 'constant value'},
-        'vis1_vis': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
-                     'num_weights': None, 'dropout': True, 'text': 'target stim in rewarded context'},
-        'sound1_vis': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
-                       'num_weights': None, 'dropout': True, 'text': 'target stim in non-rewarded context'},
-        'vis2_vis': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
-                     'num_weights': None, 'dropout': True, 'text': 'non-target stim in vis context'},
-        'sound2_vis': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
-                       'num_weights': None, 'dropout': True, 'text': 'non-target stim in vis context'},
-        'vis1_aud': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
-                     'num_weights': None, 'dropout': True, 'text': 'target stim in non-rewarded context'},
-        'sound1_aud': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
-                       'num_weights': None, 'dropout': True, 'text': 'target stim in rewarded context'},
-        'vis2_aud': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
-                     'num_weights': None, 'dropout': True, 'text': 'non-target stim in aud context'},
-        'sound2_aud': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 1, 'orthogonalize': None,
-                       'num_weights': None, 'dropout': True, 'text': 'non-target stim in aud context'},
-        'nose': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
-                 'orthogonalize': None, 'num_weights': None, 'dropout': True,
-                 'text': 'Z-scored Euclidean displacement of nose movements'},
-        'ears': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
-                 'orthogonalize': None, 'num_weights': None, 'dropout': True,
-                 'text': 'Z-scored Euclidean displacement of ear movements'},
-        'jaw': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
-                'orthogonalize': None, 'num_weights': None, 'dropout': True,
-                'text': 'Z-scored Euclidean displacement of jaw movements'},
-        'whisker_pad': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
-                        'orthogonalize': None, 'num_weights': None, 'dropout': True,
-                        'text': 'Z-scored Euclidean displacement of whisker pad movements'},
-        'licks': {'function_call': 'licks', 'type': 'discrete', 'length': 1, 'offset': -0.5, 'orthogonalize': None,
-                  'num_weights': None, 'dropout': True, 'text': 'lick responses'},
-        'running': {'function_call': 'running', 'type': 'continuous', 'length': 1, 'offset': -0.5,
-                    'orthogonalize': None, 'num_weights': None, 'dropout': True, 'text': 'Z-scored running speed'},
-        'pupil': {'function_call': 'pupil', 'type': 'continuous', 'length': 1, 'offset': -0.5, 'orthogonalize': None,
-                  'num_weights': None, 'dropout': True, 'text': 'Z-scored pupil diameter'},
-        'hit': {'function_call': 'choice', 'type': 'discrete', 'length': 3, 'offset': -1.5, 'orthogonalize': None,
-                'num_weights': None, 'dropout': True, 'text': 'lick to GO trial'},
-        'miss': {'function_call': 'choice', 'type': 'discrete', 'length': 3, 'offset': -1.5, 'orthogonalize': None,
-                 'num_weights': None, 'dropout': True, 'text': 'no lick to GO trial'},
-        'correct_reject': {'function_call': 'choice', 'type': 'discrete', 'length': 3, 'offset': -1.5,
-                           'orthogonalize': None, 'num_weights': None, 'dropout': True,
-                           'text': 'no lick to NO-GO trial'},
-        'false_alarm': {'function_call': 'choice', 'type': 'discrete', 'length': 3, 'offset': -1.5,
-                        'orthogonalize': None, 'num_weights': None, 'dropout': True, 'text': 'lick to NO-GO trial'},
-        'context': {'function_call': 'context', 'type': 'discrete', 'length': 0, 'offset': 0, 'orthogonalize': None,
-                    'num_weights': None, 'dropout': True, 'text': 'block-wise context'},
-        'session_time': {'function_call': 'session_time', 'type': 'continuous', 'length': 0, 'offset': 0,
-                         'orthogonalize': None, 'num_weights': None, 'dropout': True,
-                         'text': 'z-scored time in session'}
-    }
-
-    # Define categories for input variables
-    categories = {
-        'stimulus': ['vis1_vis', 'sound1_vis', 'vis2_vis', 'sound2_vis', 'vis1_aud', 'sound1_aud', 'vis2_aud',
-                     'sound2_aud'],
-        'movements': ['ears', 'nose', 'jaw', 'whisker_pad', 'running', 'pupil', 'licks'],
-        'movements_no_licks': ['ears', 'nose', 'jaw', 'whisker_pad', 'running', 'pupil'],
-        'choice': ['hit', 'miss', 'correct_reject', 'false_alarm'],
-        'facial_features': ['ears', 'nose', 'jaw', 'whisker_pad']
-    }
-
-    # Initialize selected keys list
-    selected_keys = []
-
-    # Determine selected input variables based on run_params
-    time_of_interest = run_params.get('time_of_interest', '')
-    input_variables = run_params.get('input_variables', [])
-
-    # Choose input variables based on 'time_of_interest'
-    if not input_variables:
-        if 'trial' in time_of_interest or time_of_interest == 'full':
-            selected_keys = categories['stimulus'] + categories['movements'] + categories['choice'] + ['context',
-                                                                                                       'session_time']
-        elif 'quiescent' in time_of_interest:
-            selected_keys = categories['movements_no_licks'] + ['context', 'session_time']
-        elif 'spontaneous' in time_of_interest:
-            selected_keys = categories['movements_no_licks'] + ['session_time']
-    else:
-        # Extend selected_keys with input variables
-        for input_variable in input_variables:
-            selected_keys.extend(categories.get(input_variable, [input_variable]))
-
-    # Add intercept if required
-    if run_params.get('intercept', False) and 'intercept' not in selected_keys:
-        selected_keys.append('intercept')
-
-    # Log error if no input variables are selected
-    if not selected_keys:
-        raise ValueError("No input variables selected!") # raise value error .
-
-    # remove drop variables if any
-    drop_keys = run_params.get('drop_variables', [])
-    if drop_keys and run_params['model_label'] != 'fullmodel':
-        for drop_key in drop_keys:
-            sub_keys = categories.get(drop_key, [drop_key])
-            for sub_key in sub_keys:
-                logger.info(get_timestamp() + f': dropping {sub_key}')
-                selected_keys.remove(sub_key)
-
-    # Build kernels dictionary based on selected keys
-    kernels = {key: master_kernels_list[key] for key in selected_keys}
-
-    # Update kernel lengths based on run_params
-    input_window_lengths = run_params.get('input_window_lengths', {})
-    if input_window_lengths:
-        input_window_lengths_updated = {}
-        for super_key in input_window_lengths.keys():
-            for sub_key in categories.get(super_key, [super_key]):
-                input_window_lengths_updated[sub_key] = input_window_lengths[super_key]
-
-        for key, length in input_window_lengths_updated.items():
-            if key in kernels:
-                if kernels[key]['length'] == np.abs(kernels[key]['offset']):
-                    kernels[key]['length'] = length
-                    kernels[key]['offset'] = np.sign(kernels[key]['offset'])*length
-                else:
-                    kernels[key]['length'] = length
-                    kernels[key]['offset'] = np.sign(kernels[key]['offset'])*length/2
-            else:
-                raise KeyError(f"Key {key} not found in kernels.")
-
-    # Update orthogonalization keys
-    input_ortho_keys = run_params.get('orthogonalize_against_context', [])
-    if input_ortho_keys:
-        ortho_keys = []
-        for input_variable in input_ortho_keys:
-            ortho_keys.extend(categories.get(input_variable, [input_variable]))
-        for key in ortho_keys:
-            if key in kernels:
-                kernels[key]['orthogonalize'] = True
-
-    return kernels
 
 
 def get_spont_times(run_params, behavior_info):
@@ -526,7 +526,6 @@ def add_kernels(design, run_params, session, fit, behavior_info):
         fit             the fit object for this model
     '''
 
-    run_params['kernels'] = define_kernels(run_params)
     fit['failed_kernels'] = set()
     fit['kernel_error_dict'] = dict()
 
