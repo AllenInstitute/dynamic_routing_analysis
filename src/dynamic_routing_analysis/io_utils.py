@@ -20,6 +20,7 @@ class RunParams:
             "time_of_interest": 'quiescent',
             "spontaneous_duration": 2 * 60,  # in seconds
             "input_variables": None,
+            "input_offsets": True,
             "input_window_lengths": None,  # offset
             "drop_variables": None,
             "unit_inclusion_criteria": {'isi_violations': 0.1,
@@ -178,23 +179,28 @@ class RunParams:
         kernels = {key: master_kernels_list[key] for key in selected_keys}
 
         # Update kernel lengths based on run_params
-        input_window_lengths = self.run_params.get('input_window_lengths', {})
-        if input_window_lengths:
-            input_window_lengths_updated = {}
-            for super_key in input_window_lengths.keys():
-                for sub_key in categories.get(super_key, [super_key]):
-                    input_window_lengths_updated[sub_key] = input_window_lengths[super_key]
+        if not self.run_params.get('input_offsets'):
+            for key, kernel in kernels.items():
+                kernel['length'] = 0
+                kernel['offset'] = 0
+        else:
+            input_window_lengths = self.run_params.get('input_window_lengths', {})
+            if input_window_lengths:
+                input_window_lengths_updated = {}
+                for super_key in input_window_lengths.keys():
+                    for sub_key in categories.get(super_key, [super_key]):
+                        input_window_lengths_updated[sub_key] = input_window_lengths[super_key]
 
-            for key, length in input_window_lengths_updated.items():
-                if key in kernels:
-                    if kernels[key]['length'] == np.abs(kernels[key]['offset']):
-                        kernels[key]['length'] = length
-                        kernels[key]['offset'] = np.sign(kernels[key]['offset'])*length
+                for key, length in input_window_lengths_updated.items():
+                    if key in kernels:
+                        if kernels[key]['length'] == np.abs(kernels[key]['offset']):
+                            kernels[key]['length'] = length
+                            kernels[key]['offset'] = np.sign(kernels[key]['offset'])*length
+                        else:
+                            kernels[key]['length'] = length
+                            kernels[key]['offset'] = np.sign(kernels[key]['offset'])*length/2
                     else:
-                        kernels[key]['length'] = length
-                        kernels[key]['offset'] = np.sign(kernels[key]['offset'])*length/2
-                else:
-                    raise KeyError(f"Key {key} not found in kernels.")
+                        raise KeyError(f"Key {key} not found in kernels.")
 
         # Update orthogonalization keys
         input_ortho_keys = self.run_params.get('orthogonalize_against_context', [])
