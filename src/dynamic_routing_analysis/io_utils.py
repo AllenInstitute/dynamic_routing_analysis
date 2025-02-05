@@ -225,7 +225,7 @@ def get_session_data(session):
                         'is_good_behavior': np.count_nonzero(dprimes >= 1) >= 4,
                         'epoch_info': epoch}
     units_table = session.units[:]
-    return session, units_table, behavior_info, None
+    return units_table, behavior_info
 
 
 def get_session_data_from_cache(session_id, version='0.0.260'):
