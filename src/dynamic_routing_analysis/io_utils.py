@@ -220,7 +220,7 @@ def get_session_data(session):
     trials = session.trials[:]
     try:
         dprimes = np.array(pd.read_parquet(
-            npc_lims.get_cache_path('performance', session, version='any')
+            npc_lims.get_cache_path('performance', session.id, version='any')
         ).cross_modal_dprime.values)
     except:
         logger.info('no cached performance table, skipping')
@@ -229,7 +229,10 @@ def get_session_data(session):
     epoch = session.epochs[:]
     behavior_info = {'trials': trials,
                         'dprime': dprimes,
-                        'is_good_behavior': np.count_nonzero(dprimes >= 1) >= 4,
+                        'is_good_behavior': (
+                            np.count_nonzero(dprimes >= 1) >= 4
+                            if dprimes is not None else None
+                        ),
                         'epoch_info': epoch}
     units_table = session.units[:]
     return units_table, behavior_info
