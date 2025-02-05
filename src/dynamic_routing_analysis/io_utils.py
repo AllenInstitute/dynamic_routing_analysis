@@ -216,19 +216,16 @@ class RunParams:
 
 
 def get_session_data(session):
-    """Fetch data from DynamicRoutingSession if files are not found."""
-    try:
-        trials = session.trials[:]
-        dprimes = np.array(session.performance.cross_modal_dprime[:])
-        epoch = session.epochs[:]
-        behavior_info = {'trials': trials,
-                         'dprime': dprimes,
-                         'is_good_behavior': np.count_nonzero(dprimes >= 1) >= 4,
-                         'epoch_info': epoch}
-        units_table = session.units[:]
-        return session, units_table, behavior_info, None
-    except Exception as e:
-        raise FileNotFoundError(f"Failed to load data from DynamicRoutingSession: {e}")
+    """Fetch data from DynamicRoutingSession."""
+    trials = session.trials[:]
+    dprimes = np.array(session.performance.cross_modal_dprime[:])
+    epoch = session.epochs[:]
+    behavior_info = {'trials': trials,
+                        'dprime': dprimes,
+                        'is_good_behavior': np.count_nonzero(dprimes >= 1) >= 4,
+                        'epoch_info': epoch}
+    units_table = session.units[:]
+    return session, units_table, behavior_info, None
 
 
 def get_session_data_from_cache(session_id, version='0.0.260'):
