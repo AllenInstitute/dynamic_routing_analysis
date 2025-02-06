@@ -222,11 +222,11 @@ class RunParams:
 def get_session_data(session):
     """Fetch data from DynamicRoutingSession."""
     trials = session.trials[:]
-    try:
-        dprimes = session.intervals['performance'][:].cross_modal_dprime.values
-    except:
-        logger.info('no cached performance table, skipping')
-        dprimes = None
+    # try:
+    dprimes = session.intervals['performance'][:].cross_modal_dprime.values
+    # except:
+    #     logger.info('no cached performance table, skipping')
+    #     dprimes = None
 
     epoch = session.epochs[:]
     behavior_info = {'trials': trials,
