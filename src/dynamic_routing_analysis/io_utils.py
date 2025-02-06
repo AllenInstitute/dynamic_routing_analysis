@@ -223,9 +223,7 @@ def get_session_data(session):
     """Fetch data from DynamicRoutingSession."""
     trials = session.trials[:]
     try:
-        dprimes = np.array(pd.read_parquet(
-            npc_lims.get_cache_path('performance', session.id, version='any')
-        ).cross_modal_dprime.values)
+        dprimes = session.intervals['performance'][:].cross_modal_dprime.values
     except:
         logger.info('no cached performance table, skipping')
         dprimes = None
