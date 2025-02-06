@@ -645,7 +645,11 @@ def pupil(kernel_name, session, fit, behavior_info):
 
 
 def running(kernel_name, session, fit, behavior_info):
-    this_kernel = bin_timeseries(session._running_speed.data, session._running_speed.timestamps, fit['timebins_all'])
+    this_kernel = bin_timeseries(
+        session.processing['behavior']['running_speed'].data[:],
+        session.processing['behavior']['running_speed'].timestamps[:],
+        fit['timebins_all']
+    )
     if np.isnan(this_kernel).all():
         raise ValueError(f"The trace is all nans for {kernel_name}")
     return this_kernel
