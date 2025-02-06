@@ -286,7 +286,7 @@ def setup_units_table(run_params, units_table):
         Returns the units_table with the column indicating QC
         Filters the table for area specific runs
     '''
-
+    logger.info('Selecting relevant units based on run_params')
     units_table['good_unit'] = (units_table['isi_violations_ratio'] < run_params['unit_inclusion_criteria'][
         'isi_violations']) & \
                                (units_table['presence_ratio'] > run_params['unit_inclusion_criteria'][
