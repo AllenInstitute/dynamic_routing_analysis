@@ -286,7 +286,7 @@ def setup_units_table(run_params, units_table):
         Returns the units_table with the column indicating QC
         Filters the table for area specific runs
     '''
-    logger.info('Selecting relevant units based on run_params')
+
     units_table['good_unit'] = (units_table['isi_violations_ratio'] < run_params['unit_inclusion_criteria'][
         'isi_violations']) & \
                                (units_table['presence_ratio'] > run_params['unit_inclusion_criteria'][
@@ -306,7 +306,6 @@ def setup_units_table(run_params, units_table):
     if areas_to_exclude:
         units_table = units_table[~units_table.structure.isin(areas_to_exclude)]
 
-    logger.info(f'Total number of units to run = {len(units_table)}')
     return units_table
 
 
@@ -490,9 +489,7 @@ def process_spikes(units_table, run_params, fit):
     '''
 
     # identifies good units
-    logger.debug(f'Setting up units table with {len(units_table)} units')
     units_table = setup_units_table(run_params, units_table)
-    logger.debug(f'Set up units table with {len(units_table)} units')
 
     spikes = np.zeros((fit['timebins'].shape[0], len(units_table)))
 
