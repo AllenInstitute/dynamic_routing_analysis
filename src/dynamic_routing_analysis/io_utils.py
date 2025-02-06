@@ -690,7 +690,7 @@ def facial_features(kernel_name, session, fit, behavior_info):
 
     map_names = {'ears': 'ear_base_l', 'jaw': 'jaw', 'nose': 'nose_tip', 'whisker_pad': 'whisker_pad_l_side'}
     try:
-        df = session._lp[0][:]
+        df = session.processing['behavior']['lp_side_camera'][:]
     except IndexError:
         raise IndexError(f'{session.id} is not a session with video.')
     timestamps = df['timestamps'].values.astype('float')
