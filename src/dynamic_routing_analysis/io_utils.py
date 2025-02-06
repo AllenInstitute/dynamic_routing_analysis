@@ -656,7 +656,10 @@ def running(kernel_name, session, fit, behavior_info):
 
 
 def licks(kernel_name, session, fit, behavior_info):
-    lick_times = session._all_licks[0].timestamps
+    lick_times = session.processing['behavior']['licks'].timestamps[:]
+    lick_duration = session.processing['behavior']['licks'].data[:]
+    lick_duration_threshold = 0.5
+    lick_times = lick_times[lick_duration < lick_duration_threshold]
 
     # Extract the bin edges
     bin_starts, bin_stops = fit['timebins_all'][:, 0], fit['timebins_all'][:, 1]
