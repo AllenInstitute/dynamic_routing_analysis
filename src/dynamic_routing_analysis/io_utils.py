@@ -637,7 +637,7 @@ def pupil(kernel_name, session, fit, behavior_info):
         df['pupil_area'] = df['pupil_area'].interpolate(method='linear')
         return df
 
-    df = process_pupil_data(session._eye_tracking.to_dataframe(), behavior_info)
+    df = process_pupil_data(session.processing['behavior']['eye_tracking'][:], behavior_info)
     this_kernel = bin_timeseries(df.pupil_area.values, df.timestamps.values, fit['timebins_all'])
     if np.isnan(this_kernel).all():
         raise ValueError(f"The trace is all nans for {kernel_name}")
