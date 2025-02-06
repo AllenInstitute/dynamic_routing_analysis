@@ -178,6 +178,10 @@ class RunParams:
         # Build kernels dictionary based on selected keys
         kernels = {key: master_kernels_list[key] for key in selected_keys}
 
+        if 'intercept' in selected_keys:
+            selected_keys.remove('intercept')
+        self.run_params['input_variables'] = selected_keys
+
         # Update kernel lengths based on run_params
         if not self.run_params.get('input_offsets'):
             for key, kernel in kernels.items():
@@ -228,12 +232,12 @@ def get_session_data(session):
 
     epoch = session.epochs[:]
     behavior_info = {'trials': trials,
-                        'dprime': dprimes,
-                        'is_good_behavior': (
-                            np.count_nonzero(dprimes >= 1) >= 4
-                            if dprimes is not None else None
-                        ),
-                        'epoch_info': epoch}
+                    'dprime': dprimes,
+                    'is_good_behavior': (
+                        np.count_nonzero(dprimes >= 1) >= 4
+                        if dprimes is not None else None
+                    ),
+                    'epoch_info': epoch}
     units_table = session.units[:]
     return units_table, behavior_info
 
