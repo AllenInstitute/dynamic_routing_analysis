@@ -368,11 +368,10 @@ def optimize_model(fit, design_mat, run_params):
     return fit
 
 
-def evaluate_models(fit, design_mat, run_params):
+def evaluate_model(fit, design_mat, run_params):
     X = design_mat.data
     spike_counts = fit['spike_count_arr']['spike_counts']
-    # x_is_continuous = [run_params['kernels'][kernel_name.rsplit('_', 1)[0]]['type'] == 'continuous'
-    #                    for kernel_name in design_mat.weights.values]
+    method = run_params['method']
 
     # Initialize outputs
     num_units = spike_counts.shape[1]
@@ -382,22 +381,26 @@ def evaluate_models(fit, design_mat, run_params):
     all_weights = np.full((X.shape[1], num_units), np.nan)
     all_prediction = np.full(spike_counts.shape, np.nan)
 
-    if isinstance(run_params['cell_L2_regularization'], list):
-        fit['cell_L2_regularization'] = run_params['cell_L2_regularization']
+    param_keys = ['cell_regularization', 'cell_L1_ratio', 'cell_rank']
+    param_keys += [key + '_nested' for key in param_keys]
 
-    if isinstance(run_params['cell_L2_regularization_nested'], list):
-        fit['cell_L2_regularization_nested'] = run_params['cell_L2_regularization_nested']
-
-    cell_L2_regularization_nested = np.full((num_units, num_outer_folds), np.nan)
+    # fullmodel is completely fitted (simple or nested), and reduced model is to be fit
+    if run_params["fullmodel_fitted"]:
+        for key in param_keys:
+            if isinstance(run_params[key], list) or isinstance(run_params[key], np.ndarray):
+                fit[key] = np.array(run_params[key])
 
     if run_params['use_fixed_penalty']:
+        param, param2 = get_parameters(fit, method)
         cv_var_train, cv_var_test, all_weights, all_prediction = simple_train_and_test(
             design_mat, spike_counts,
-            lam=fit['L2_regularization'],
+            param=param,
+            param2=param2,
             folds_outer=num_outer_folds,
             method = run_params['method']
         )
-    elif run_params['no_nested_CV']:
+    # fullmodel is completely fitted (simple or nested) or fullmodel is not fit but model parameters have beeen optimized
+    elif run_params["fullmodel_fitted"] or run_params['no_nested_CV']:
         if run_params['optimize_penalty_by_cell']:
             print(get_timestamp() + ': fitting each cell')
             with ProcessPoolExecutor(max_workers=10) as executor:
@@ -414,13 +417,19 @@ def evaluate_models(fit, design_mat, run_params):
 
         elif run_params['optimize_penalty_by_area']:
             areas = np.unique(fit['spike_count_arr']['structure'])
+            if run_params['no_nested_CV']:
+                param, param2 = get_parameters(fit, method)
+            else:
+                param, param2 = get_parameters(fit, method, '_nested')
             print(get_timestamp() + ': fitting units by area')
             for area in tqdm(areas, total=len(areas), desc='progress'):
                 unit_ids = np.where(fit['spike_count_arr']['structure'] == area)[0]
                 fit_area = spike_counts[:, unit_ids]
-                L2_value = np.nanmedian(np.take(fit['cell_L2_regularization'], unit_ids))
+                param_area = np.nanmedian(np.take(param, unit_ids), axis = 0)
+                param2_area = np.nanmedian(np.take(param2, unit_ids), axis = 0) if param2 is not None else None
                 cv_train, cv_test, weights, prediction = simple_train_and_test(design_mat, fit_area,
-                                                                               lam=L2_value,
+                                                                               param=param_area,
+                                                                               param2=param2_area,
                                                                                folds_outer=run_params['n_outer_folds'],
                                                                                method = run_params['method'])
                 cv_var_train[unit_ids] = cv_train
@@ -431,13 +440,19 @@ def evaluate_models(fit, design_mat, run_params):
         elif run_params['optimize_penalty_by_firing_rate']:
             num_clusters =  np.min([run_params['num_rate_clusters'], num_units])
             rate_clusters = KMeans(n_clusters =  num_clusters, random_state = 0).fit(fit['spike_count_arr']['firing_rate'].reshape(-1,1)).labels_
+            if run_params['no_nested_CV']:
+                param, param2 = get_parameters(fit, method)
+            else:
+                param, param2 = get_parameters(fit, method, '_nested')
             print(get_timestamp() + ': fitting units by firing rate')
             for cluster in tqdm(np.unique(rate_clusters), total=len(np.unique(rate_clusters)), desc='progress'):
                 unit_ids = np.where(rate_clusters == cluster)[0]
                 fit_rate = spike_counts[:, unit_ids]
-                L2_value = np.nanmedian(np.take(fit['cell_L2_regularization'], unit_ids))
+                param_cluster = np.nanmedian(np.take(param, unit_ids), axis = 0)
+                param2_cluster = np.nanmedian(np.take(param2, unit_ids), axis = 0) if param2 is not None else None
                 cv_train, cv_test, weights, prediction = simple_train_and_test(design_mat, fit_rate,
-                                                                               lam=L2_value,
+                                                                               param=param_cluster,
+                                                                               param2=param2_cluster,
                                                                                folds_outer=run_params['n_outer_folds'],
                                                                                method = run_params['method'])
                 cv_var_train[unit_ids] = cv_train
@@ -446,16 +461,26 @@ def evaluate_models(fit, design_mat, run_params):
                 all_prediction[:, unit_ids] = prediction
 
         else:
+            if run_params['no_nested_CV']:
+                param, param2 = get_parameters(fit, method)
+            else:
+                param, param2 = get_parameters(fit, method, '_nested')
             print(get_timestamp() + ': fitting all units')
-            L2_value = np.nanmedian(np.array(fit['cell_L2_regularization']))
+            param = np.nanmedian(param, axis = 0)
+            param2 = np.nanmedian(param2, axis = 0) if param2 is not None else None
             cv_var_train, cv_var_test, all_weights, all_prediction = simple_train_and_test(design_mat,
                                                                                            spike_counts,
-                                                                                           lam=L2_value,
+                                                                                           param=param,
+                                                                                           param2=param2,
                                                                                            folds_outer=run_params[
                                                                                                'n_outer_folds'],
                                                                                                method = run_params['method'])
+    else: # fitting fullmodel using nested CV
+        for key in param_keys:
+            fit[key] = np.full((num_units, num_outer_folds), np.nan)
 
-    elif 'cell_L2_regularization_nested' in fit:
+        param_grid, param2_grid = get_parameter_grid(fit, method)
+
         if run_params['optimize_penalty_by_cell']:
             print(get_timestamp() + ': fitting each cell')
             with ProcessPoolExecutor(max_workers=10) as executor:
@@ -464,107 +489,64 @@ def evaluate_models(fit, design_mat, run_params):
                     for unit_no in range(num_units)
                 }
                 for future in tqdm(as_completed(futures), total=num_units, desc='progress'):
-                    unit_no, cv_train, cv_test, weights, prediction = future.result()
+                    unit_no, cv_train, cv_test, weights, prediction, optimal_parameters = future.result()
                     cv_var_train[unit_no] = cv_train
                     cv_var_test[unit_no] = cv_test
                     all_weights[:, unit_no] = weights.reshape(-1)
                     all_prediction[:, unit_no] = prediction.reshape(-1)
+                    fit = set_parameters_nested_CV(fit, unit_no, method, optimal_parameters)
 
         elif run_params['optimize_penalty_by_area']:
             areas = np.unique(fit['spike_count_arr']['structure'])
             for area in tqdm(areas, total=len(areas), desc='progress'):
                 unit_ids = np.where(fit['spike_count_arr']['structure'] == area)[0]
                 fit_area = spike_counts[:, unit_ids]
-                L2_value = np.unique(np.take(fit['cell_L2_regularization_nested'], unit_ids), axis=0)
-                cv_train, cv_test, weights, prediction = simple_train_and_test(design_mat, fit_area,
-                                                                               lam=L2_value,
-                                                                               folds_outer=run_params['n_outer_folds'],
-                                                                               method = run_params['method'])
-                cv_var_train[unit_ids] = cv_var_train
-                cv_var_test[unit_ids] = cv_var_test
-                all_weights[unit_ids] = weights
-                all_prediction[unit_ids] = prediction
-
-        elif run_params['optimize_penalty_by_firing_rate']:
-            rate_clusters = fit['spike_count_arr']['rate_clusters']
-            for cluster in tqdm(np.unique(rate_clusters), total=len(np.unique(rate_clusters)), desc='progress'):
-                unit_ids = np.where(rate_clusters == cluster)[0]
-                fit_rate = spike_counts[:, unit_ids]
-                L2_value = np.unique(np.take(fit['cell_L2_regularization_nested'], unit_ids), axis=0)
-                cv_train, cv_test, weights, prediction = simple_train_and_test(design_mat, fit_rate,
-                                                                               lam=L2_value,
-                                                                               folds_outer=run_params['n_outer_folds'],
-                                                                               method = run_params['method'])
-                cv_var_train[unit_ids] = cv_train
-                cv_var_test[unit_ids] = cv_test
-                all_weights[unit_ids] = weights
-                all_prediction[unit_ids] = prediction
-
-        else:
-            L2_value = np.unique(np.array(fit['cell_L2_regularization_nested']), axis=0)
-            cv_var_train, cv_var_test, all_weights, all_prediction = \
-                simple_train_and_test(design_mat, fit['spike_count_arr']['spike_counts'],
-                                      lam=L2_value,
-                                      folds_outer=run_params['n_outer_folds'],
-                                      method = run_params['method'])
-
-    else:
-        if run_params['optimize_penalty_by_cell']:
-            print(get_timestamp() + ': fitting each cell')
-            with ProcessPoolExecutor(max_workers=10) as executor:
-                futures = {
-                    executor.submit(process_unit, unit_no, design_mat.copy(), fit.copy(), run_params): unit_no
-                    for unit_no in range(num_units)
-                }
-                for future in tqdm(as_completed(futures), total=num_units, desc='progress'):
-                    unit_no, cv_train, cv_test, weights, prediction, lams = future.result()
-                    cv_var_train[unit_no] = cv_train
-                    cv_var_test[unit_no] = cv_test
-                    all_weights[:, unit_no] = weights.reshape(-1)
-                    all_prediction[:, unit_no] = prediction.reshape(-1)
-                    cell_L2_regularization_nested[unit_no] = lams
-
-        elif run_params['optimize_penalty_by_area']:
-            areas = np.unique(fit['spike_count_arr']['structure'])
-            for area in tqdm(areas, total=len(areas), desc='progress'):
-                unit_ids = np.where(fit['spike_count_arr']['structure'] == area)[0]
-                fit_area = spike_counts[:, unit_ids]
-                cv_train, cv_test, weights, prediction, lams = \
-                    nested_train_and_test(design_mat, fit_area, L2_grid=fit['L2_grid'],
-                                          folds_outer=run_params['n_outer_folds'],
-                                          folds_inner=run_params['n_inner_folds'], method = run_params['method'])
-
-                cv_var_train[unit_ids] = cv_train
-                cv_var_test[unit_ids] = cv_test
-                all_weights[:, unit_ids] = weights
-                all_prediction[:, unit_ids] = prediction
-                cell_L2_regularization_nested[unit_ids] = lams
-
-        elif run_params['optimize_penalty_by_firing_rate']:
-            num_clusters =  np.min([run_params['num_rate_clusters'], num_units])
-            rate_clusters = KMeans(n_clusters = run_params['num_rate_clusters'], random_state = 0).fit(fit['spike_count_arr']['firing_rate'].reshape(-1,1)).labels_
-            fit['spike_count_arr']['rate_clusters'] = rate_clusters
-            for cluster in tqdm(np.unique(rate_clusters), total=len(np.unique(rate_clusters)), desc='progress'):
-                unit_ids = np.where(rate_clusters == cluster)[0]
-                fit_rate = spike_counts[:, unit_ids]
-                cv_train, cv_test, weights, prediction, lams = \
-                    nested_train_and_test(design_mat, fit_rate, L2_grid=fit['L2_grid'],
+                cv_train, cv_test, weights, prediction, optimal_parameters = \
+                    nested_train_and_test(design_mat, fit_area,
                                           folds_outer=run_params['n_outer_folds'],
                                           folds_inner=run_params['n_inner_folds'],
+                                          param_grid=param_grid,
+                                          param2_grid=param2_grid,
                                           method = run_params['method'])
 
                 cv_var_train[unit_ids] = cv_train
                 cv_var_test[unit_ids] = cv_test
                 all_weights[:, unit_ids] = weights
                 all_prediction[:, unit_ids] = prediction
-                cell_L2_regularization_nested[unit_ids] = lams
+                fit = set_parameters_nested_CV(fit, unit_ids, method, optimal_parameters)
+
+        elif run_params['optimize_penalty_by_firing_rate']:
+            num_clusters =  np.min([run_params['num_rate_clusters'], num_units])
+            rate_clusters = KMeans(n_clusters = num_clusters, random_state = 0).fit(fit['spike_count_arr']['firing_rate'].reshape(-1,1)).labels_
+            fit['spike_count_arr']['rate_clusters'] = rate_clusters
+            for cluster in tqdm(np.unique(rate_clusters), total=len(np.unique(rate_clusters)), desc='progress'):
+                unit_ids = np.where(rate_clusters == cluster)[0]
+                fit_rate = spike_counts[:, unit_ids]
+                cv_train, cv_test, weights, prediction, optimal_parameters = \
+                    nested_train_and_test(design_mat, fit_rate,
+                                          folds_outer=run_params['n_outer_folds'],
+                                          folds_inner=run_params['n_inner_folds'],
+                                          param_grid=param_grid,
+                                          param2_grid=param2_grid,
+                                          method = run_params['method'])
+
+                cv_var_train[unit_ids] = cv_train
+                cv_var_test[unit_ids] = cv_test
+                all_weights[:, unit_ids] = weights
+                all_prediction[:, unit_ids] = prediction
+                fit = set_parameters_nested_CV(fit, unit_ids, method, optimal_parameters)
+
 
         else:
-            cv_var_train, cv_var_test, all_weights, all_prediction, cell_L2_regularization_nested = \
-                nested_train_and_test(design_mat, spike_counts, L2_grid=fit['L2_grid'],
+            cv_var_train, cv_var_test, all_weights, all_prediction, optimal_parameters = \
+                nested_train_and_test(design_mat, spike_counts,
                                       folds_outer=run_params['n_outer_folds'],
                                       folds_inner=run_params['n_inner_folds'],
+                                      param_grid=param_grid,
+                                      param2_grid=param2_grid,
                                       method = run_params['method'])
+            fit = set_parameters_nested_CV(fit, np.arange(num_units), method, optimal_parameters)
+
     model_label = run_params['model_label']
     fit[model_label] = {
         'weights': all_weights,
@@ -572,8 +554,9 @@ def evaluate_models(fit, design_mat, run_params):
         'cv_var_train': cv_var_train,
         'cv_var_test': cv_var_test
     }
-    if not np.isnan(cell_L2_regularization_nested).all():
-        fit['cell_L2_regularization_nested'] = cell_L2_regularization_nested
+
+    if model_label == 'fullmodel':
+        fit['fullmodel_fitted'] = True
 
     return fit
 
