@@ -274,91 +274,96 @@ def process_unit(unit_no, design_mat, fit, run_params):
     return unit_no, cv_train, cv_test, weights, prediction
 
 
-def evaluate_ridge(fit, design_mat, run_params):
+def optimize_model(fit, design_mat, run_params):
     '''
-        fit, model dictionary
-        design_mat, design matrix
-        run_params, dictionary of parameters, which needs to include:
-            optimize_penalty_by_cell     # If True, uses the best L2 value for each cell
-            optimize_penalty_by_area  # If True, uses the best L2 value for this session
-            use_fixed_penalty      # If True, uses the hard coded L2_fixed_lambda
+    Optimize model parameters by performing cross-validation and selecting the best regularization or rank values 
+    based on the provided parameters and data.
 
-            L2_fixed_lambda         # This value is used if L2_use_fixed_value
-            L2_grid_range           # Min/Max L2 values for optimization
-            L2_grid_num             # Number of L2 values for optimization
-            L2_grid_type            # log or linear
+    Parameters:
+    - fit: dict, contains model fitting information, including spike counts,and model parameters.
+    - design_mat: xarray.DataArray, the design matrix with data to train the model.
+    - run_params: dict, contains runtime parameters, including settings for model, optimization, penalty values, and cross-validation parameters.
 
-        returns fit, with the values added:
-            L2_grid                 # the L2 grid evaluated
-            for the case of no nested CV,
-                avg_L2_regularization      # the average optimal L2 value, or the fixed value
-                cell_L2_regularization     # the optimal L2 value for each cell
+    Returns:
+    - fit: dict, updated with the optimized parameters and cross-validation results.
+
     '''
 
     spike_counts = fit['spike_count_arr']['spike_counts']
-    # x_is_continuous = [run_params['kernels'][kernel_name.rsplit('_', 1)[0]]['type'] == 'continuous'
-    #                    for kernel_name in design_mat.weights.values]
+
     num_units = spike_counts.shape[1]
     T = spike_counts.shape[0]
+    method = run_params['method']
+    param_keys = ['cell_regularization', 'cell_L1_ratio', 'cell_rank']
+    param_keys += [key + '_nested' for key in param_keys]
 
     if run_params['use_fixed_penalty']:
         print(get_timestamp() + 'Using a hard-coded regularization value')
-        fit['L2_regularization'] = run_params['L2_fixed_lambda']
+
+        for key in param_keys:
+            fit[key] = None
+        fit['cell_regularization'] = run_params['L2_fixed_lambda'] if method in ['ridge_regression', 'elastic_net_regression'] else None
+        fit['cell_regularization'] = run_params['L1_fixed_lambda'] if method in ['lasso_regression'] else fit['cell_regularization']
+        fit['cell_L1_ratio'] = run_params['L1_ratio_fixed'] if method == 'elastic_net_regression' else None
+        fit['cell_rank'] = run_params['rank_fixed'] if method == 'reduced_rank_regression' else None
 
     elif run_params['no_nested_CV']:
-        if run_params['L2_grid_type'] == 'log':
-            fit['L2_grid'] = np.geomspace(run_params['L2_grid_range'][0],
-                                        run_params['L2_grid_range'][1],
-                                        num=run_params['L2_grid_num'])
-        else:
-            fit['L2_grid'] = np.linspace(run_params['L2_grid_range'][0],
-                                        run_params['L2_grid_range'][1],
-                                        num=run_params['L2_grid_num'])
 
-        if run_params['method'] != 'lasso_regression':
-            fit['L2_grid'] = np.array([0] + list(fit['L2_grid']))
+        if run_params['fullmodel_fitted']:
+            return fit
 
+        for key in param_keys:
+            fit[key] = np.full((num_units), np.nan)
+        fit = set_parameter_grids(fit, run_params)
+
+        # select a subset of the data to optimize on
         T_optimize = int(run_params['optimize_on'] * T)
-        samples_optimize = np.random.choice(T, T_optimize, replace=False)
+        samples_optimize = np.random.choice(T, T_optimize, replace=False) if run_params['optimize_on'] < 1 else np.arange(T_optimize)
         design_mat_optimize = design_mat.copy()
         design_mat_optimize = design_mat_optimize.isel(timestamps=samples_optimize)
         design_mat_optimize['weights'] = design_mat.weights
         design_mat_optimize['timestamps'] = design_mat.timestamps[samples_optimize]
         spike_counts_optimize = spike_counts[samples_optimize, :]
 
-        train_cv = np.full((num_units, len(fit['L2_grid'])), np.nan)
-        test_cv = np.full((num_units, len(fit['L2_grid'])), np.nan)
+        param_grid, param2_grid = get_parameter_grid(fit, method)
 
-        print(get_timestamp() + ': optimizing L2 penalty for all cells')
-        for L2_index, L2_value in enumerate(fit['L2_grid']):
-            cv_var_train, cv_var_test, _, _, = simple_train_and_test(design_mat_optimize,
-                                                                        spike_counts_optimize,
-                                                                        lam=L2_value,
-                                                                        folds_outer=run_params['n_outer_folds'],
-                                                                        method = run_params['method'])
-            train_cv[:, L2_index] = np.nanmean(cv_var_train, axis=1)
-            test_cv[:, L2_index] = np.nanmean(cv_var_test, axis=1)
-            test_cv[:, L2_index] = np.nanmean(cv_var_test, axis=1)
+        grid_shape = (num_units, len(param_grid), len(param2_grid)) if param2_grid is not None else (num_units, len(param_grid))
+        train_cv = np.full(grid_shape, np.nan)
+        test_cv = np.full(grid_shape, np.nan)
 
-        fit['avg_L2_regularization'] = np.mean([fit['L2_grid'][x] for x in np.nanargmax(test_cv, 1)])
-        fit['cell_L2_regularization'] = [fit['L2_grid'][x] for x in np.nanargmax(test_cv, 1)]
-        fit['L2_test_cv'] = test_cv
-        fit['L2_train_cv'] = train_cv
-        fit['L2_at_grid_min'] = [x == 0 for x in np.nanargmax(test_cv, 1)]
-        fit['L2_at_grid_max'] = [x == (len(fit['L2_grid']) - 1) for x in np.nanargmax(test_cv, 1)]
+        print(get_timestamp() + ': optimizing parameters for all cells')
+        for index1, param in enumerate(param_grid):
+            for index2, param2 in (enumerate(param2_grid) if param2_grid is not None else [(None, None)]):
+                # Run simple train and test for each parameter combination
+                cv_var_train, cv_var_test, _, _, = simple_train_and_test(design_mat_optimize, spike_counts_optimize,
+                                                                         param=param, param2=param2,
+                                                                         folds_outer=run_params['n_outer_folds'],
+                                                                         method=method)
+
+                train_cv[:, index1, index2] = np.nanmean(cv_var_train, axis=1) if param2_grid is not None else np.nanmean(cv_var_train, axis=1).reshape(-1, 1)
+                test_cv[:, index1, index2] = np.nanmean(cv_var_test, axis=1) if param2_grid is not None else np.nanmean(cv_var_test, axis=1).reshape(-1, 1)
+
+
+        # Find the best parameter values for each cell
+        if method in ['ridge_regression', 'lasso_regression']:
+            fit['cell_regularization'] = [param_grid[x] for x in np.nanargmax(test_cv, 1)]
+
+        elif method == 'elastic_net_regression':
+            for unit_no in range(num_units):
+                max_row, max_col = np.unravel_index(np.argmax(test_cv[unit_no]), test_cv[unit_no].shape)
+                fit['cell_regularization'] = param_grid[max_row]
+                fit['cell_L1_ratio'] = param2_grid[max_col]
+
+        elif method == 'reduced_rank_regression':
+            fit['cell_rank'] = [param_grid[x] for x in np.nanargmax(test_cv, 1)]
+
+
+        fit['test_cv_grid'] = test_cv
+        fit['train_cv_grid'] = train_cv
 
     else:
-        if run_params['L2_grid_type'] == 'log':
-            fit['L2_grid'] = np.geomspace(run_params['L2_grid_range'][0],
-                                        run_params['L2_grid_range'][1],
-                                        num=run_params['L2_grid_num'])
-        else:
-            fit['L2_grid'] = np.linspace(run_params['L2_grid_range'][0],
-                                        run_params['L2_grid_range'][1],
-                                        num=run_params['L2_grid_num'])
 
-        if run_params['method'] != 'lasso_regression':
-            fit['L2_grid'] = np.array([0] + list(fit['L2_grid']))
+        fit = set_parameter_grids(fit, run_params, design_mat.data)
 
     return fit
 
