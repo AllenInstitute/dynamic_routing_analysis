@@ -172,6 +172,67 @@ def simple_train_and_test(design_mat, spike_counts, param, param2 = None, folds_
 
     return clean_r2_vals(train_r2), clean_r2_vals(test_r2), weights, y_pred
 
+def get_parameter_grid(fit,method):
+    param_grid = fit['L2_grid'] if method in ['ridge_regression',  'elastic_net_regression'] else None
+    param_grid = fit['rank_grid'] if method == 'reduced_rank_regression' else param_grid
+    param_grid = fit['L1_grid'] if method in ['lasso_regression'] else param_grid
+    param2_grid = fit['L1_ratio_grid'] if method == 'elastic_net_regression' else None
+    return param_grid, param2_grid
+
+def get_parameters(fit, method, suffix = ''):
+    param = fit[f'cell_regularization{suffix}'] if method in ['ridge_regression', 'lasso_regression', 'elastic_net_regression'] else fit[f'cell_rank{suffix}']
+    param2 = fit[f'cell_L1_ratio{suffix}'] if method == 'elastic_net_regression' else None
+    return param, param2
+
+def set_parameter_grids(fit, run_params, X = None):
+    method = run_params['method']
+
+    if method in ['ridge_regression', 'elastic_net_regression']:
+            fit['L2_grid'] = np.geomspace(
+                run_params['L2_grid_range'][0],
+                run_params['L2_grid_range'][1],
+                num=run_params['L2_grid_num']
+            ) if run_params['L2_grid_type'] == 'log' else np.linspace(
+                run_params['L2_grid_range'][0],
+                run_params['L2_grid_range'][1],
+                num=run_params['L2_grid_num']
+            )
+
+    if method == 'lasso_regression':
+        fit['L1_grid'] = np.geomspace(
+            run_params['L1_grid_range'][0],
+            run_params['L1_grid_range'][1],
+            num=run_params['L1_grid_num']
+        ) if run_params['L1_grid_type'] == 'log' else np.linspace(
+            run_params['L1_grid_range'][0],
+            run_params['L1_grid_range'][1],
+            num=run_params['L1_grid_num']
+        )
+
+    if method == 'elastic_net_regression':
+        fit['L1_ratio_grid'] = np.geomspace(
+            run_params['L1_ratio_grid_range'][0],
+            run_params['L1_ratio_grid_range'][1],
+            num=run_params['L1_ratio_grid_num']
+        ) if run_params['L1_ratio_grid_type'] == 'log' else np.linspace(
+            run_params['L1_ratio_grid_range'][0],
+            run_params['L1_ratio_grid_range'][1],
+            num=run_params['L1_ratio_grid_num']
+        )
+
+    if method == 'reduced_rank_regression':
+        fit['rank_grid'] = np.linspace(1, np.min(X.shape), num=run_params['rank_grid_num']).astype(int)
+
+    return fit
+
+def set_parameters_nested_CV(fit, unit_ids, method, optimal_params):
+    if method in ['ridge_regression', 'lasso_regression', 'elastic_net_regression']:
+        fit['cell_regularization_nested'][unit_ids] = optimal_params['lam']
+        if method == 'elastic_net_regression':
+            fit['cell_L1_ratio_nested'][unit_ids] = optimal_params['l1_ratio']
+    elif method == 'reduced_rank_regression':
+        fit['cell_rank_nested'][unit_ids] = optimal_params['rank']
+    return fit
 
 # Define function to process a single unit
 def process_unit(unit_no, design_mat, fit, run_params):
