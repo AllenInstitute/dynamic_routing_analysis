@@ -6,7 +6,6 @@ import models as mu
 import numpy as np
 from numpy.linalg import LinAlgError
 from sklearn.cluster import KMeans
-from sklearn.linear_model import LassoLars as SklearnLasso
 from sklearn.model_selection import GridSearchCV, KFold
 from tqdm import tqdm
 
