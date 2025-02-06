@@ -62,6 +62,8 @@ def nested_train_and_test(design_mat, spike_counts, param_grid, param2_grid = No
 
     train_r2 = np.zeros((y.shape[-1], folds_outer))
     test_r2 = np.zeros((y.shape[-1], folds_outer))
+    param_dict = get_param_grid(method, param_grid, param2_grid = param2_grid)
+    optimal_params = {key: np.zeros(folds_outer) + np.nan for key in param_dict.keys()}
 
     # outer CV
     for k, (train_index, test_index) in enumerate(kf.split(X)):
@@ -123,6 +125,16 @@ def simple_train_and_test(design_mat, spike_counts, param, param2 = None, folds_
         weights: Model weights after training on the entire dataset.
         y_pred: Predictions on the entire dataset.
     """
+
+    def ensure_param(param, folds_outer):
+        if param is None:
+            return param
+        if not isinstance(param, list) and not isinstance(param, np.ndarray):
+            return [param] * folds_outer
+        if len(param) != folds_outer:
+            raise ValueError(f"Length of parameter, ({len(param)}) must match number of folds ({folds_outer}).")
+        return param
+
     X = design_mat.data
     y = spike_counts
 
