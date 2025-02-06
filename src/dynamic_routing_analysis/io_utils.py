@@ -306,6 +306,7 @@ def setup_units_table(run_params, units_table):
     if areas_to_exclude:
         units_table = units_table[~units_table.structure.isin(areas_to_exclude)]
 
+    logger.info(f'Total number of units to run = {len(units_table)}')
     return units_table
 
 
