@@ -106,14 +106,15 @@ def nested_train_and_test(design_mat, spike_counts, param_grid, param2_grid = No
     return clean_r2_vals(train_r2), clean_r2_vals(test_r2), weights, y_pred, optimal_params
 
 
-def simple_train_and_test(design_mat, spike_counts, lam, folds_outer=10, method = 'ridge_regression'):
+def simple_train_and_test(design_mat, spike_counts, param, param2 = None, folds_outer=10, method = 'ridge_regression'):
     """
     Train and test a Ridge regression model using cross-validation with specified lambda values.
 
     Args:
         design_mat: Input design matrix containing data.
         spike_counts: Target variable (spike counts).
-        lam: Regularization parameter (single value or a list of values for each fold).
+        param: Regularizer parameter for ridge, lasso and elastic net, and rank for RRR (single value or a list of values for each fold).
+        param2: Mixing parameter (e.g., l1_ratio for elastic net), if applicable.
         folds_outer: Number of folds for outer cross-validation.
 
     Returns:
@@ -128,22 +129,20 @@ def simple_train_and_test(design_mat, spike_counts, lam, folds_outer=10, method 
     kf = KFold(n_splits=folds_outer, shuffle=True, random_state=0)
     test_r2 = np.zeros((y.shape[-1], folds_outer))
     train_r2 = np.zeros((y.shape[-1], folds_outer))
-
-    # If lam is a scalar, convert it to a list with the same value for each fold
-    if not isinstance(lam, list):
-        lam = [lam] * folds_outer
-
-    if len(lam) != folds_outer:
-        raise ValueError(f"Length of lam ({len(lam)}) must match number of folds ({folds_outer}).")
+    param = ensure_param(param, folds_outer)
+    param2 = ensure_param(param2, folds_outer)
 
     for k, (train_index, test_index) in enumerate(kf.split(X)):
         X_train, y_train = X[train_index], y[train_index]
         X_test, y_test = X[test_index], y[test_index]
 
-        if method == 'ridge_regression':
-            model = Ridge(lam=lam[k])  # Use the k-th lambda value for this fold
-        elif method == 'lasso_regression':
-            model = Lasso(lam=lam[k])
+        if method in ['ridge_regression', 'lasso_regression']:
+            model = model_mapping[method](lam=param[k])  # Use the k-th lambda value for this fold
+        elif method == 'elastic_net_regression':
+            model = model_mapping[method](lam=param[k], l1_ratio=param2[k])
+        elif method == 'reduced_rank_regression':
+            model = model_mapping[method](rank=param[k])
+
         try:
             model.fit(X_train, y_train)
         except LinAlgError:
@@ -159,11 +158,14 @@ def simple_train_and_test(design_mat, spike_counts, lam, folds_outer=10, method 
     if np.sum(test_r2) == 0:
         raise LinAlgError("Test cv$R^2$ values were never updated")
 
-    # Train the model on the entire dataset with the median lambda value
-    if method == 'ridge_regression':
-        model = Ridge(lam=np.median(lam))
-    elif method == 'lasso_regression':
-        model = Lasso(lam=np.median(lam))
+    # Train the model on the entire dataset with the median parameter value
+    if method in ['ridge_regression', 'lasso_regression']:
+        model = model_mapping[method](lam=np.nanmedian(param)).fit(X, y)
+    elif method == 'elastic_net_regression':
+        model = model_mapping[method](lam=np.nanmedian(param), l1_ratio=np.nanmedian(param2))
+    elif method == 'reduced_rank_regression':
+        model = model_mapping[method](rank=np.nanmedian(param)).fit(X, y)
+
     model.fit(X, y)
     weights = model.W
     y_pred = model.predict(X)
