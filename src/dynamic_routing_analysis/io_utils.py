@@ -490,7 +490,9 @@ def process_spikes(units_table, run_params, fit):
     '''
 
     # identifies good units
+    logger.debug(f'Setting up units table with {len(units_table)} units')
     units_table = setup_units_table(run_params, units_table)
+    logger.debug(f'Set up units table with {len(units_table)} units')
 
     spikes = np.zeros((fit['timebins'].shape[0], len(units_table)))
 
