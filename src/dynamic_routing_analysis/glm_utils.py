@@ -249,30 +249,27 @@ def process_unit(unit_no, design_mat, fit, run_params):
     - Tuple with results depending on the specified function.
     """
     fit_cell = fit['spike_count_arr']['spike_counts'][:, unit_no].reshape(-1, 1)
+    method = run_params['method']
 
+    # Determine regularization and other parameters based on method and run_params
     if run_params['no_nested_CV']:
-        lam_value = fit['cell_L2_regularization'][unit_no]
-    elif 'cell_L2_regularization_nested' in run_params.keys():
-        lam_value = fit['cell_L2_regularization_nested'][unit_no]
+        param, param2 = get_parameters(fit, method)
+    elif run_params["fullmodel_fitted"]:
+        param, param2 = get_parameters(fit, method, '_nested')
     else:
+        param_grid, param2_grid = get_parameter_grid(fit, method)
+
         # If nested CV is enabled, use nested_train_and_test
-        cv_train, cv_test, weights, prediction, lams = nested_train_and_test(
-            design_mat,
-            fit_cell,
-            L2_grid=fit['L2_grid'],
-            folds_outer=run_params['n_outer_folds'],
-            folds_inner=run_params['n_inner_folds'],
-            method = run_params['method']
+        cv_train, cv_test, weights, prediction, optimal_parameters = nested_train_and_test(
+            design_mat, fit_cell, param_grid=param_grid, param2_grid=param2_grid,
+            folds_outer=run_params['n_outer_folds'], folds_inner=run_params['n_inner_folds'], method=method
         )
-        return unit_no, cv_train, cv_test, weights, prediction, lams
+        return unit_no, cv_train, cv_test, weights, prediction, optimal_parameters
 
     # Perform simple training and testing for regular cases
     cv_train, cv_test, weights, prediction = simple_train_and_test(
-        design_mat,
-        fit_cell,
-        lam=lam_value,
-        folds_outer=run_params['n_outer_folds'],
-        method=run_params['method']
+        design_mat, fit_cell, param=param[unit_no], param2=param2[unit_no],
+        folds_outer=run_params['n_outer_folds'], method=method
     )
     return unit_no, cv_train, cv_test, weights, prediction
 
