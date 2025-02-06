@@ -34,81 +34,32 @@ def nested_train_and_test(design_mat, spike_counts, param_grid, param2_grid = No
         folds_inner: Number of inner cross-validation folds.
         method: Regression method ('ridge_regression', 'lasso_regression', 'elastic_net_regression', 'reduced_rank_regression').
 
-        Returns:
-        self
-        '''
-        try:
-            # Use sklearn's Lasso for coordinate descent
-            lasso = SklearnLasso(alpha=self.lam, fit_intercept=False, max_iter=1000)
+    Returns:
+        train_r2: Cleaned R^2 values for training data across outer CV folds.
+        test_r2: Cleaned R^2 values for test data across outer CV folds.
+        weights: Fitted model weights.
+        y_pred: Predictions on the entire dataset using the final model.
+        optimal_params: Optimal parameters chosen for each fold during outer CV.
+    """
 
-            # If y has multiple targets, fit each one independently
-            if y.ndim == 1:
-                lasso.fit(X, y)
-                self.W = lasso.coef_
-            else:
-                self.W = np.zeros((X.shape[1], y.shape[1]))
-                for i in range(y.shape[1]):
-                    lasso.fit(X, y[:, i])
-                    self.W[:, i] = lasso.coef_
+    def get_param_grid(method, param_grid, param2_grid = None):
+        """Get the parameter grid for the specified method."""
+        param_dict = {}
+        if method in ['ridge_regression','lasso_regression', 'elastic_net_regression']:
+            param_dict['lam'] = param_grid
+            if method == 'elastic_net_regression':
+                param_dict['l1_ratio'] = param2_grid
+        elif method == 'reduced_rank_regression':
+            param_dict['rank'] = param_grid
+        else:
+            raise ValueError(f"Unknown method: {method}")
+        return param_dict
 
-        except Exception as e:
-            print("Unexpected error encountered:", e)
-            raise  # Re-raise the exception to propagate unexpected errors
-
-        assert ~np.isnan(np.sum(self.W)), 'Weights contain NaNs'
-
-        self.mean_r2 = self.score(X, y)
-        return self
-
-    def get_params(self, deep=True):
-        return {'lam': self.lam}
-
-    def set_params(self, **parameters):
-        for parameter, value in parameters.items():
-            setattr(self, parameter, value)
-        return self
-
-    def score(self, X, y):
-        '''
-        Computes the fraction of variance in y explained by the linear model y = X*W.
-
-        Parameters:
-        X: np.ndarray
-            Input data matrix of shape (n_samples, n_features).
-        y: np.ndarray
-            Target matrix of shape (n_samples, n_targets).
-
-        Returns:
-        float
-            Mean R^2 across all targets.
-        '''
-        y_pred = self.predict(X)
-        var_total = np.var(y, axis=0)  # Total variance in the target
-        var_resid = np.var(y - y_pred, axis=0)  # Residual variance
-        self.r2 = (var_total - var_resid) / var_total
-        return np.nanmean(self.r2)
-
-    def predict(self, X):
-        '''
-        Predicts outputs using the linear model.
-
-        Parameters:
-        X: np.ndarray
-            Input data matrix of shape (n_samples, n_features).
-
-        Returns:
-        np.ndarray
-            Predicted outputs of shape (n_samples, n_targets).
-        '''
-        return np.dot(X, self.W)
-
-
-def nested_train_and_test(design_mat, spike_counts, L2_grid, folds_outer=10, folds_inner=6, method = 'ridge_regression'):
     X = design_mat.data
     y = spike_counts
 
     kf = KFold(n_splits=folds_outer, shuffle=True, random_state=0)
-    lams = np.zeros(folds_outer) + np.nan
+
     train_r2 = np.zeros((y.shape[-1], folds_outer))
     test_r2 = np.zeros((y.shape[-1], folds_outer))
 
@@ -119,22 +70,20 @@ def nested_train_and_test(design_mat, spike_counts, L2_grid, folds_outer=10, fol
 
         # inner CV
         cv_inner = KFold(n_splits=folds_inner, shuffle=True, random_state=1)
+        model = model_mapping.get(method)()
 
-        if method == 'ridge_regression':
-            model = Ridge()
-        elif method == 'lasso_regression':
-            model = Lasso()
 
         try:
-            search = GridSearchCV(model, {'lam': np.array(L2_grid)}, cv=cv_inner, refit=True,
-                              n_jobs=1)
+            search = GridSearchCV(model, param_dict, cv = cv_inner, refit=True, n_jobs=1)
         except LinAlgError:
             logger.info(f"Fold {k} failed due to a linear algebra error. Skipping fold.")
             continue
 
         result = search.fit(X_train, y_train)
         best_model = result.best_estimator_
-        lams[k] = result.best_params_['lam']
+
+        for key in param_dict.keys():
+            optimal_params[key][k] = search.best_params_[key]
 
         # needs to be calculated because it updates
         # the r2 of the best model with the test-r2
@@ -147,16 +96,14 @@ def nested_train_and_test(design_mat, spike_counts, L2_grid, folds_outer=10, fol
     if np.sum(test_r2) == 0:
         raise LinAlgError("Test cv$R^2$ values were never updated")
 
-    # Train the model on the entire dataset with the median lambda value
-    lam = np.median(lams)
-    if method == 'ridge_regression':
-        model = Ridge(lam=lam).fit(X, y)
-    elif method == 'lasso_regression':
-        model = Lasso(lam=lam).fit(X, y)
+    # Train the model on the entire dataset with the median parameter value
+    median_param = {key: np.nanmedian(optimal_params[key]) for key in optimal_params.keys()}
+    model = model_mapping[method](**median_param).fit(X, y)
+
     weights = model.W
     y_pred = model.predict(X)
 
-    return clean_r2_vals(train_r2), clean_r2_vals(test_r2), weights, y_pred, lams
+    return clean_r2_vals(train_r2), clean_r2_vals(test_r2), weights, y_pred, optimal_params
 
 
 def simple_train_and_test(design_mat, spike_counts, lam, folds_outer=10, method = 'ridge_regression'):
