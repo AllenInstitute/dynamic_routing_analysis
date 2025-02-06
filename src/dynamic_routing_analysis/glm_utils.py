@@ -2,6 +2,7 @@ import logging
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+import models as mu
 import numpy as np
 from numpy.linalg import LinAlgError
 from sklearn.cluster import KMeans
@@ -13,90 +14,26 @@ logger = logging.getLogger(__name__) # debug < info < warning < error
 
 np.random.seed(0)
 
-class Ridge:
-    def __init__(self, lam=None, W=None):
-        self.lam = lam
-        self.r2 = None
-        self.mean_r2 = None
-        self.W = W
+model_mapping = {
+    'ridge_regression': mu.Ridge,
+    'lasso_regression': mu.Lasso,
+    'elastic_net_regression': mu.ElasticNet,
+    'reduced_rank_regression': mu.ReducedRankRegression
+}
 
-    def fit(self, X, y):
-        '''
-        Analytical OLS solution with added L2 regularization penalty.
-        Y: shape (n_timestamps * n_cells)
-        X: shape (n_timestamps * n_kernel_params)
-        lam (float): Strength of L2 regularization (hyperparameter to tune)
-        '''
+def nested_train_and_test(design_mat, spike_counts, param_grid, param2_grid = None, folds_outer=10, folds_inner=6, method = 'ridge_regression'):
 
-        # Compute the weights
-        try:
-            if self.lam == 0:
-                self.W = np.dot(np.linalg.inv(np.dot(X.T, X)), np.dot(X.T, y))
-                self.W = self.W if ~np.isnan(np.sum(self.W)) else np.zeros(self.W.shape) # if weights contain NaNs, set to zeros
-            else:
-                self.W = np.dot(np.linalg.inv(np.dot(X.T, X) + self.lam * np.eye(X.shape[-1])),
-                                np.dot(X.T, y))
-        except LinAlgError as e:
-            logger.info(f"Matrix inversion failed due to a linear algebra error:{e}. Falling back to pseudo-inverse.")
-            # Fallback to pseudo-inverse
-            if self.lam == 0:
-                self.W = np.dot(np.linalg.pinv(np.dot(X.T, X)), np.dot(X.T, y))
-            else:
-                self.W = np.dot(np.linalg.pinv(np.dot(X.T, X) + self.lam * np.eye(X.shape[-1])),
-                                np.dot(X.T, y))
-        except Exception as e:
-            print("Unexpected error encountered:", e)
-            raise  # Re-raise the exception to propagate unexpected errors
+    """
+    Performs nested cross-validation for model selection and evaluation.
 
-        assert ~np.isnan(np.sum(self.W)), 'Weights contain NaNs'
-
-        self.mean_r2 = self.score(X, y)
-
-        return self
-
-    def get_params(self, deep=True):
-        return {'lam': self.lam}
-
-    def set_params(self, **parameters):
-        for parameter, value in parameters.items():
-            setattr(self, parameter, value)
-        return self
-
-    def score(self, X, y):
-        '''
-        Computes the fraction of variance in fit_trace_arr explained by the linear model y = X*W
-        y: (n_timepoints, n_cells)
-        W: (kernel_params, n_cells)
-        X: (n_timepoints, n_kernel_params)
-        '''
-        # Y = X.values @ W.values
-        y_pred = self.predict(X)
-        var_total = np.var(y, axis=0)  # Total variance in the ophys trace for each cell
-        var_resid = np.var(y - y_pred, axis=0)  # Residual variance in the difference between the model and data
-        self.r2 = (var_total - var_resid) / var_total
-        return np.nanmean(self.r2)  # Fraction of variance explained by linear model
-
-    def predict(self, X):
-        y = np.dot(X, self.W)
-        return y
-
-
-class Lasso:
-    def __init__(self, lam=None, W=None):
-        self.lam = lam  # Regularization strength (alpha in sklearn)
-        self.W = W  # Model weights
-        self.r2 = None  # R^2 for each output variable
-        self.mean_r2 = None  # Mean R^2 across all output variables
-
-    def fit(self, X, y):
-        '''
-        Fits the Lasso model using coordinate descent.
-
-        Parameters:
-        X: np.ndarray
-            Input data matrix of shape (n_samples, n_features).
-        y: np.ndarray
-            Target matrix of shape (n_samples, n_targets).
+    Args:
+        design_mat: Design matrix (X) containing predictor variables.
+        spike_counts: Response variable (y).
+        param_grid: Regularizer parameter grid for ridge, lasso and elastic net, and rank grid for RRR(e.g., lambda values).
+        param2_grid: Mixing parameter grid (e.g., l1_ratio for elastic net), if applicable.
+        folds_outer: Number of outer cross-validation folds.
+        folds_inner: Number of inner cross-validation folds.
+        method: Regression method ('ridge_regression', 'lasso_regression', 'elastic_net_regression', 'reduced_rank_regression').
 
         Returns:
         self
