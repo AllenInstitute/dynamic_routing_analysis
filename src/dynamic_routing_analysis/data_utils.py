@@ -13,7 +13,7 @@ vid_angle_npc_names={
     'eye':'eye',
 }
 
-def load_trials_or_units(session, table_name):
+def load_trials_or_units(session, table_name, version='any'):
     # convenience function to load trials or units from cache if available,
     # otherwise from npc_sessions
     if isinstance(session, pynwb.NWBFile):
@@ -22,7 +22,7 @@ def load_trials_or_units(session, table_name):
     if table_name == 'trials':
         try:
             table=pd.read_parquet(
-                    npc_lims.get_cache_path('trials',session.id,version='any')
+                    npc_lims.get_cache_path('trials',session.id,version=version)
                 )
             print(session.id,'cached trials loaded')
         except:
@@ -35,7 +35,7 @@ def load_trials_or_units(session, table_name):
     elif table_name == 'units':
         try:
             table=pd.read_parquet(
-                    npc_lims.get_cache_path('units',session.id,version='any')
+                    npc_lims.get_cache_path('units',session.id,version=version)
                 )
             print(session.id,'cached units loaded')
         except:
