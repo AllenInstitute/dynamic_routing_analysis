@@ -445,12 +445,19 @@ def establish_timebins(run_params, fit, behavior_info):
     bin_ends_all = bin_starts_all + run_params['spike_bin_width']
     timebins_all = np.vstack([bin_starts_all, bin_ends_all]).T
 
-    fit['timebins_all'] = timebins_all
-    fit['bin_centers_all'] = bin_starts_all + run_params['spike_bin_width'] / 2
-    fit['epoch_trace_all'] = epoch_trace_all
-    precision = 5
-    rounded_times = np.round(timebins[:, 0], precision)
-    fit['mask'] = np.array([index for index, value in enumerate(timebins_all[:, 0]) if np.round(value, precision) in rounded_times])
+    if run_params["input_offsets"]:
+        fit['timebins_all'] = timebins_all
+        fit['bin_centers_all'] = bin_starts_all + run_params['spike_bin_width'] / 2
+        fit['epoch_trace_all'] = epoch_trace_all
+        precision = 5
+        rounded_times = np.round(timebins[:, 0], precision)
+        fit['mask'] = np.array([index for index, value in enumerate(timebins_all[:, 0]) if np.round(value, precision) in rounded_times])
+    else:
+        fit['timebins_all'] = timebins
+        fit['bin_centers_all'] = bin_starts + run_params['spike_bin_width'] / 2
+        fit['epoch_trace_all'] = epoch_trace
+        fit['mask'] = np.arange(timebins.shape[0])
+
 
     assert len(fit['mask']) == timebins.shape[0], 'Incorrect masking, recheck timebins.'
     # potentially a precision problem
