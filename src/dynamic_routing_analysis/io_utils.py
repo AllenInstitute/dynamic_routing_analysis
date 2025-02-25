@@ -438,6 +438,10 @@ def establish_timebins(run_params, fit, behavior_info):
     bin_starts_all = np.concatenate(bin_starts_all, axis=0)
     epoch_trace_all = np.concatenate(epoch_trace_all)
 
+    ind = np.where(np.diff(bin_starts_all) < fit['spike_bin_width'])[0]
+    bin_starts_all = np.delete(bin_starts_all, ind)
+    epoch_trace_all = np.delete(epoch_trace_all, ind)
+
     sorted_indices = np.argsort(bin_starts_all)
     bin_starts_all = bin_starts_all[sorted_indices]
     epoch_trace_all = epoch_trace_all[sorted_indices]
@@ -445,7 +449,7 @@ def establish_timebins(run_params, fit, behavior_info):
     bin_ends_all = bin_starts_all + run_params['spike_bin_width']
     timebins_all = np.vstack([bin_starts_all, bin_ends_all]).T
 
-    if run_params["input_offsets"]:
+    if run_params["input_offsets"] or 'full' not in run_params['time_of_interest'] :
         fit['timebins_all'] = timebins_all
         fit['bin_centers_all'] = bin_starts_all + run_params['spike_bin_width'] / 2
         fit['epoch_trace_all'] = epoch_trace_all
