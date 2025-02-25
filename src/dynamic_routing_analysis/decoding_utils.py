@@ -2858,13 +2858,23 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
 
 def concat_decoder_summary_tables(dir,savepath):
 
+    LP_keys = ['session_id', 'project', 'n_good_blocks','cross_modal_dprime', 'true_accuracy_all',
+       'null_accuracy_mean_all', 'null_accuracy_median_all',
+       'null_accuracy_std_all', 'p_value_all',
+       'true_accuracy_all_trials_no_shift_all']
+
     #create summary folder if does not exist
     if not upath.UPath(savepath).is_dir():
             upath.UPath(savepath).mkdir(parents=True)
 
     decoder_results_summary_files=[]
     for p in dir.glob('*decoding_results.csv'):
-        decoder_results_summary_files.append(pd.read_csv(p))
+        session_file = pd.read_csv(p)
+        if len(session_file) == 1:
+            decoder_results_summary_files.append(session_file[LP_keys])
+        else:
+            decoder_results_summary_files.append(session_file)
+
     decoder_results_summary=pd.concat(decoder_results_summary_files)
     decoder_results_summary.to_csv(upath.UPath(savepath) / 'decoder_results_summary.csv')
 
