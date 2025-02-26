@@ -77,6 +77,14 @@ class RunParams:
         master_kernels_list = {
             'intercept': {'function_call': 'intercept', 'type': 'discrete', 'length': 0, 'offset': 0,
                         'orthogonalize': None, 'num_weights': None, 'dropout': True, 'text': 'constant value'},
+            'vis1': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 0, 'orthogonalize': None,
+                        'num_weights': None, 'dropout': True, 'text': 'target vis stim'},
+            'sound1': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 0, 'orthogonalize': None,
+                        'num_weights': None, 'dropout': True, 'text': 'target aud stim'},
+            'vis2': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 0, 'orthogonalize': None,
+                        'num_weights': None, 'dropout': True, 'text': 'non-target aud stim'},
+            'sound2': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 0, 'orthogonalize': None,
+                        'num_weights': None, 'dropout': True, 'text': 'non-target vis stim'},
             'vis1_vis': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 0, 'orthogonalize': None,
                         'num_weights': None, 'dropout': True, 'text': 'target stim in rewarded context'},
             'sound1_vis': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 0, 'orthogonalize': None,
@@ -129,8 +137,9 @@ class RunParams:
 
         # Define categories for input variables
         categories = {
-            'stimulus': ['vis1_vis', 'sound1_vis', 'vis2_vis', 'sound2_vis', 'vis1_aud', 'sound1_aud', 'vis2_aud',
+            'stimulus_context': ['vis1_vis', 'sound1_vis', 'vis2_vis', 'sound2_vis', 'vis1_aud', 'sound1_aud', 'vis2_aud',
                         'sound2_aud'],
+            'stimulus': ['vis1', 'sound1', 'vis2', 'sound2'],
             'movements': ['ears', 'nose', 'jaw', 'whisker_pad', 'running', 'pupil', 'licks'],
             'movements_no_licks': ['ears', 'nose', 'jaw', 'whisker_pad', 'running', 'pupil'],
             'choice': ['hit', 'miss', 'correct_reject', 'false_alarm'],
@@ -724,10 +733,16 @@ def choice(kernel_name, session, fit, behavior_info):
 
 
 def stimulus(kernel_name, session, fit, behavior_info):
-    stim_name, context_name = kernel_name.split('_')
+    if '_' in kernel_name:
+        stim_name, context_name = kernel_name.split('_')
+        filtered_trials = behavior_info['trials'][
+            (behavior_info['trials'].stim_name == stim_name) & (behavior_info['trials'].context_name == context_name)]
+    else:
+        stim_name = kernel_name
+        context_name = 'all'
+        filtered_trials = behavior_info['trials'][behavior_info['trials'].stim_name == stim_name]
     bin_starts, bin_stops = fit['timebins_all'][:, 0], fit['timebins_all'][:, 1]
-    filtered_trials = behavior_info['trials'][
-        (behavior_info['trials'].stim_name == stim_name) & (behavior_info['trials'].context_name == context_name)]
+
     if not filtered_trials.empty:
         stim_times = filtered_trials.stim_start_time.values
         in_bin = (stim_times[:, None] >= bin_starts) & (stim_times[:, None] < bin_stops)
