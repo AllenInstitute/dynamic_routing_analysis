@@ -452,14 +452,14 @@ def establish_timebins(run_params, fit, behavior_info):
                          run_params['spike_bin_width'])
         bin_starts_all.append(bins)
         epoch_trace_all.append([epoch]*len(bins))
-    
+
     bin_starts_all = np.concatenate(bin_starts_all, axis=0)
     epoch_trace_all = np.concatenate(epoch_trace_all)
-    
+
     sorted_indices = np.argsort(bin_starts_all)
     bin_starts_all = bin_starts_all[sorted_indices]
     epoch_trace_all = epoch_trace_all[sorted_indices]
-    
+
     ind = np.where(np.diff(bin_starts_all) < fit['spike_bin_width'])[0]
     bin_starts_all = np.delete(bin_starts_all, ind)
     epoch_trace_all = np.delete(epoch_trace_all, ind)
@@ -481,7 +481,10 @@ def establish_timebins(run_params, fit, behavior_info):
         fit['mask'] = np.arange(timebins.shape[0])
 
 
-    assert len(fit['mask']) == timebins.shape[0], 'Incorrect masking, recheck timebins.'
+    assert len(fit['mask']) == timebins.shape[0], (
+        f"Incorrect masking, length of mask ({len(fit['mask'])}) != "
+        f"length of timebins ({timebins.shape[0]})."
+    )
     # potentially a precision problem
 
     return fit
