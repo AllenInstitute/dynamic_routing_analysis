@@ -479,7 +479,10 @@ def establish_timebins(run_params, fit, behavior_info):
         fit['mask'] = np.arange(timebins.shape[0])
 
 
-    assert len(fit['mask']) == timebins.shape[0], f'Incorrect masking, length of mask ({len(fit['mask'])}) != length of timebins (len({timebins.shape[0]})).'
+    assert len(fit['mask']) == timebins.shape[0], (
+        f"Incorrect masking, length of mask ({len(fit['mask'])}) != "
+        f"length of timebins ({timebins.shape[0]})."
+    )
     # potentially a precision problem
 
     return fit
