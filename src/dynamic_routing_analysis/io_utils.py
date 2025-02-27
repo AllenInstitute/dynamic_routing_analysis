@@ -44,7 +44,14 @@ class RunParams:
         """Update or add a parameter in the run_params dictionary."""
         if key not in self.run_params:
             logger.warning(f"{key} is not a valid key. Adding new parameter '{key}' with value {value}")
-        self.run_params[key] = value
+        if key == 'unit_inclusion_criteria':
+            for criteria in value.keys(): 
+                if criteria in self.run_params[key]:
+                    self.run_params[key][criteria] = value[criteria]
+                else:
+                    logger.warning(f"{criteria} is not a valid key for unit_inclusion_criteria. Skipping.")
+        else: 
+            self.run_params[key] = value
 
     def update_multiple_metrics(self, updates: dict):
         """Update multiple parameters at once."""
