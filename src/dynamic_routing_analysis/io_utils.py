@@ -45,12 +45,12 @@ class RunParams:
         if key not in self.run_params:
             logger.warning(f"{key} is not a valid key. Adding new parameter '{key}' with value {value}")
         if key == 'unit_inclusion_criteria':
-            for criteria in value.keys(): 
+            for criteria in value.keys():
                 if criteria in self.run_params[key]:
                     self.run_params[key][criteria] = value[criteria]
                 else:
                     logger.warning(f"{criteria} is not a valid key for unit_inclusion_criteria. Skipping.")
-        else: 
+        else:
             self.run_params[key] = value
 
     def update_multiple_metrics(self, updates: dict):
@@ -465,7 +465,7 @@ def establish_timebins(run_params, fit, behavior_info):
     bin_ends_all = bin_starts_all + run_params['spike_bin_width']
     timebins_all = np.vstack([bin_starts_all, bin_ends_all]).T
 
-    if run_params["input_offsets"] or 'full' not in run_params['time_of_interest'] :
+    if run_params["input_offsets"] or 'full' not in run_params['time_of_interest']:
         fit['timebins_all'] = timebins_all
         fit['bin_centers_all'] = bin_starts_all + run_params['spike_bin_width'] / 2
         fit['epoch_trace_all'] = epoch_trace_all
@@ -479,7 +479,7 @@ def establish_timebins(run_params, fit, behavior_info):
         fit['mask'] = np.arange(timebins.shape[0])
 
 
-    assert len(fit['mask']) == timebins.shape[0], 'Incorrect masking, recheck timebins.'
+    assert len(fit['mask']) == timebins.shape[0], f'Incorrect masking, length of mask ({len(fit['mask'])}) != length of timebins (len({timebins.shape[0]})).'
     # potentially a precision problem
 
     return fit
