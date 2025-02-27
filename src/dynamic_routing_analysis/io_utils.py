@@ -437,10 +437,11 @@ def establish_timebins(run_params, fit, behavior_info):
     fit['bin_centers'] = bin_starts + run_params['spike_bin_width'] / 2
     fit['epoch_trace'] = epoch_trace
 
+
     # Extend time bins to include trace around existing time bins for time-embedding, to create a fuller trace.
     scale_factor = int(1 / run_params['spike_bin_width'])
     result = next((x for x in range(2 * scale_factor, 6 * scale_factor) if x % 1 == 0), None)
-    r = result / scale_factor if result is not None else None
+    r = result / scale_factor if result is not None else 0
 
     bin_starts_all = []
     epoch_trace_all = []
@@ -451,21 +452,22 @@ def establish_timebins(run_params, fit, behavior_info):
                          run_params['spike_bin_width'])
         bin_starts_all.append(bins)
         epoch_trace_all.append([epoch]*len(bins))
+    
     bin_starts_all = np.concatenate(bin_starts_all, axis=0)
     epoch_trace_all = np.concatenate(epoch_trace_all)
-
+    
+    sorted_indices = np.argsort(bin_starts_all)
+    bin_starts_all = bin_starts_all[sorted_indices]
+    epoch_trace_all = epoch_trace_all[sorted_indices]
+    
     ind = np.where(np.diff(bin_starts_all) < fit['spike_bin_width'])[0]
     bin_starts_all = np.delete(bin_starts_all, ind)
     epoch_trace_all = np.delete(epoch_trace_all, ind)
 
-    sorted_indices = np.argsort(bin_starts_all)
-    bin_starts_all = bin_starts_all[sorted_indices]
-    epoch_trace_all = epoch_trace_all[sorted_indices]
-
     bin_ends_all = bin_starts_all + run_params['spike_bin_width']
     timebins_all = np.vstack([bin_starts_all, bin_ends_all]).T
 
-    if run_params["input_offsets"] or 'full' not in run_params['time_of_interest']:
+    if run_params['input_offsets'] and 'full' not in run_params['time_of_interest']:
         fit['timebins_all'] = timebins_all
         fit['bin_centers_all'] = bin_starts_all + run_params['spike_bin_width'] / 2
         fit['epoch_trace_all'] = epoch_trace_all
@@ -479,10 +481,7 @@ def establish_timebins(run_params, fit, behavior_info):
         fit['mask'] = np.arange(timebins.shape[0])
 
 
-    assert len(fit['mask']) == timebins.shape[0], (
-        f"Incorrect masking, length of mask ({len(fit['mask'])}) != "
-        f"length of timebins ({timebins.shape[0]})."
-    )
+    assert len(fit['mask']) == timebins.shape[0], 'Incorrect masking, recheck timebins.'
     # potentially a precision problem
 
     return fit
