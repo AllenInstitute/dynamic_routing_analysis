@@ -1360,6 +1360,11 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
     else:
         return_results=False
 
+    if 'split_area_by_probe' in params:
+        split_area_by_probe=params['split_area_by_probe']
+    else:
+        split_area_by_probe=True
+
     if session is not None:
         session_id = session.session_id
         if session_info is None:
@@ -1391,9 +1396,10 @@ def decode_stimulus_across_context(session=None,params=None,trials=None,units=No
         )
 
     #add probe to structure name
-    structure_probe=spike_utils.get_structure_probe(units)
-    for uu, unit in units.iterrows():
-        units.loc[units['unit_id']==unit['unit_id'],'structure']=structure_probe.loc[structure_probe['unit_id']==unit['unit_id'],'structure_probe']
+    if split_area_by_probe:
+        structure_probe=spike_utils.get_structure_probe(units)
+        for uu, unit in units.iterrows():
+            units.loc[units['unit_id']==unit['unit_id'],'structure']=structure_probe.loc[structure_probe['unit_id']==unit['unit_id'],'structure_probe']
 
     #make trial data array for baseline activity
     trial_da = spike_utils.make_neuron_time_trials_tensor(units, trials, spikes_time_before, spikes_time_after, spikes_binsize)
