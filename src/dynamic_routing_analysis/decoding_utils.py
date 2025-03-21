@@ -948,6 +948,11 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     else:
         split_area_by_probe=1
 
+    if 'select_single_area' in params:
+        select_single_area=params['select_single_area']
+    else:
+        select_single_area=None
+
     if session is not None:
         session_id = session.session_id
         if session_info is None:
@@ -1115,7 +1120,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             areas=['all']
         else:
             areas=units['structure'].unique()
-            areas=np.concatenate([areas,['all']])
+            if select_single_area is None:
+                areas=np.concatenate([areas,['all']])
 
             #add non-probe-specific area to areas
             all_probe_areas=[]
