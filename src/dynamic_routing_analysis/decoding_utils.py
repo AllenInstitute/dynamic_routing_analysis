@@ -1192,8 +1192,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
 
         #loop through repeats
         for nunits in n_units_input:
-            ###possbily remove this, so 'all' repeats with different train&test sets###
-            if nunits!='all' and nunits>len(area_units):
+            if nunits>=len(area_units):
                 continue
             decoder_results[session_id]['results'][aa]['shift'][nunits]={}
             decoder_results[session_id]['results'][aa]['no_shift'][nunits]={}
