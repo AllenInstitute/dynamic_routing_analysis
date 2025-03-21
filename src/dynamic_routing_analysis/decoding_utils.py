@@ -40,7 +40,7 @@ def dump_dict_to_zarr(group, data):
 # 'linearSVC' or 'LDA' or 'RandomForest'
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                    crossval_index=None,labels_as_index=False,train_test_split_input=None,
-                   regularization=None,penalty=None,solver=None):
+                   regularization=None,penalty=None,solver=None,n_jobs=None):
     #helper function to decode labels from input data using different decoder models
 
     if decoder_type=='linearSVC':
@@ -52,7 +52,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         if solver is not None:
             logger.warning('Solver not used for LinearSVC')
         clf=LinearSVC(max_iter=5000,dual='auto',class_weight='balanced',
-                      C=regularization,penalty=penalty)
+                      C=regularization,penalty=penalty,n_jobs=n_jobs)
     elif decoder_type=='LDA':
         from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
         if solver is None:
@@ -61,7 +61,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             logger.warning('Regularization not used for LDA')
         if penalty is not None:
             logger.warning('Penalty not used for LDA')
-        clf=LinearDiscriminantAnalysis(solver=solver)
+        clf=LinearDiscriminantAnalysis(solver=solver,n_jobs=n_jobs)
     elif decoder_type=='RandomForest':
         from sklearn.ensemble import RandomForestClassifier
         if regularization is not None:
@@ -70,7 +70,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             logger.warning('Penalty not used for RandomForest')
         if solver is not None:
             logger.warning('Solver not used for RandomForest')
-        clf=RandomForestClassifier(class_weight='balanced')
+        clf=RandomForestClassifier(class_weight='balanced',n_jobs=n_jobs)
     elif decoder_type=='LogisticRegression':
         from sklearn.linear_model import LogisticRegression
         if regularization is None:
@@ -80,7 +80,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         if solver is None:
             solver = 'lbfgs'
         clf=LogisticRegression(max_iter=5000,class_weight='balanced',
-                               C=regularization,penalty=penalty,solver=solver)
+                               C=regularization,penalty=penalty,solver=solver,n_jobs=n_jobs)
 
     output={}
 
@@ -1186,6 +1186,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
 
         #loop through repeats
         for nunits in n_units_input:
+            ###possbily remove this, so 'all' repeats with different train&test sets###
             if nunits!='all' and nunits>len(area_units):
                 continue
             decoder_results[session_id]['results'][aa]['shift'][nunits]={}
