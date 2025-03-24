@@ -298,15 +298,7 @@ def set_parameter_grids(fit, run_params, X = None):
         )
 
     if method == 'elastic_net_regression':
-        fit['L1_ratio_grid'] = np.geomspace(
-            run_params['L1_ratio_grid_range'][0],
-            run_params['L1_ratio_grid_range'][1],
-            num=run_params['L1_ratio_grid_num']
-        ) if run_params['L1_ratio_grid_type'] == 'log' else np.linspace(
-            run_params['L1_ratio_grid_range'][0],
-            run_params['L1_ratio_grid_range'][1],
-            num=run_params['L1_ratio_grid_num']
-        )
+        fit['L1_ratio_grid'] = np.linspace(run_params['L1_ratio_grid_range'][0], run_params['L1_ratio_grid_range'][1], num=run_params['L1_ratio_grid_num'])
 
     if method == 'reduced_rank_regression':
         fit['rank_grid'] = np.linspace(1, np.min(X.shape), num=run_params['rank_grid_num']).astype(int)
