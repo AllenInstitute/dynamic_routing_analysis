@@ -630,7 +630,7 @@ def evaluate_model(fit, design_mat, run_params):
     model_label = run_params['model_label']
     fit[model_label] = {
         'weights': all_weights,
-        'full_model_prediction': all_prediction,
+        # 'full_model_prediction': all_prediction,
         'cv_var_train': cv_var_train,
         'cv_var_test': cv_var_test
     }
