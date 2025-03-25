@@ -32,7 +32,6 @@ from collections.abc import Iterable, Mapping
 from typing import Any, Literal
 
 import altair as alt
-import ccf_utils as ccf_utils
 import geopandas as gpd
 import matplotlib
 import matplotlib.cm
