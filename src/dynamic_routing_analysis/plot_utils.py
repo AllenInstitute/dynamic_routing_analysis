@@ -1972,6 +1972,7 @@ def plot_brain_heatmap(
         
     if interactive:
         chart = plot_gdf_alt(gdfs, ccf_colors=False)
+        fig.clf()
         return chart, tuple(gdfs)
     else:
         return fig, tuple(gdfs)
