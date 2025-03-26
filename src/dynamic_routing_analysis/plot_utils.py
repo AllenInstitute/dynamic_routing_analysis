@@ -4,11 +4,16 @@ import functools
 import logging
 import os
 import pickle
-from collections.abc import Iterable
-from typing import Literal
+import time
+from collections import Counter
+from collections.abc import Iterable, Mapping
+from typing import Any, Literal
 
+import altair as alt
+import geopandas as gpd
 import iblatlas.plots
 import matplotlib
+import matplotlib.cm
 import matplotlib.colors
 import matplotlib.figure
 import matplotlib.gridspec
@@ -19,33 +24,12 @@ import numpy.typing as npt
 import pandas as pd
 import polars as pl
 import pyarrow.dataset as ds
-from matplotlib import patches
-
-from dynamic_routing_analysis import ccf_utils, spike_utils
-
-logger = logging.getLogger(__name__)
-import functools
-import logging
-import time
-from collections import Counter
-from collections.abc import Iterable, Mapping
-from typing import Any, Literal
-
-import altair as alt
-import geopandas as gpd
-import matplotlib
-import matplotlib.cm
-import matplotlib.colors
-import matplotlib.figure
-import matplotlib.gridspec
-import matplotlib.pyplot as plt
-import numpy as np
-import numpy.typing as npt
-import pandas as pd
-import polars as pl
 import rasterio.features
 import shapely
 import shapely.geometry
+from matplotlib import patches
+
+from dynamic_routing_analysis import ccf_utils, spike_utils
 
 logger = logging.getLogger(__name__)
 
@@ -1577,7 +1561,7 @@ def get_heatmap_gdf(
     redundant_parents = user_df.filter(expr)
     if len(redundant_parents):
         if remove_redundant_parents:
-            logger.warning(
+            logger.debug(
                 f"Removing {len(redundant_parents)} regions as they are parents of other regions ({remove_redundant_parents=!r}): {redundant_parents['acronym'].to_numpy()}"
             )
             user_df = user_df.filter(~expr)
@@ -1969,17 +1953,18 @@ def plot_brain_heatmap(
         ax.set_aspect(1)
         ax.set_axis_off()
         ax.set_clip_on(False)
-        
+
     if interactive:
         chart = plot_gdf_alt(gdfs, ccf_colors=False)
-        fig.clf()
         return chart, tuple(gdfs)
     else:
         return fig, tuple(gdfs)
 
 
 def plot_gdf_alt(
-    gdfs: gpd.GeoDataFrame | Iterable[gpd.GeoDataFrame], ccf_colors: bool = False
+    gdfs: gpd.GeoDataFrame | Iterable[gpd.GeoDataFrame],
+    ccf_colors: bool = False,
+    value_name: str = "value",
 ) -> alt.Chart:
     if isinstance(gdfs, gpd.GeoDataFrame):
         gdfs = (gdfs,)
@@ -2059,20 +2044,13 @@ def plot_gdf_alt(
                 range=ccf_utils.get_ccf_structure_tree_df()["color_hex_str"].to_list(),
             )
         else:
-            logger.warning(f"Color encoding for regions with no values does not work correctly")
-            use_missing_color_fix = False
-            if use_missing_color_fix:
-                gdf = gdf.copy()
-                gdf["value"] = gdf["value"].fillna("")
-                condition = alt.Undefined
-            else:
-                condition = {"test": "datum['value'] === null", "value": "#aaa"} # currently does nothing if use_fix is True (and doesn't work if False)
             tooltip.append("value:Q")
             color = alt.Color(
                 "value:Q",
+                title=value_name,
                 scale=alt.Scale(scheme="viridis"),
                 legend=alt.Legend(orient="bottom", direction="horizontal"),
-                condition=condition,
+                # condition=condition,
             )
         chart = (
             alt.Chart(gdf)
@@ -2093,14 +2071,34 @@ def plot_gdf_alt(
                 ),
             )
         )
+        null_slice = (
+            alt.Chart(gdf[gdf["value"].isna() | gdf["value"].isnull()])
+            .mark_geoshape(
+                strokeWidth=0.05,
+                stroke="white",
+            )
+            .encode(
+                tooltip=tooltip,
+                color=alt.value("#eee"),
+            )
+            .project(
+                type="identity",
+                reflectY=projection != "sagittal",
+                fit=get_fit(
+                    projection,
+                    is_upright if projection in ("top", "horizontal") else None,
+                ),
+            )
+        )
+        chart = alt.layer(null_slice, chart)
 
-        with_background = False
-        if with_background or not use_missing_color_fix:
+        with_background = True
+        if with_background:
             background = (
                 alt.Chart(get_background_gdf(projection, background_position))
-                .mark_geoshape(strokeWidth=0.05, stroke="darkgrey")
+                .mark_geoshape(strokeWidth=0.2, stroke="darkgrey")
                 .encode(
-                    color=alt.value("#E6E8E9"),
+                    color=alt.value("#fff"),
                 )
                 .project(
                     type="identity",
