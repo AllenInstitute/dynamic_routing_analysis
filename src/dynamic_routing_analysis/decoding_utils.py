@@ -1296,8 +1296,6 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                         penalty=penalty,
                         solver=solver)
 
-                if nunits=='all':
-                    break
 
         logger.info(f'{session_id} | area: {aa} | Finished decoding')
     logger.info(f'{session_id} | Finished all decoding')

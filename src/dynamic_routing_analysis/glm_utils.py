@@ -20,6 +20,82 @@ model_mapping = {
     'reduced_rank_regression': mu.ReducedRankRegression
 }
 
+class RunParams:
+    def __init__(self, session_id):
+        self.run_params = {
+            "session_id": session_id,
+            "method": 'ridge_regression',  # ['ridge_regression', 'lasso_regression','reduced_rank_regression']
+
+            "no_nested_CV": False,
+            "optimize_on": 0.3,
+            "n_outer_folds": 5,
+            "n_inner_folds": 5,
+            "optimize_penalty_by_cell": False,
+            "optimize_penalty_by_area": False,
+            "optimize_penalty_by_firing_rate": False,
+            "optimize_penalty_by_best_units": False, # TO DO
+            "best_unit_cvr2_cut_off": 0.05, # TO DO
+            "use_fixed_penalty": False,
+            "num_rate_clusters": 5,
+
+            # RIDGE + ELASTIC NET
+            "L2_grid_type": 'log',
+            "L2_grid_range": [1, 2**12],
+            "L2_grid_num": 13,
+            "L2_fixed_lambda": None,
+
+            # LASSO
+            "L1_grid_type": 'log',
+            "L1_grid_range": [10**-6, 10**-2],
+            "L1_grid_num": 13,
+            "L1_fixed_lambda": None,
+
+            "cell_regularization": None,
+            "cell_regularization_nested": None,
+
+            # ELASTIC NET
+            "L1_ratio_grid_type": 'log',
+            "L1_ratio_grid_range": [10**-6, 10**-1],
+            "L1_ratio_grid_num": 9,
+            "L1_ratio_fixed": None,
+            "cell_L1_ratio": None,
+            "cell_L1_ratio_nested": None,
+
+            # RRR
+            "rank_grid_num": 10,
+            "rank_fixed": None,
+            "cell_rank": None,
+            "cell_rank_nested": None,
+
+            "fullmodel_fitted": False,
+        }
+
+    def update_metric(self, key, value):
+        """Update or add a parameter in the run_params dictionary."""
+        if key not in self.run_params:
+            logger.warning(f"{key} is not a valid key. Adding new parameter '{key}' with value {value}")
+        self.run_params[key] = value
+
+    def update_multiple_metrics(self, updates: dict):
+        """Update multiple parameters at once."""
+        for key, value in updates.items():
+            self.update_metric(key, value)
+
+    def get_params(self):
+        """Retrieve the run_params dictionary."""
+        return self.run_params
+
+    def validate_params(self):
+        """Validation logic to ensure parameters are consistent."""
+        if self.run_params["method"] not in ['ridge_regression', 'lasso_regression', 'elastic_net', 'reduced_rank_regression']:
+            raise ValueError("Invalid method: must be one of ['ridge_regression', 'lasso_regression', 'elastic_net_regression', 'reduced_rank_regression']")
+
+        if self.run_params["rank_fixed"] or self.run_params["L1_ratio_fixed"] or self.run_params["L1_fixed_lambda"] or self.run_params["L2_fixed_lambda"]:
+            if not self.run_params["use_fixed_penalty"]:
+                logger.warning('Fixed penalty parameter passed, setting fixed penalty to True')
+                self.run_params["use_fixed_penalty"] = True
+
+
 def nested_train_and_test(design_mat, spike_counts, param_grid, param2_grid = None, folds_outer=10, folds_inner=6, method = 'ridge_regression'):
 
     """
@@ -222,15 +298,7 @@ def set_parameter_grids(fit, run_params, X = None):
         )
 
     if method == 'elastic_net_regression':
-        fit['L1_ratio_grid'] = np.geomspace(
-            run_params['L1_ratio_grid_range'][0],
-            run_params['L1_ratio_grid_range'][1],
-            num=run_params['L1_ratio_grid_num']
-        ) if run_params['L1_ratio_grid_type'] == 'log' else np.linspace(
-            run_params['L1_ratio_grid_range'][0],
-            run_params['L1_ratio_grid_range'][1],
-            num=run_params['L1_ratio_grid_num']
-        )
+        fit['L1_ratio_grid'] = np.linspace(run_params['L1_ratio_grid_range'][0], run_params['L1_ratio_grid_range'][1], num=run_params['L1_ratio_grid_num'])
 
     if method == 'reduced_rank_regression':
         fit['rank_grid'] = np.linspace(1, np.min(X.shape), num=run_params['rank_grid_num']).astype(int)
@@ -562,7 +630,7 @@ def evaluate_model(fit, design_mat, run_params):
     model_label = run_params['model_label']
     fit[model_label] = {
         'weights': all_weights,
-        'full_model_prediction': all_prediction,
+        # 'full_model_prediction': all_prediction,
         'cv_var_train': cv_var_train,
         'cv_var_test': cv_var_test
     }
