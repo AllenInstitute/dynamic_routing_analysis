@@ -242,7 +242,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     y_dec_func = clf.decision_function(X)
     ypred = clf.predict(X)
     if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression':
-        predict_proba_all = clf.predict_proba(X)
+        predict_proba_all_trials = clf.predict_proba(X)
         
 
     if decoder_type == 'LDA' or decoder_type == 'linearSVC':
@@ -250,27 +250,40 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     else:
         coefs = np.full((X.shape[1]), fill_value=False)
 
+    #scikit-learn's classification report
     output['cr']=cr_dict_test
 
+    #predicted label from training/testing on all trials
     output['pred_label']=ypred
+    #true original label
     output['true_label']=y
+    #predicted label for trials in each train-test fold
     output['pred_label_all']=ypred_all
+    #indices of trials used in test for each fold
     output['trials_used']=tidx_used
 
+    #decision function from training/testing on all trials
     output['decision_function']=y_dec_func
+    #decision function for each test fold
     output['decision_function_all']=dec_func_all
+    #predict probability for each test fold
     output['predict_proba']=ypred_proba
-    output['predict_proba_all']=predict_proba_all if 'predict_proba_all' in locals() else None
+    #predict probability from training/testing on all trials
+    output['predict_proba_all_trials']=predict_proba_all_trials if 'predict_proba_all_trials' in locals() else None
+    #coefficients for each feature
     output['coefs']=coefs
     output['classes']=classes
     output['intercept']=intercept
+    #input parameters
     output['params']=params
+    #mean balanced accuracy across folds
     output['balanced_accuracy_test']=np.nanmean(balanced_accuracy_test)
 
     output['pred_label_train']=ypred_train
     output['true_label_train']=ytrue_train
 
     output['cr_train']=cr_dict_train
+    #balanced accuracy for training data (all folds)
     output['balanced_accuracy_train']=balanced_accuracy_train
 
     output['train_trials']=train_trials
@@ -279,7 +292,6 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     output['models']=models
     output['scaler']=scaler
     output['label_names']=unique_labels
-    # output['input_data']=input_data
     output['labels']=labels
 
     return output
