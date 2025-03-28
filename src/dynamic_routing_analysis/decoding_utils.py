@@ -241,6 +241,9 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     clf.fit(X, y)
     y_dec_func = clf.decision_function(X)
     ypred = clf.predict(X)
+    if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression':
+        predict_proba_all = clf.predict_proba(X)
+        
 
     if decoder_type == 'LDA' or decoder_type == 'linearSVC':
         coefs = clf.coef_
@@ -257,6 +260,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     output['decision_function']=y_dec_func
     output['decision_function_all']=dec_func_all
     output['predict_proba']=ypred_proba
+    output['predict_proba_all']=predict_proba_all if 'predict_proba_all' in locals() else None
     output['coefs']=coefs
     output['classes']=classes
     output['intercept']=intercept
