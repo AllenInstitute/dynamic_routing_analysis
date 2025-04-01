@@ -1930,7 +1930,7 @@ def concat_decoder_results(files,savepath=None,return_table=True,single_session=
 
 
 
-def compute_significant_decoding_by_area(all_decoder_results):
+def compute_significant_decoding_by_area(all_decoder_results,combine_areas_across_probes=True):
 
     #determine different numbers of units from all_decoder_results
     n_units=[]
@@ -1946,6 +1946,17 @@ def compute_significant_decoding_by_area(all_decoder_results):
     p_threshold=0.05
 
     DR_linear_shift_df=all_decoder_results.query('project=="DynamicRouting" and n_good_blocks>=4')
+
+    if combine_areas_across_probes:
+        if 'all' in DR_linear_shift_df['probe']:
+            DR_linear_shift_df=DR_linear_shift_df.query('probe.isna() or probe == "all"')
+        else:
+            print('ERROR: no combined probes in results')
+            return 
+    else:
+        DR_linear_shift_df=DR_linear_shift_df.query('probe != "all"')
+
+
     #fraction significant
     frac_sig_DR={
         'area':[],
