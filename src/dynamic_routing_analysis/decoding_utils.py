@@ -1948,7 +1948,7 @@ def compute_significant_decoding_by_area(all_decoder_results,combine_areas_acros
     DR_linear_shift_df=all_decoder_results.query('project=="DynamicRouting" and n_good_blocks>=4')
 
     if combine_areas_across_probes:
-        if 'all' in DR_linear_shift_df['probe']:
+        if 'all' in DR_linear_shift_df['probe'].unique():
             DR_linear_shift_df=DR_linear_shift_df.query('probe.isna() or probe == "all"')
         else:
             print('ERROR: no combined probes in results')
