@@ -10,22 +10,12 @@ authors = [
 dependencies = [
     "numpy>=1.24.4",
     "pandas>=2.0.3",
+    "polars[pandas,plot]>=1.0",
     "matplotlib>=3.7.2",
-    "pynwb>=2.3.3",
-    "nwbwidgets>=0.11.3",
-    "fsspec>=2023.6.0",
-    "s3fs>=2023.6.0",
-    "universal-pathlib>=0.0.24",
     "npc-lims>=0.1.0",
-    "npc-sessions>=0.0.226",
     "xarray>=2024.6.0",
-    "scikit-learn>=1.5.1",
     "statsmodels>=0.14.2",
-    "rasterio>=1.4.2",
-    "shapely>=2.0.6",
-    "geopandas>=1.0.1",
-    "altair[all]>=5.4.1",
-    "iblatlas>=0.5.4",
+    "scikit-learn>=1.5.1",
 ]
 requires-python = ">=3.9"
 readme = "README.md"
@@ -39,6 +29,20 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
 ]
 
+[project.optional-dependencies]
+plot = [
+    "rasterio>=1.4.2",
+    "shapely>=2.0.6",
+    "geopandas>=1.0.1",
+    "altair[save]>=5.4.1",
+]
+pywnb = [
+    "pynwb>=2.3.3",
+]
+npc_sessions = [
+    "npc-sessions>=0.0.226",
+]
+
 [project.license]
 text = "MIT"
 
@@ -46,69 +50,65 @@ text = "MIT"
 Repository = "https://github.com/AllenInstitute/dynamic_routing_analysis"
 Issues = "https://github.com/AllenInstitute/dynamic_routing_analysis/issues"
 
-[tool.pdm.dev-dependencies]
-dev = [
-    "pytest>=7.4.0",
-    "ruff>=0.0.282",
-    "pdm-bump>=0.7.3",
-    "mypy>=1.4.1",
-    "pytest-cov>=4.1.0",
-    "black>=23.7.0",
+[project.scripts]
+task = "poethepoet:main"
+
+[dependency-groups]
+task_runner = ["poethepoet>=0.33.1"]
+linting = ["black>=25.1.0", "isort>=6.0.1", "ruff>=0.11.2"]
+testing = ["pytest>=7.4.0", "mypy>=1.4.1", "pytest-cov>=4.1.0"]
+bump = ["bump-my-version>=1.1.1", "git-changelog>=2.5.3"]
+
+[tool.uv]
+package = true
+
+[tool.bumpversion]
+tag = true
+allow_dirty = true
+commit = true
+commit_args = "-a"
+message = "Bump version: {current_version} → {new_version} [skip actions]"
+pre_commit_hooks = [
+    "uv lock --upgrade-package lazynwb",
+    "git-changelog -o CHANGELOG.md",
+    "uv build",
+    "uv publish",
 ]
 
-[tool.pdm.scripts]
+[tool.poe.tasks]
+mypy = "mypy src --install-types --non-interactive"
+pytest = "pytest --cov-report term-missing:skip-covered --cov-report=html"
+test = ["mypy", "pytest"]
 ruff = "ruff check src --fix-only"
 black = "black src"
-test = "pytest --cov"
-mypy = "mypy src"
-bumpver = "pdm bump micro"
-tag = "pdm bump tag"
-
-[tool.pdm.scripts.prebuild]
-composite = [
-    "black",
-    "ruff",
-    "test",
-    "mypy",
-]
-
-[tool.pdm.scripts.dryrun]
-composite = [
-    "prebuild",
-    "pdm publish --repository testpypi",
-]
-
-[tool.pdm.scripts.pub]
-composite = [
-    "prebuild",
-    "bumpver",
-    "pdm publish",
-]
+format = ["ruff", "black"]
+bump_pub_tag = "bump-my-version bump patch"
+release = ["format", "bump_pub_tag"]
 
 [tool.ruff]
 fix = true
 ignore-init-module-imports = true
 select = [
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "E",      # pycodestyle
+    "F",      # pyflakes
+    "PGH",    # pygrep-hooks
+    "RUF",    # ruff
+    "W",      # pycodestyle
+    "YTT",    # flake8-2020
     "ANN",
-    "B",
     "C",
-    "E",
-    "F",
     "I",
     "RUF100",
     "N",
-    "U",
-    "W",
-    "YTT",
+    "UP",
 ]
-extend-exclude = [
-    "tests",
-]
-src = [
-    "src",
-    "tests",
-]
+# extend-ignore = ["B018", "B019"]
+src = ["src"]
+extend-exclude = ["tests/fixtures"]
 target-version = "py39"
+
 
 [tool.ruff.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -163,3 +163,6 @@ requires = [
     "wheel",
 ]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+license-files = ["LICENSE"]

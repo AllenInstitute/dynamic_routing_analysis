@@ -5,7 +5,6 @@ import npc_lims
 import npc_sessions
 import numpy as np
 import pandas as pd
-import pynwb
 
 vid_angle_npc_names={
     'behavior':'side',
@@ -16,7 +15,7 @@ vid_angle_npc_names={
 def load_trials_or_units(session, table_name, version='any'):
     # convenience function to load trials or units from cache if available,
     # otherwise from npc_sessions
-    if isinstance(session, pynwb.NWBFile):
+    if session.__class__.__name__ == "NWBFile":
         return getattr(session, table_name)[:]
 
     if table_name == 'trials':
@@ -53,7 +52,7 @@ def load_facemap_data(session,session_info=None,trials=None,vid_angle=None,keep_
     if not vid_angle:
         raise ValueError("vid_angle must be specified")
 
-    if isinstance(session, pynwb.NWBFile):
+    if session.__class__.__name__ == "NWBFile":
         if trials is None:
             trials = session.trials[:]
         if not any("facemap" in k for k in session.processing["behavior"].data_interfaces.keys()):
@@ -117,7 +116,7 @@ def load_facemap_data(session,session_info=None,trials=None,vid_angle=None,keep_
     mean_trial_behav_SVD={}
     mean_trial_behav_motion={}
 
-    if isinstance(session, pynwb.NWBFile):
+    if session.__class__.__name__ == "NWBFile":
         rr = 0
         motsvd = np.asarray(facemap.data[:, :])
 
@@ -172,7 +171,7 @@ def load_facemap_data(session,session_info=None,trials=None,vid_angle=None,keep_
             mean_trial_behav_motion[rr] = np.nanmean(behav_motion_by_trial[rr],axis=0)
 
     else:
-        if isinstance(session, pynwb.NWBFile):
+        if session.__class__.__name__ == "NWBFile":
             motsvd = np.asarray(facemap.data[:, :])
         else:
             motsvd = np.asarray(facemap_info["motSVD"][:, :])
@@ -244,7 +243,7 @@ def load_LP_data(session, trials=None, vid_angle=None, LP_parts_to_keep=None):
         'face': 1,
     }
     camera_idx = vid_angle_idx[vid_angle]
-    if isinstance(session, pynwb.NWBFile):
+    if session.__class__.__name__ == "NWBFile":
         if trials is None:
             trials = session.trials[:]
         if not any(

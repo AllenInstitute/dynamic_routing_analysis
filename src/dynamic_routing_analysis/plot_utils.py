@@ -11,7 +11,6 @@ from typing import Any, Literal
 
 import altair as alt
 import geopandas as gpd
-import iblatlas.plots
 import matplotlib
 import matplotlib.cm
 import matplotlib.colors
@@ -1407,14 +1406,6 @@ def plot_single_session_decoding_results(path):
             ax.set_xlabel("trial shift")
             ax.set_ylabel("balanced accuracy")
             ax.set_title(str(aa) + " p=" + str(pval))
-
-
-@functools.cache
-def get_slice_files(
-    slice_: Literal["coronal", "sagittal", "horizontal", "top"],
-    mapping: Literal["Beryl", "Allen", "Cosmos"],
-) -> npt.NDArray:
-    return iblatlas.plots.load_slice_files(slice_, mapping.lower())
 
 
 def _aggregate_top_layer(
