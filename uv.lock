@@ -1073,7 +1073,7 @@ plot = [
     { name = "rasterio" },
     { name = "shapely" },
 ]
-pywnb = [
+pynwb = [
     { name = "pynwb" },
 ]
 
@@ -1106,14 +1106,14 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.24.4" },
     { name = "pandas", specifier = ">=2.0.3" },
     { name = "polars", extras = ["pandas", "plot"], specifier = ">=1.0" },
-    { name = "pynwb", marker = "extra == 'pywnb'", specifier = ">=2.3.3" },
+    { name = "pynwb", marker = "extra == 'pynwb'", specifier = ">=2.3.3" },
     { name = "rasterio", marker = "extra == 'plot'", specifier = ">=1.4.2" },
     { name = "scikit-learn", specifier = ">=1.5.1" },
     { name = "shapely", marker = "extra == 'plot'", specifier = ">=2.0.6" },
     { name = "statsmodels", specifier = ">=0.14.2" },
     { name = "xarray", specifier = ">=2024.6.0" },
 ]
-provides-extras = ["plot", "pywnb", "npc-sessions"]
+provides-extras = ["plot", "pynwb", "npc-sessions"]
 
 [package.metadata.requires-dev]
 bump = [

@@ -36,7 +36,7 @@ plot = [
     "geopandas>=1.0.1",
     "altair[save]>=5.4.1",
 ]
-pywnb = [
+pynwb = [
     "pynwb>=2.3.3",
 ]
 npc_sessions = [
