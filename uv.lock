@@ -1,5 +1,4 @@
 version = 1
-revision = 1
 requires-python = ">=3.9"
 resolution-markers = [
     "python_full_version < '3.10' and platform_machine == 'arm64' and sys_platform == 'darwin'",
@@ -1053,6 +1052,7 @@ name = "dynamic-routing-analysis"
 version = "0.1.1"
 source = { editable = "." }
 dependencies = [
+    { name = "lazynwb" },
     { name = "matplotlib" },
     { name = "npc-lims" },
     { name = "numpy" },
@@ -1100,6 +1100,7 @@ testing = [
 requires-dist = [
     { name = "altair", extras = ["save"], marker = "extra == 'plot'", specifier = ">=5.4.1" },
     { name = "geopandas", marker = "extra == 'plot'", specifier = ">=1.0.1" },
+    { name = "lazynwb", specifier = ">=0.2.2" },
     { name = "matplotlib", specifier = ">=3.7.2" },
     { name = "npc-lims", specifier = ">=0.1.0" },
     { name = "npc-sessions", marker = "extra == 'npc-sessions'", specifier = ">=0.0.226" },
@@ -1113,7 +1114,6 @@ requires-dist = [
     { name = "statsmodels", specifier = ">=0.14.2" },
     { name = "xarray", specifier = ">=2024.6.0" },
 ]
-provides-extras = ["plot", "pynwb", "npc-sessions"]
 
 [package.metadata.requires-dev]
 bump = [
@@ -1673,6 +1673,24 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f0/f8/fe6484e847bc6e238ec9f9828089fb2c0bb53f2f5f3a79351fde5b565e4f/kiwisolver-1.4.7-pp39-pypy39_pp73-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:599b5c873c63a1f6ed7eead644a8a380cfbdf5db91dcb6f85707aaab213b1674", size = 80776 },
     { url = "https://files.pythonhosted.org/packages/9b/57/d7163c0379f250ef763aba85330a19feefb5ce6cb541ade853aaba881524/kiwisolver-1.4.7-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:801fa7802e5cfabe3ab0c81a34c323a319b097dfb5004be950482d882f3d7225", size = 79984 },
     { url = "https://files.pythonhosted.org/packages/8c/95/4a103776c265d13b3d2cd24fb0494d4e04ea435a8ef97e1b2c026d43250b/kiwisolver-1.4.7-pp39-pypy39_pp73-win_amd64.whl", hash = "sha256:0c6c43471bc764fad4bc99c5c2d6d16a676b1abf844ca7c8702bdae92df01ee0", size = 55811 },
+]
+
+[[package]]
+name = "lazynwb"
+version = "0.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "h5py" },
+    { name = "npc-io" },
+    { name = "pandas" },
+    { name = "polars", extra = ["pandas"] },
+    { name = "remfile" },
+    { name = "tqdm" },
+    { name = "zarr" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2a/19/17ed0132a783339efb2078231bfc407e921079dbf7371ff0d7edd968d996/lazynwb-0.2.2.tar.gz", hash = "sha256:6cf906b7944ff1955e9952fc6c170924876981d95e89f342b40e036faf886195", size = 20834 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/3e/4e4d928e537996b62d3f8f283bd42d8e2bbf6e3690710428389e24493c32/lazynwb-0.2.2-py3-none-any.whl", hash = "sha256:3c715916cb55ba765d50dd49c43f1d3e66d39a3142710171ac2ec49e09dc5c69", size = 20674 },
 ]
 
 [[package]]
@@ -3442,6 +3460,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/99/5b/73ca1f8e72fff6fa52119dbd185f73a907b1989428917b24cff660129b6d/referencing-0.35.1.tar.gz", hash = "sha256:25b42124a6c8b632a425174f24087783efb348a6f1e0008e63cd4466fedf703c", size = 62991 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/59/2056f61236782a2c86b33906c025d4f4a0b17be0161b63b70fd9e8775d36/referencing-0.35.1-py3-none-any.whl", hash = "sha256:eda6d3234d62814d1c64e305c1331c9a3a6132da475ab6382eaa997b21ee75de", size = 26684 },
+]
+
+[[package]]
+name = "remfile"
+version = "0.1.13"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "h5py" },
+    { name = "numpy" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7c/d1/e9ae25f762f188d912440c9f595c94e3148e9f6994bb43b1794a199f5610/remfile-0.1.13.tar.gz", hash = "sha256:230795a0f903c2e0650dedbef14167ff714d64bb6ce22e9c5d835a9afbdfff55", size = 13267 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3e/33/485cb65a071e2e15b86693e25467ada58164f00ec076b8e24191671004cb/remfile-0.1.13-py3-none-any.whl", hash = "sha256:1e87dacc76a4db9fbbcb7ccaaa275e6b428b7d4528d39b88f8d790e17d1b50c3", size = 11916 },
 ]
 
 [[package]]

@@ -2,11 +2,13 @@ import logging
 import time
 
 import npc_lims
-import npc_sessions
 import numpy as np
+import polars as pl
 import pandas as pd
 import xarray as xr
 from tqdm import tqdm
+
+import dynamic_routing_analysis.datacube_utils as datacube_utils
 
 logger = logging.getLogger(__name__) # debug < info < warning < error
 pd.set_option('display.max_columns', None)
@@ -234,26 +236,36 @@ class RunParams:
 
         self.run_params['kernels'] = kernels
 
+def _create_behavior_info(trials, performance, epochs):
+    dprimes = performance.cross_modal_dprime.values
+    return {
+        'trials': trials,
+        'dprime': dprimes,
+        'is_good_behavior': (
+            np.count_nonzero(dprimes >= 1) >= 4
+            if dprimes is not None else None
+        ),
+        'epoch_info': epochs,
+    }
 
-def get_session_data(session):
+def get_session_data_from_session_obj(session):
     """Fetch data from DynamicRoutingSession."""
-    trials = session.trials[:]
-    # try:
-    dprimes = session.intervals['performance'][:].cross_modal_dprime.values
-    # except:
-    #     logger.info('no cached performance table, skipping')
-    #     dprimes = None
+    behavior_info = _create_behavior_info(
+        trials=session.trials[:],
+        performance=session.intervals['performance'][:],
+        epochs=session.epochs[:],
+    )
+    return session.units[:], behavior_info
 
-    epoch = session.epochs[:]
-    behavior_info = {'trials': trials,
-                    'dprime': dprimes,
-                    'is_good_behavior': (
-                        np.count_nonzero(dprimes >= 1) >= 4
-                        if dprimes is not None else None
-                    ),
-                    'epoch_info': epoch}
-    units_table = session.units[:]
-    return units_table, behavior_info
+def get_session_data_from_datacube(session_id):
+    import lazynwb
+    nwb_path = next(p for p in datacube_utils.get_nwb_paths() if p.stem == session_id)
+    behavior_info = _create_behavior_info(
+        trials=lazynwb.get_df(nwb_path, '/intervals/trials'),
+        performance=lazynwb.get_df(nwb_path, '/intervals/performance'),
+        epochs=lazynwb.get_df(nwb_path, '/intervals/epochs'),
+    )
+    return lazynwb.get_df(nwb_path, '/units'), behavior_info
 
 
 def get_session_data_from_cache(session_id, version='0.0.260'):
@@ -269,29 +281,28 @@ def get_session_data_from_cache(session_id, version='0.0.260'):
     # npc_lims.get_current_cache_version()
     try:
         # Attempt to load data from cached files
-        trials = pd.read_parquet(
-            npc_lims.get_cache_path('trials', session_id, version=version)
+        behavior_info = _create_behavior_info(
+            trials=pd.read_parquet(
+                npc_lims.get_cache_path('trials', session_id, version=version)
+            ),
+            performance=pd.read_parquet(
+                npc_lims.get_cache_path('performance', session_id, version=version)
+            ),
+            epochs=pd.read_parquet(
+                npc_lims.get_cache_path('epochs', session_id, version=version)
+            ),
         )
-        dprimes = np.array(pd.read_parquet(
-            npc_lims.get_cache_path('performance', session_id, version=version)
-        ).cross_modal_dprime.values)
-        epoch = pd.read_parquet(
-            npc_lims.get_cache_path('epochs', session_id, version=version)
-        )
-        behavior_info = {'trials': trials,
-                         'dprime': dprimes,
-                         'is_good_behavior': np.count_nonzero(dprimes >= 1) >= 4,
-                         'epoch_info': epoch}
-
+        units_table_path = npc_lims.get_cache_path("units", session_id, version=version)
+        schema = pl.scan_parquet(units_table_path).collect_schema()
         units_table = pd.read_parquet(
-            npc_lims.get_cache_path('units', session_id, version=version)
+            units_table_path, columns=[c for c in schema if c not in ['waveform_mean', 'waveform_sd',]]
         )
-        return None, units_table, behavior_info, None
+        return None, units_table, behavior_info, None #! doesn't match signature of get_session_data_from_session_obj
 
     except FileNotFoundError:
         # Attempt to load data from DynamicRoutingSession as a fallback
         logger.warning(f"File not found for session_id {session_id}. Attempting fallback.")
-        return get_session_data(session_id)
+        return get_session_data_from_session_obj(session_id)
 
     except Exception as e:
         raise FileNotFoundError(f"Unexpected error occurred: {e}")
@@ -577,6 +588,7 @@ def add_kernels(design, run_params, session, fit, behavior_info):
     fit['kernel_error_dict'] = dict()
 
     if session is None:
+        import npc_sessions
         session = npc_sessions.DynamicRoutingSession(run_params["session_id"])
 
     for kernel_name in run_params['kernels']:
