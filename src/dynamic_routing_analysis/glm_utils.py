@@ -1,9 +1,11 @@
+import copy
 import logging
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import models as mu
 import numpy as np
+import xarray as xr
 from numpy.linalg import LinAlgError
 from sklearn.cluster import KMeans
 from sklearn.model_selection import GridSearchCV, KFold
@@ -639,6 +641,98 @@ def evaluate_model(fit, design_mat, run_params):
         fit['fullmodel_fitted'] = True
 
     return fit
+
+
+def linear_shift(fit, design_mat, run_params):
+
+    def convert_blocks(vector):
+        vector = np.array(vector)
+        unique_blocks = np.cumsum(np.diff(np.insert(vector, 0, vector[0])) != 0)
+        return (unique_blocks + 1).tolist()
+
+    def get_shift_bins(run_params, fit, context):
+
+        bin_centers = fit['bin_centers']
+        bin_width = fit['spike_bin_width']
+        shift_by = run_params['linear_shift_by']
+        blocks = convert_blocks(context)
+
+        #find middle 4 block times
+        first_block = bin_centers[blocks == np.nanmin(blocks)]
+        middle_of_first=first_block[np.ceil(len(first_block)/2).astype('int')]
+
+        last_block = bin_centers[blocks == np.nanmax(blocks)]
+        middle_of_last = last_block[np.ceil(len(last_block)/2).astype('int')]
+
+
+        middle_of_first_index = np.nanargmin(np.abs(bin_centers-middle_of_first))
+        middle_of_last_index = np.nanargmin(np.abs(bin_centers-middle_of_last))
+        middle_4_blocks = np.arange(middle_of_first_index, middle_of_last_index)
+
+        #find the number of trials to shift by, from -1 to +1 block
+        negative_shift= middle_4_blocks.min()
+        positive_shift= len(bin_centers) - middle_4_blocks.max()
+        shifts = np.arange(-negative_shift, positive_shift + 1, int(shift_by//bin_width))
+        if 0 not in shifts:
+            shifts = np.append(shifts, 0)
+        shifts = np.sort(shifts)
+        return shifts, middle_4_blocks
+
+
+    model_label = run_params['model_label']
+    shifts, blocks = get_shift_bins(run_params, fit, design_mat.sel(weights='context_0'))
+    shift_variables = [key for key in run_params['kernels'].keys() if run_params['kernels'][key]['shift']]
+    shift_column = [i for i, label in enumerate(design_mat.coords['weights'].values) if any([key in label for key in shift_variables])]
+    shifted_cv_var_test = np.zeros((len(shifts), fit['spike_count_arr']['spike_counts'].shape[1])) + np.nan
+
+    for sh, shift in enumerate(tqdm(shifts, desc="Shifting progress")):
+        times_used=blocks+shift
+        shift_exists=[]
+        for tt in times_used:
+            if tt < len(fit['bin_centers']):
+                shift_exists.append(True)
+            else:
+                shift_exists.append(False)
+        shift_exists=np.array(shift_exists)
+        times_used=times_used[shift_exists]
+
+
+        design_mat_shifted = {'data': np.zeros((len(times_used), design_mat.data.shape[1])),
+                              'weights': design_mat.weights.copy(),
+                              'timestamps': design_mat['timestamps'][blocks].copy()}
+        design_mat_shifted['data'][:, shift_column] = design_mat.data[times_used][:, shift_column]
+        non_shift_column = list(set(np.arange(design_mat.data.shape[1])) - set(shift_column))
+        design_mat_shifted['data'][:, non_shift_column] = design_mat.data[blocks][:, non_shift_column]
+
+        design_mat_shifted = xr.Dataset(data_vars={"data": (["timestamps", "weights"], design_mat_shifted["data"])},
+                                        coords={"timestamps": design_mat_shifted["timestamps"],
+                                            "weights": design_mat_shifted["weights"]})
+
+        fit_shift = copy.deepcopy(fit)
+        fit_shift['spike_count_arr'].pop('spike_counts')
+        fit_shift['spike_count_arr']['spike_counts'] = fit['spike_count_arr']['spike_counts'][blocks]
+        fit_shift['bin_centers'] = fit_shift['bin_centers'][blocks]
+
+        fit_shift = evaluate_model(fit_shift, design_mat_shifted, run_params)
+        shifted_cv_var_test[sh] = np.nanmean(fit_shift[model_label]['cv_var_test'], axis=1)
+
+    fit[model_label]['shifted_cv_var_test'] = shifted_cv_var_test
+    fit[model_label]['shifts'] = shifts
+
+    return fit
+
+
+def dropout(fit, design_mat, run_params):
+    model_label = run_params['model_label']
+    filtered_weights = run_params['weights_post_dropout']
+    design_matrix_reduced = design_mat.copy()
+    design_matrix_reduced = design_matrix_reduced.sel(weights=filtered_weights)
+    fit_drop = copy.deepcopy(fit)
+    fit_drop = evaluate_model(fit_drop, design_matrix_reduced, run_params)
+    fit[model_label]['dropout_cv_var_test'] = fit_drop[model_label]['cv_var_test']
+    fit[model_label]['weights_post_dropout'] = design_matrix_reduced.weights.values
+    return fit
+
 
 
 def clean_r2_vals(x):
