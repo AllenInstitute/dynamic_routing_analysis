@@ -12,7 +12,6 @@ from collections.abc import Iterable
 # 3rd-party imports necessary for processing ----------------------- #
 import npc_lims
 import polars as pl
-import pynwb
 import upath
 
 import dynamic_routing_analysis.codeocean_utils as codeocean_utils
