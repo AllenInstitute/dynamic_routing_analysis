@@ -17,6 +17,6 @@ dotenv.load_dotenv()
         's3://aind-scratch-data/dynamic-routing/session_metadata/session_table.parquet'
     )
     .write_parquet(
-        pathlib.Path(__file__).parent.parent / 'bin/sessions_table.parquet'
+        pathlib.Path(__file__).parent.parent / 'bin/session_table.parquet'
     )
 )
