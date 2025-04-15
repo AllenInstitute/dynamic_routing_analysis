@@ -94,9 +94,9 @@ def setup_logging(level: int | str = logging.INFO, filepath: str | None = None) 
         # note: filename must be unique if we want to collect logs at end of pipeline
 
     if filepath:
-        pathlib.Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+        pathlib.Path(filepath).resolve().parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.handlers.RotatingFileHandler(
-            filename=filepath,
+            filename=pathlib.Path(filepath).resolve().as_posix(),
             maxBytes=1024 * 1024 * 10,
         )
         handlers.append(file_handler)
@@ -104,8 +104,11 @@ def setup_logging(level: int | str = logging.INFO, filepath: str | None = None) 
     # Apply formatting to the console handler and attach to root logger
     for handler in handlers:
         handler.setFormatter(formatter)
-    # Configure the root logger
-    logging.basicConfig(level=level, handlers=handlers)
+        # Configure the root logger
+    root_logger = logging.getLogger()  # Get the root logger
+    root_logger.setLevel(level)
+    for handler in handlers:
+        root_logger.addHandler(handler)
 
 
 if __name__ == "__main__":
