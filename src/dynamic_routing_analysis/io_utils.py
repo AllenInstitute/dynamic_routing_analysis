@@ -257,6 +257,9 @@ def get_session_data_from_session_obj(session):
     )
     return session.units[:], behavior_info
 
+def get_session_data(session):
+    return get_session_data_from_session_obj(session)
+
 def get_session_data_from_datacube(session_id):
     import lazynwb
     nwb_path = next(p for p in datacube_utils.get_nwb_paths() if p.stem == session_id)
@@ -297,7 +300,7 @@ def get_session_data_from_cache(session_id, version='0.0.260'):
         units_table = pd.read_parquet(
             units_table_path, columns=[c for c in schema if c not in ['waveform_mean', 'waveform_sd',]]
         )
-        return None, units_table, behavior_info, None #! doesn't match signature of get_session_data_from_session_obj
+        return units_table, behavior_info
 
     except FileNotFoundError:
         # Attempt to load data from DynamicRoutingSession as a fallback
