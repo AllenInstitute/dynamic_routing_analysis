@@ -2,7 +2,6 @@ import glob
 import os
 
 import npc_lims
-import npc_sessions
 import numpy as np
 import pandas as pd
 
@@ -87,6 +86,8 @@ def load_facemap_data(session,session_info=None,trials=None,vid_angle=None,keep_
         facemap_info['motSVD']=behav_info.item()['motSVD']
     # use s3 data
     else:
+        import npc_sessions
+
         camera_to_facemap_name = {
             "face": "Face",
             "behavior": "Behavior",
