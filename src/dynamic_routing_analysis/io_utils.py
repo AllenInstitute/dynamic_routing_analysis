@@ -247,10 +247,6 @@ def _create_behavior_info(trials, performance, epochs):
     return {
         'trials': trials,
         'dprime': dprimes,
-        'is_good_behavior': (
-            np.count_nonzero(dprimes >= 1) >= 4
-            if dprimes is not None else None
-        ),
         'epoch_info': epochs,
     }
 
