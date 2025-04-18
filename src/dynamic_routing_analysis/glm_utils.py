@@ -683,18 +683,18 @@ def linear_shift(fit, design_mat, run_params):
     model_label = run_params['model_label']
     shifts, blocks = get_shift_bins(run_params, fit, design_mat.sel(weights='context_0'))
     shift_variables = [key for key in run_params['kernels'].keys() if run_params['kernels'][key]['shift']]
-    shift_column = [i for i, label in enumerate(design_mat.coords['weights'].values) if any([key in label for key in shift_variables])]
+    shift_columns = [i for i, label in enumerate(design_mat.coords['weights'].values) if any([key in label for key in shift_variables])]
     shifted_cv_var_test = np.zeros((len(shifts), fit['spike_count_arr']['spike_counts'].shape[1])) + np.nan
 
     for sh, shift in enumerate(tqdm(shifts, desc="Shifting progress")):
-        apply_shift_to_design_matrix(fit, design_mat, run_params, model_label, blocks, shift_column, shifted_cv_var_test, sh, shift)
+        apply_shift_to_design_matrix(fit, design_mat, run_params, model_label, blocks, shift_columns, shifted_cv_var_test, sh, shift)
 
     fit[model_label]['shifted_cv_var_test'] = shifted_cv_var_test
     fit[model_label]['shifts'] = shifts
 
     return fit
 
-def apply_shift_to_design_matrix(fit, design_mat, run_params, blocks, shift_column, shift):
+def apply_shift_to_design_matrix(fit, design_mat, run_params, blocks, shift_columns, shift):
     times_used=blocks+shift
     shift_exists=[]
     for tt in times_used:
@@ -709,9 +709,9 @@ def apply_shift_to_design_matrix(fit, design_mat, run_params, blocks, shift_colu
     design_mat_shifted = {'data': np.zeros((len(times_used), design_mat.data.shape[1])),
                               'weights': design_mat.weights.copy(),
                               'timestamps': design_mat['timestamps'][blocks].copy()}
-    design_mat_shifted['data'][:, shift_column] = design_mat.data[times_used][:, shift_column]
-    non_shift_column = list(set(np.arange(design_mat.data.shape[1])) - set(shift_column))
-    design_mat_shifted['data'][:, non_shift_column] = design_mat.data[blocks][:, non_shift_column]
+    design_mat_shifted['data'][:, shift_columns] = design_mat.data[times_used][:, shift_columns]
+    non_shift_columns = list(set(np.arange(design_mat.data.shape[1])) - set(shift_columns))
+    design_mat_shifted['data'][:, non_shift_columns] = design_mat.data[blocks][:, non_shift_columns]
 
     design_mat_shifted = xr.Dataset(data_vars={"data": (["timestamps", "weights"], design_mat_shifted["data"])},
                                         coords={"timestamps": design_mat_shifted["timestamps"],
@@ -723,7 +723,7 @@ def apply_shift_to_design_matrix(fit, design_mat, run_params, blocks, shift_colu
     fit_shift['bin_centers'] = fit_shift['bin_centers'][blocks]
 
     fit_shift = evaluate_model(fit_shift, design_mat_shifted, run_params)
-    return np.nanmean(fit_shift['cv_var_test'], axis=1)
+    return fit_shift
 
 
 def dropout(fit, design_mat, run_params):
