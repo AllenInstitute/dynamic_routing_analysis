@@ -1742,7 +1742,7 @@ def plot_brain_heatmap(
         sagittal_planes = (sagittal_planes,)
     else:
         sagittal_planes = tuple(sagittal_planes)  # type: ignore
-
+    sagittal_planes = [i + ccf_utils.get_midline_ccf_ml()  for i in sagittal_planes]
     if clevels is not None:
         clevels = tuple(clevels)  # type: ignore
         if len(clevels) != 2:
@@ -1946,7 +1946,7 @@ def plot_brain_heatmap(
         ax.set_clip_on(False)
 
     if interactive:
-        chart = plot_gdf_alt(gdfs, ccf_colors=False)
+        chart = plot_gdf_alt(gdfs, ccf_colors=False, cmap=cmap)
         return chart, tuple(gdfs)
     else:
         return fig, tuple(gdfs)
@@ -1955,6 +1955,7 @@ def plot_brain_heatmap(
 def plot_gdf_alt(
     gdfs: gpd.GeoDataFrame | Iterable[gpd.GeoDataFrame],
     ccf_colors: bool = False,
+    cmap: str = "viridis",
     value_name: str = "value",
 ) -> alt.Chart:
     if isinstance(gdfs, gpd.GeoDataFrame):
@@ -2039,7 +2040,7 @@ def plot_gdf_alt(
             color = alt.Color(
                 "value:Q",
                 title=value_name,
-                scale=alt.Scale(scheme="viridis"),
+                scale=alt.Scale(scheme=cmap.lower()),
                 legend=alt.Legend(orient="bottom", direction="horizontal"),
                 # condition=condition,
             )
