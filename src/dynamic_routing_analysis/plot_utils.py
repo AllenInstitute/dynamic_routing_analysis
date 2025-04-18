@@ -1742,7 +1742,7 @@ def plot_brain_heatmap(
         sagittal_planes = (sagittal_planes,)
     else:
         sagittal_planes = tuple(sagittal_planes)  # type: ignore
-
+    sagittal_planes = [i + ccf_utils.get_midline_ccf_ml()  for i in sagittal_planes]
     if clevels is not None:
         clevels = tuple(clevels)  # type: ignore
         if len(clevels) != 2:
