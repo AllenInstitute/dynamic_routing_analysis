@@ -3,13 +3,14 @@ import logging
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-import models as mu
 import numpy as np
 import xarray as xr
 from numpy.linalg import LinAlgError
 from sklearn.cluster import KMeans
 from sklearn.model_selection import GridSearchCV, KFold
 from tqdm import tqdm
+
+import dynamic_routing_analysis.models as mu
 
 logger = logging.getLogger(__name__) # debug < info < warning < error
 
