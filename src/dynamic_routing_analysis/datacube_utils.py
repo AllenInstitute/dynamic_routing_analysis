@@ -127,6 +127,11 @@ def parse_version(path: str) -> str:
     return result.group(0)
 
 
+@functools.cache
+def get_datacube_version() -> str:
+    return parse_version(codeocean_utils.get_datacube_dir().as_posix())
+
+
 # data access ------------------------------------------------------- #
 @functools.cache
 def get_session_table() -> pl.DataFrame:
