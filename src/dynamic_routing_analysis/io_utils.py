@@ -963,10 +963,7 @@ class DesignMatrix:
         # CONVERT offset to offset_samples
         offset_samples = int(np.floor((1 / self.spike_bin_width) * offset))
 
-        if np.abs(offset_samples) > 0:
-            this_kernel = toeplitz_this_kernel(input_x, kernel_length_samples, offset_samples)
-        else:
-            this_kernel = input_x.reshape(1, -1)
+        this_kernel = toeplitz_this_kernel(input_x, kernel_length_samples, offset_samples)
 
         # keep only the relevant trace for prediction
         this_kernel = this_kernel[:, self.mask]
