@@ -349,6 +349,10 @@ def setup_units_table(run_params, units_table):
     if run_params['run_on_qc_units']:
         units_table = units_table[units_table.good_unit]
 
+    unit_ids = run_params.get('unit_ids', [])
+    if unit_ids:
+        units_table = units_table[units_table.unit_id.isin(unit_ids)]
+
     areas_to_include = run_params.get('areas_to_include', [])
     if areas_to_include:
         units_table = units_table[units_table.structure.isin(areas_to_include)]
