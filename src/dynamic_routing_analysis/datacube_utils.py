@@ -1,6 +1,7 @@
 # stdlib imports --------------------------------------------------- #
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import functools
 import logging
@@ -132,6 +133,12 @@ def parse_version(path: str) -> str:
 def get_datacube_version() -> str:
     return parse_version(codeocean_utils.get_datacube_dir().as_posix())
 
+@functools.cache
+def is_datacube_available() -> bool:
+    with contextlib.suppress(FileNotFoundError):
+        _ = codeocean_utils.get_datacube_dir()
+        return True
+    return False
 
 # data access ------------------------------------------------------- #
 @functools.cache
