@@ -529,6 +529,25 @@ def establish_timebins(run_params, fit, behavior_info):
     return fit
 
 
+
+def construct_half_gaussian_kernel(std_dev, spike_bin_width):
+    '''
+    Returns a half-gaussian kernel
+    '''
+    x = np.arange(-3 * std_dev, 3 * std_dev, spike_bin_width)
+    kernel = np.exp(-x ** 2 / (2 * std_dev ** 2))
+    kernel[:len(kernel) // 2] = 0
+    kernel = kernel / np.sum(kernel)
+    return kernel
+
+
+def half_gaussian_smoothing(spike_counts, kernel):
+    '''
+    Returns a smoothed version of spike_counts using a half-gaussian kernel
+    '''
+    return np.convolve(spike_counts, kernel, mode='same')
+
+
 def get_spike_counts(spike_times, timebins):
     '''
         spike_times, a list of spike times, sorted
