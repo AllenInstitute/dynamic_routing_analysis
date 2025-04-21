@@ -253,6 +253,10 @@ def define_kernels(run_params):
             if key in kernels:
                 kernels[key]['orthogonalize'] = True
 
+    # update which context kernel to use based on project
+    if run_params['project'] == 'templeton':
+        kernels['context']['function_call'] = 'context_templeton'
+
     run_params['kernels'] = kernels
 
     return run_params
