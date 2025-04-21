@@ -8,6 +8,7 @@ import logging.handlers
 import pathlib
 import re
 from collections.abc import Iterable
+import typing
 
 # 3rd-party imports necessary for processing ----------------------- #
 import npc_lims
@@ -150,11 +151,26 @@ def get_df(component: str) -> pl.DataFrame:
         pl.col("session_id").str.split("_").list.slice(0, 2).list.join("_")
     )
 
+@typing.overload
+def get_nwb_paths(session_id: str) -> pathlib.Path:
+    ...
+
+@typing.overload
+def get_nwb_paths(session_id: None) -> tuple[pathlib.Path, ...]:
+    ...
 
 @functools.cache
-def get_nwb_paths() -> tuple[pathlib.Path, ...]:
-    return tuple(datacube_config.nwb_dir.rglob("*.nwb"))
-
+def get_nwb_paths(session_id: str | None = None) -> pathlib.Path | tuple[pathlib.Path, ...]:
+    paths = datacube_config.nwb_dir.rglob("*.nwb")
+    if session_id:
+        try:
+            return next(p for p in paths if p.stem == session_id)
+        except StopIteration:
+            raise FileNotFoundError(
+                f"Cannot find NWB file for {session_id!r} in {datacube_config.nwb_dir}"
+            ) from None
+    else:
+        return tuple(p for p in paths if p.is_file())
 
 def _parse_nwb_path_from_input(
     session_id_or_path: str | pathlib.Path,
