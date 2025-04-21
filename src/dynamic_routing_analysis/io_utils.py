@@ -205,6 +205,13 @@ def define_kernels(run_params):
                 logger.info(get_timestamp() + f': dropping {sub_key}')
                 selected_keys.remove(sub_key)
 
+    shift_keys = run_params.get('linear_shift_variables', [])
+    if shift_keys and run_params['model_label'] != 'fullmodel':
+        for shift_key in shift_keys:
+            sub_keys = categories.get(shift_key, [shift_key])
+            for sub_key in sub_keys:
+                master_kernels_list[sub_key]['shift'] = True
+
     # Build kernels dictionary based on selected keys
     kernels = {key: master_kernels_list[key] for key in selected_keys}
 
