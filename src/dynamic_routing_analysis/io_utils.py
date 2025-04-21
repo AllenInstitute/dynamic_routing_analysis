@@ -580,8 +580,15 @@ def process_spikes(units_table, run_params, fit):
 
     spikes = np.zeros((fit['timebins'].shape[0], len(units_table)))
 
+    if run_params["smooth_spikes_half_gaussian"]:
+        kernel = construct_half_gaussian_kernel(run_params["half_gaussian_std_dev"], run_params["spike_bin_width"])
+
+
     for uu, (_, unit) in tqdm(enumerate(units_table.iterrows()), total=len(units_table), desc='getting spike counts'):
         spikes[:, uu] = get_spike_counts(np.array(unit['spike_times']), fit['timebins'])
+        if run_params["smooth_spikes_half_gaussian"]:
+            spikes[:, uu] = half_gaussian_smoothing(spikes[:, uu], kernel)
+
 
     spike_count_arr = {
         'spike_counts': spikes,
