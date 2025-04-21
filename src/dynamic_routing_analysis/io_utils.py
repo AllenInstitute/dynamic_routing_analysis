@@ -758,12 +758,16 @@ def pupil(kernel_name, session, fit, behavior_info):
             # Apply threshold and set outliers to NaN within the epoch
             df.loc[epoch_mask & (df['pupil_area'] > threshold), 'pupil_area'] = np.nan
         df['pupil_area'] = df['pupil_area'].interpolate(method='linear')
+        df['pupil_area'] = df['pupil_area'].ffill()
+        df['pupil_area'] = df['pupil_area'].bfill()
         return df
+
     if isinstance(session, str) and datacube_utils.is_datacube_available():
         df = process_pupil_data(_datacube_data(session, '/processing/behavior/eye_tracking'), behavior_info)
     else:
         df = process_pupil_data(session.processing['behavior']['eye_tracking'][:], behavior_info)
     this_kernel = bin_timeseries(df.pupil_area.values, df.timestamps.values, fit['timebins_all'])
+    this_kernel = pd.Series(this_kernel).ffill().bfill().to_numpy()
     if np.isnan(this_kernel).all():
         raise ValueError(f"The trace is all nans for {kernel_name}")
     return this_kernel
@@ -775,6 +779,7 @@ def running(kernel_name, session, fit, behavior_info):
     else:
         timeseries = session.processing['behavior']['running_speed']
     this_kernel = bin_timeseries(timeseries.data[:], timeseries.timestamps[:], fit['timebins_all'])
+    this_kernel = pd.Series(this_kernel).ffill().bfill().to_numpy()
     if np.isnan(this_kernel).all():
         raise ValueError(f"The trace is all nans for {kernel_name}")
     return this_kernel
@@ -832,7 +837,7 @@ def facial_features(kernel_name, session, fit, behavior_info):
     lp_part_name = map_names[kernel_name]
     part_xy, confidence = part_info_LP(lp_part_name, df)
     this_kernel = bin_timeseries(part_xy, timestamps, fit['timebins_all'])
-
+    this_kernel = pd.Series(this_kernel).ffill().bfill().to_numpy()
     if np.isnan(this_kernel).all():
         raise ValueError(f"The trace is all nans for {kernel_name}")
     return this_kernel
@@ -864,6 +869,10 @@ def stimulus(kernel_name, session, fit, behavior_info):
         stim_times = filtered_trials.stim_start_time.values
         in_bin = (stim_times[:, None] >= bin_starts) & (stim_times[:, None] < bin_stops)
         this_kernel = np.any(in_bin, axis=0).astype(int)
+        # Ensure no consecutive 1s
+        for i in range(1, len(this_kernel)):
+            if this_kernel[i] == 1 and this_kernel[i - 1] == 1:
+                this_kernel[i] = 0
     else:
         raise ValueError(f"No trials presented with {stim_name} stimulus in {context_name} context")
     return this_kernel
