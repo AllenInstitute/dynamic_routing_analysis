@@ -84,18 +84,26 @@ class RunParams:
     def __init__(self, session_id):
         self.run_params = {
             "session_id": session_id,
+            "project": "DynamicRouting",
+            "cache_version": '0.0.265',
             "time_of_interest": 'quiescent',
             "spontaneous_duration": 2 * 60,  # in seconds
             "input_variables": None,
             "input_offsets": True,
             "input_window_lengths": None,  # offset
+
             "drop_variables": None,
+            "linear_shift_variables": None,
+            "linear_shift_by": 0.1, # in seconds
             "unit_inclusion_criteria": {'isi_violations': 0.1,
                                         'presence_ratio': 0.99,
                                         'amplitude_cutoff': 0.1,
                                         'firing_rate': 1},
             "run_on_qc_units": True,
-            "spike_bin_width": 0.025,
+            "unit_ids": None,
+            "spike_bin_width": 0.1,
+            "smooth_spikes_half_gaussian": False,
+            "half_gaussian_std_dev": 0.05,
             "areas_to_include": None,
             "areas_to_exclude": None,
             "orthogonalize_against_context": ['facial_features'],
