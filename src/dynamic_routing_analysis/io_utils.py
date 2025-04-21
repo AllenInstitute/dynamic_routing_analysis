@@ -710,6 +710,26 @@ def context(kernel_name, session, fit, behavior_info):
 
     return this_kernel
 
+
+def context_templeton(kernel_name, session, fit, behavior_info):
+    this_kernel = np.zeros(len(fit['bin_centers_all']))
+    epoch_trace = fit['epoch_trace_all']
+    trial_indexes = [n for n, epoch in enumerate(epoch_trace) if 'trial' in epoch]
+
+    # find index corresponding to passage of every 10 minutes from fit['bin_centers_all']
+    trial_times = fit['bin_centers_all'][trial_indexes]
+    block_length = 10 * 60  # 10 minutes in seconds
+    switch_times = trial_times[0] + np.arange(0, block_length*6, block_length)
+    signed_context = np.random.choice([-1, 1], size=1)[0]
+    for i in range(1, len(switch_times)):
+        this_kernel[np.where((fit['bin_centers_all'] >= switch_times[i-1]) & (fit['bin_centers_all'] < switch_times[i]))] = signed_context
+        signed_context = -signed_context
+    # Handle the last segment
+    this_kernel[np.where((fit['bin_centers_all'] >= switch_times[-1]) & (fit['bin_centers_all'] <= trial_times[-1]))] = signed_context
+
+    return this_kernel
+
+
 @typing.overload
 def _datacube_data(session_id: str, internal_path: str, is_timeseries: Literal[False]) -> pd.DataFrame:
     ...
