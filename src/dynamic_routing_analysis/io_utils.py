@@ -1,7 +1,7 @@
 import logging
 import time
-from typing import Literal
 import typing
+from typing import Literal
 
 import lazynwb
 import npc_lims
@@ -11,7 +11,6 @@ import polars as pl
 import xarray as xr
 from tqdm import tqdm
 
-from dynamic_routing_analysis import codeocean_utils
 import dynamic_routing_analysis.datacube_utils as datacube_utils
 
 # Define master kernel list
@@ -537,9 +536,6 @@ def process_spikes(units_table, run_params, fit):
         Returns a  dictionary including spike counts and unit-specific information.
     '''
 
-    # identifies good units
-    units_table = setup_units_table(run_params, units_table)
-
     spikes = np.zeros((fit['timebins'].shape[0], len(units_table)))
 
     for uu, (_, unit) in tqdm(enumerate(units_table.iterrows()), total=len(units_table), desc='getting spike counts'):
@@ -549,10 +545,6 @@ def process_spikes(units_table, run_params, fit):
         'spike_counts': spikes,
         'bin_centers': fit['bin_centers'],
         'unit_id': units_table.unit_id.values,
-        'structure': units_table.structure.values,
-        'location': units_table.location.values,
-        'quality':  units_table.good_unit.values,
-        'firing_rate': units_table.firing_rate.values
     }
     fit['spike_count_arr'] = spike_count_arr
 
@@ -700,7 +692,7 @@ def pupil(kernel_name, session, fit, behavior_info):
         return df
     if isinstance(session, str) and datacube_utils.is_datacube_available():
         df = process_pupil_data(_datacube_data(session, '/processing/behavior/eye_tracking'), behavior_info)
-    else:    
+    else:
         df = process_pupil_data(session.processing['behavior']['eye_tracking'][:], behavior_info)
     this_kernel = bin_timeseries(df.pupil_area.values, df.timestamps.values, fit['timebins_all'])
     if np.isnan(this_kernel).all():
@@ -762,7 +754,7 @@ def facial_features(kernel_name, session, fit, behavior_info):
             df = _datacube_data(session, '/processing/behavior/lp_side_camera')
         except KeyError:
             raise IndexError(f'{session} is not a session with video.')
-    else:    
+    else:
         try:
             df = session.processing['behavior']['lp_side_camera'][:]
         except IndexError:
