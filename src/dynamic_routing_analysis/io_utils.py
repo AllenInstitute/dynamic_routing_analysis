@@ -100,7 +100,7 @@ class RunParams:
                                         'amplitude_cutoff': 0.1,
                                         'firing_rate': 1},
             "run_on_qc_units": True,
-            "unit_ids": None,
+            "unit_ids_to_use": None,
             "spike_bin_width": 0.1,
             "smooth_spikes_half_gaussian": False,
             "half_gaussian_std_dev": 0.05,
@@ -349,9 +349,9 @@ def setup_units_table(run_params, units_table):
     if run_params['run_on_qc_units']:
         units_table = units_table[units_table.good_unit]
 
-    unit_ids = run_params.get('unit_ids', [])
-    if unit_ids:
-        units_table = units_table[units_table.unit_id.isin(unit_ids)]
+    unit_ids_to_use = run_params.get('unit_ids_to_use', [])
+    if unit_ids_to_use:
+        units_table = units_table[units_table.unit_id.isin(unit_ids_to_use)]
 
     areas_to_include = run_params.get('areas_to_include', [])
     if areas_to_include:
