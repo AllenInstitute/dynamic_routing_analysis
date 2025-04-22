@@ -1042,7 +1042,7 @@ def get_timestamp():
 
 def orthogonalize_this_kernel(this_kernel, y):
     mat_to_ortho = np.concatenate((y.reshape(-1, 1), this_kernel.reshape(-1, 1)), axis=1)
-    logger.info(get_timestamp() + '                 : ' + 'othogonalizing against context')
+    logger.info(get_timestamp() + '                 : ' + 'orthogonalizing against context')
     Q, R = np.linalg.qr(mat_to_ortho)
     return Q[:, 1]
 
