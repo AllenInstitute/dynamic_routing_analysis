@@ -729,7 +729,7 @@ def apply_shift_to_design_matrix(fit, design_mat, run_params, blocks, shift_colu
 
 def dropout(fit, design_mat, run_params):
     model_label = run_params['model_label']
-    filtered_weights = run_params['weights_post_dropout']
+    filtered_weights = run_params['input_variables']
     design_matrix_reduced = design_mat.copy()
     design_matrix_reduced = design_matrix_reduced.sel(weights=filtered_weights)
     fit_drop = copy.deepcopy(fit)
