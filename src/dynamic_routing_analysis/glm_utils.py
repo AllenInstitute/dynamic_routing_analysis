@@ -1,5 +1,6 @@
 import copy
 import logging
+import re
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -729,7 +730,7 @@ def apply_shift_to_design_matrix(fit, design_mat, run_params, blocks, shift_colu
 
 def dropout(fit, design_mat, run_params):
     model_label = run_params['model_label']
-    filtered_weights = run_params['input_variables']
+    filtered_weights = [weight for weight in design_mat.weights.values if re.split(r'_(?=\d)', weight)[0] in run_params['input_variables'].keys()]
     design_matrix_reduced = design_mat.copy()
     design_matrix_reduced = design_matrix_reduced.sel(weights=filtered_weights)
     fit_drop = copy.deepcopy(fit)
