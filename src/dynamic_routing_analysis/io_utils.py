@@ -282,15 +282,17 @@ def get_session_data_from_session_obj(session):
 def get_session_data(session):
     return get_session_data_from_session_obj(session)
 
-def get_session_data_from_datacube(session_id):
-    nwb_path = next(p for p in datacube_utils.get_nwb_paths() if p.stem == session_id)
+def get_session_data_from_datacube(session_id, lazy: bool = False, low_memory: bool = False):
+    nwb_path = datacube_utils.get_nwb_paths(session_id)
     behavior_info = _create_behavior_info(
         trials=lazynwb.get_df(nwb_path, '/intervals/trials'),
         performance=lazynwb.get_df(nwb_path, '/intervals/performance'),
         epochs=lazynwb.get_df(nwb_path, '/intervals/epochs'),
     )
-    return lazynwb.get_df(nwb_path, '/units'), behavior_info
-
+    if not lazy:
+        return lazynwb.get_df(nwb_path, '/units'), behavior_info
+    else:
+        return lazynwb.scan_nwb(nwb_path, '/units', low_memory=low_memory), behavior_info
 
 def get_session_data_from_cache(session_id, version='0.0.260'):
 
