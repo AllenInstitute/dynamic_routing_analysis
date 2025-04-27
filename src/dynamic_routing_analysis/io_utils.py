@@ -708,7 +708,7 @@ def context(kernel_name, session, fit, behavior_info):
     for n, epoch in enumerate(epoch_trace):
         if 'trial' in epoch:
             trial_no = int(''.join(filter(str.isdigit, epoch)))
-            this_kernel[n] = 1 if behavior_info['trials'].loc[trial_no, 'is_vis_context'] else -1
+            this_kernel[n] = 1 if behavior_info['trials'].loc[trial_no, 'is_vis_rewarded'] else -1
 
     return this_kernel
 
@@ -858,12 +858,12 @@ def choice(kernel_name, session, fit, behavior_info):
 
 def stimulus(kernel_name, session, fit, behavior_info):
     if '_' in kernel_name:
-        stim_name, context_name = kernel_name.split('_')
+        stim_name, rewarded_modality = kernel_name.split('_')
         filtered_trials = behavior_info['trials'][
-            (behavior_info['trials'].stim_name == stim_name) & (behavior_info['trials'].context_name == context_name)]
+            (behavior_info['trials'].stim_name == stim_name) & (behavior_info['trials'].rewarded_modality == rewarded_modality)]
     else:
         stim_name = kernel_name
-        context_name = 'all'
+        rewarded_modality = 'all'
         filtered_trials = behavior_info['trials'][behavior_info['trials'].stim_name == stim_name]
     bin_starts, bin_stops = fit['timebins_all'][:, 0], fit['timebins_all'][:, 1]
 
@@ -876,7 +876,7 @@ def stimulus(kernel_name, session, fit, behavior_info):
             if this_kernel[i] == 1 and this_kernel[i - 1] == 1:
                 this_kernel[i] = 0
     else:
-        raise ValueError(f"No trials presented with {stim_name} stimulus in {context_name} context")
+        raise ValueError(f"No trials presented with {stim_name} stimulus in {rewarded_modality} context")
     return this_kernel
 
 
