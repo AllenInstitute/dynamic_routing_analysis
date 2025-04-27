@@ -263,7 +263,7 @@ def define_kernels(run_params):
 
 
 def _create_behavior_info(trials, performance, epochs):
-    dprimes = performance.cross_modal_dprime.values
+    dprimes = performance.cross_modality_dprime.values
     return {
         'trials': trials,
         'dprime': dprimes,

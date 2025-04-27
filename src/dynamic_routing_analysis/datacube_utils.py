@@ -270,7 +270,7 @@ def combine_exprs(exprs: Iterable[pl.expr]) -> pl.expr:
 
 
 def get_passing_blocks_performance_filter(
-    cross_modal_dprime: float | None = 1.0,
+    cross_modality_dprime: float | None = 1.0,
     same_modal_dprime: float | None = None,
     min_n_blocks: int = 2,
     of_each_rewarded_modality: bool = True,
@@ -278,8 +278,8 @@ def get_passing_blocks_performance_filter(
     min_contingent_rewards: int | None = 10,
 ) -> pl.Expr:
     cross_modal_dprime_filter: pl.Expr = (
-        pl.col("cross_modal_dprime") > cross_modal_dprime
-        if cross_modal_dprime is not None
+        pl.col("cross_modality_dprime") > cross_modality_dprime
+        if cross_modality_dprime is not None
         else pl.lit(True)
     )
     same_modal_dprime_filter: pl.Expr = (
