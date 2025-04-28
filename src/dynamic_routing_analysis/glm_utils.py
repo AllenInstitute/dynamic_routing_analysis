@@ -635,6 +635,7 @@ def evaluate_model(fit, design_mat, run_params):
     fit[model_label] = {
         'weights': all_weights,
         # 'full_model_prediction': all_prediction,
+        # 'weight_label': design_mat.weights.values,
         'cv_var_train': np.nanmean(cv_var_train, axis = 1),
         'cv_var_test': np.nanmean(cv_var_test, axis = 1)
     }
