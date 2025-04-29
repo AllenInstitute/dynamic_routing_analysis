@@ -1,7 +1,6 @@
 import copy
 import logging
 import re
-import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import numpy as np
@@ -382,7 +381,7 @@ def optimize_model(fit, design_mat, run_params):
     param_keys += [key + '_nested' for key in param_keys]
 
     if run_params['use_fixed_penalty']:
-        print(get_timestamp() + 'Using a hard-coded regularization value')
+        print('Using a hard-coded regularization value')
 
         for key in param_keys:
             fit[key] = None
@@ -415,7 +414,7 @@ def optimize_model(fit, design_mat, run_params):
         train_cv = np.full(grid_shape, np.nan)
         test_cv = np.full(grid_shape, np.nan)
 
-        print(get_timestamp() + ': optimizing parameters for all cells')
+        print(': optimizing parameters for all cells')
         for index1, param in enumerate(param_grid):
             for index2, param2 in (enumerate(param2_grid) if param2_grid is not None else [(None, None)]):
                 # Run simple train and test for each parameter combination
@@ -486,7 +485,7 @@ def evaluate_model(fit, design_mat, run_params):
     # fullmodel is completely fitted (simple or nested) or fullmodel is not fit but model parameters have beeen optimized
     elif run_params["fullmodel_fitted"] or run_params['no_nested_CV']:
         if run_params['optimize_penalty_by_cell']:
-            print(get_timestamp() + ': fitting each cell')
+            print(': fitting each cell')
             with ProcessPoolExecutor(max_workers=10) as executor:
                 futures = {
                     executor.submit(process_unit, unit_no, design_mat.copy(), fit.copy(), run_params): unit_no
@@ -505,7 +504,7 @@ def evaluate_model(fit, design_mat, run_params):
                 param, param2 = get_parameters(fit, method)
             else:
                 param, param2 = get_parameters(fit, method, '_nested')
-            print(get_timestamp() + ': fitting units by area')
+            print(': fitting units by area')
             for area in tqdm(areas, total=len(areas), desc='progress'):
                 unit_ids = np.where(fit['spike_count_arr']['structure'] == area)[0]
                 fit_area = spike_counts[:, unit_ids]
@@ -528,7 +527,7 @@ def evaluate_model(fit, design_mat, run_params):
                 param, param2 = get_parameters(fit, method)
             else:
                 param, param2 = get_parameters(fit, method, '_nested')
-            print(get_timestamp() + ': fitting units by firing rate')
+            print(': fitting units by firing rate')
             for cluster in tqdm(np.unique(rate_clusters), total=len(np.unique(rate_clusters)), desc='progress'):
                 unit_ids = np.where(rate_clusters == cluster)[0]
                 fit_rate = spike_counts[:, unit_ids]
@@ -549,7 +548,7 @@ def evaluate_model(fit, design_mat, run_params):
                 param, param2 = get_parameters(fit, method)
             else:
                 param, param2 = get_parameters(fit, method, '_nested')
-            print(get_timestamp() + ': fitting all units')
+            print(': fitting all units')
             param = np.nanmedian(param, axis = 0)
             param2 = np.nanmedian(param2, axis = 0) if param2 is not None else None
             cv_var_train, cv_var_test, all_weights, all_prediction = simple_train_and_test(design_mat,
@@ -566,7 +565,7 @@ def evaluate_model(fit, design_mat, run_params):
         param_grid, param2_grid = get_parameter_grid(fit, method)
 
         if run_params['optimize_penalty_by_cell']:
-            print(get_timestamp() + ': fitting each cell')
+            print(': fitting each cell')
             with ProcessPoolExecutor(max_workers=10) as executor:
                 futures = {
                     executor.submit(process_unit, unit_no, design_mat.copy(), fit.copy(), run_params): unit_no
@@ -742,8 +741,3 @@ def dropout(fit, design_mat, run_params):
 def clean_r2_vals(x):
     x[np.isinf(x) | np.isnan(x)] = 0
     return x
-
-
-def get_timestamp():
-    t = time.localtime()
-    return time.strftime('%Y-%m-%d: %H:%M:%S') + ' '
