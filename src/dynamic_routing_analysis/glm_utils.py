@@ -677,6 +677,7 @@ def get_shift_bins(run_params, fit, context):
     if 0 not in shifts:
         shifts = np.append(shifts, 0)
     shifts = np.sort(shifts)
+    shifts = [shift for sh, shift in enumerate(shifts) if np.max(middle_4_blocks+shift) < len(bin_centers) and np.min(middle_4_blocks+shift) >= 0]
     return shifts, middle_4_blocks
 
 
