@@ -673,7 +673,7 @@ def get_shift_bins(run_params, fit, context):
     #find the number of trials to shift by, from -1 to +1 block
     negative_shift= middle_4_blocks.min()
     positive_shift= len(bin_centers) - middle_4_blocks.max()
-    shifts = np.arange(-negative_shift, positive_shift + 1, int(shift_by//bin_width))
+    shifts = np.arange(-negative_shift, positive_shift + 1, int(shift_by/bin_width))
     if 0 not in shifts:
         shifts = np.append(shifts, 0)
     shifts = np.sort(shifts)
