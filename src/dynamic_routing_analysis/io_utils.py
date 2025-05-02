@@ -585,7 +585,7 @@ def get_spike_counts(spike_times, timebins):
 
     # return counts
     # ------------------------------------------------------------------ #
-    return [b-a for a, b in np.searchsorted(spike_times, timebins)]
+    return np.array([b-a for a, b in np.searchsorted(spike_times, timebins)], dtype=np.float64)
 
 
 def process_spikes(units_table, run_params, fit):
