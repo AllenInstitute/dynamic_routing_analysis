@@ -281,7 +281,7 @@ def get_session_data_from_session_obj(session):
 def get_session_data(session):
     return get_session_data_from_session_obj(session)
 
-def get_session_data_from_datacube(session_id, lazy: bool = False, low_memory: bool = False):
+def get_session_data_from_datacube(session_id, lazy: bool = False, low_memory: bool = False) -> tuple[pl.LazyFrame, dict[str, pd.DataFrame]]:
     nwb_path = datacube_utils.get_nwb_paths(session_id)
     behavior_info = _create_behavior_info(
         trials=lazynwb.get_df(nwb_path, '/intervals/trials'),
@@ -289,7 +289,7 @@ def get_session_data_from_datacube(session_id, lazy: bool = False, low_memory: b
         epochs=lazynwb.get_df(nwb_path, '/intervals/epochs'),
     )
     if not lazy:
-        return lazynwb.get_df(nwb_path, '/units'), behavior_info
+        return lazynwb.get_df(nwb_path, '/units', as_polars=True), behavior_info
     else:
         return lazynwb.scan_nwb(nwb_path, '/units', low_memory=low_memory), behavior_info
 
