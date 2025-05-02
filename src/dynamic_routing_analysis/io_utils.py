@@ -281,17 +281,29 @@ def get_session_data_from_session_obj(session):
 def get_session_data(session):
     return get_session_data_from_session_obj(session)
 
-def get_session_data_from_datacube(session_id, lazy: bool = False, low_memory: bool = False, parallel: bool = True) -> tuple[pl.LazyFrame, dict[str, pd.DataFrame]]:
+
+def get_session_data_from_datacube(
+    session_id,
+    lazy: bool = False,
+    get_df_kwargs: dict | None = None,
+    scan_nwb_kwargs: dict | None = None,
+) -> tuple[pl.LazyFrame, dict[str, pd.DataFrame]]:
     nwb_path = datacube_utils.get_nwb_paths(session_id)
     behavior_info = _create_behavior_info(
-        trials=lazynwb.get_df(nwb_path, '/intervals/trials', parallel=parallel),
-        performance=lazynwb.get_df(nwb_path, '/intervals/performance', parallel=parallel),
-        epochs=lazynwb.get_df(nwb_path, '/intervals/epochs', parallel=parallel),
+        trials=lazynwb.get_df(nwb_path, '/intervals/trials', exact_path=True, **(get_df_kwargs or {})),
+        performance=lazynwb.get_df(nwb_path, '/intervals/performance', exact_path=True, **(get_df_kwargs or {})),
+        epochs=lazynwb.get_df(nwb_path, '/intervals/epochs', exact_path=True, **(get_df_kwargs or {})),
     )
-    if not lazy:
-        return lazynwb.get_df(nwb_path, '/units', as_polars=True, parallel=parallel), behavior_info
+    if lazy:
+        return lazynwb.scan_nwb(nwb_path, '/units', **(scan_nwb_kwargs or {})), behavior_info
     else:
-        return lazynwb.scan_nwb(nwb_path, '/units', low_memory=low_memory), behavior_info
+        return (
+            lazynwb.get_df(
+                nwb_path, "/units", exact_path=True, as_polars=True, **(get_df_kwargs or {})
+            ),
+            behavior_info,
+        )
+
 
 def get_session_data_from_cache(session_id, version='0.0.260'):
 
@@ -528,7 +540,6 @@ def establish_timebins(run_params, fit, behavior_info):
     # potentially a precision problem
 
     return fit
-
 
 
 def construct_half_gaussian_kernel(std_dev, spike_bin_width):
