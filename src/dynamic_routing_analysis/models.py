@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 from numpy.linalg import LinAlgError
+from scipy.linalg import solve
 from sklearn.linear_model import ElasticNet as SklearnElasticNet
 from sklearn.linear_model import LassoLars as SklearnLasso
 
@@ -23,21 +24,27 @@ class Ridge:
         '''
 
         # Compute the weights
+        XtX = X.T @ X
+        Xty = X.T @ y
         try:
             if self.lam == 0:
-                self.W = np.dot(np.linalg.inv(np.dot(X.T, X)), np.dot(X.T, y))
+                self.W = np.dot(np.linalg.inv(XtX), Xty)
                 self.W = self.W if ~np.isnan(np.sum(self.W)) else np.zeros(self.W.shape) # if weights contain NaNs, set to zeros
             else:
-                self.W = np.dot(np.linalg.inv(np.dot(X.T, X) + self.lam * np.eye(X.shape[-1])),
-                                np.dot(X.T, y))
+                a = XtX + self.lam * np.eye(X.shape[-1], dtype=np.float64)
+                self.W = solve(a, Xty, assume_a='pos')
+                # self.W = np.dot(np.linalg.inv(np.dot(X.T, X) + self.lam * np.eye(X.shape[-1])),
+                #                 np.dot(X.T, y))
         except LinAlgError as e:
             logger.info(f"Matrix inversion failed due to a linear algebra error:{e}. Falling back to pseudo-inverse.")
             # Fallback to pseudo-inverse
             if self.lam == 0:
-                self.W = np.dot(np.linalg.pinv(np.dot(X.T, X)), np.dot(X.T, y))
+                self.W = np.dot(np.linalg.pinv(XtX), Xty)
             else:
-                self.W = np.dot(np.linalg.pinv(np.dot(X.T, X) + self.lam * np.eye(X.shape[-1])),
-                                np.dot(X.T, y))
+                a = XtX + self.lam * np.eye(X.shape[-1], dtype=np.float64)
+                self.W = solve(a, Xty, assume_a='pos')
+                # self.W = np.dot(np.linalg.pinv(np.dot(X.T, X) + self.lam * np.eye(X.shape[-1])),
+                #                 np.dot(X.T, y))
         except Exception as e:
             print("Unexpected error encountered:", e)
             raise  # Re-raise the exception to propagate unexpected errors
