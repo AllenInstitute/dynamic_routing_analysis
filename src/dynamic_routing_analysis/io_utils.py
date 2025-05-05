@@ -1,6 +1,8 @@
 import logging
-import time
+import typing
+from typing import Literal
 
+import lazynwb
 import npc_lims
 import numpy as np
 import pandas as pd
@@ -38,16 +40,16 @@ master_kernels_list = {
                     'num_weights': None, 'shuffle': False, 'shift': False, 'text': 'non-target stim in aud context'},
     'sound2_aud': {'function_call': 'stimulus', 'type': 'discrete', 'length': 1, 'offset': 0, 'orthogonalize': None,
                     'num_weights': None, 'shuffle': False, 'shift': False, 'text': 'non-target stim in aud context'},
-    'nose': {'function_call': 'LP_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
+    'nose': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
                 'orthogonalize': None, 'num_weights': None, 'shuffle': False, 'shift': False,
                 'text': 'Z-scored Euclidean displacement of nose movements'},
-    'ears': {'function_call': 'LP_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
+    'ears': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
                 'orthogonalize': None, 'num_weights': None, 'shuffle': False, 'shift': False,
                 'text': 'Z-scored Euclidean displacement of ear movements'},
-    'jaw': {'function_call': 'LP_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
+    'jaw': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
             'orthogonalize': None, 'num_weights': None, 'shuffle': False, 'shift': False,
             'text': 'Z-scored Euclidean displacement of jaw movements'},
-    'whisker_pad': {'function_call': 'LP_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
+    'whisker_pad': {'function_call': 'facial_features', 'type': 'continuous', 'length': 1, 'offset': -0.5,
                     'orthogonalize': None, 'num_weights': None, 'shuffle': False, 'shift': False,
                     'text': 'Z-scored Euclidean displacement of whisker pad movements'},
     'licks': {'function_call': 'licks', 'type': 'discrete', 'length': 1, 'offset': -0.5, 'orthogonalize': None,
@@ -81,18 +83,26 @@ class RunParams:
     def __init__(self, session_id):
         self.run_params = {
             "session_id": session_id,
+            "project": "DynamicRouting",
+            "cache_version": '0.0.265',
             "time_of_interest": 'quiescent',
             "spontaneous_duration": 2 * 60,  # in seconds
             "input_variables": None,
             "input_offsets": True,
             "input_window_lengths": None,  # offset
+
             "drop_variables": None,
+            "linear_shift_variables": None,
+            "linear_shift_by": 0.1, # in seconds
             "unit_inclusion_criteria": {'isi_violations': 0.1,
                                         'presence_ratio': 0.99,
                                         'amplitude_cutoff': 0.1,
                                         'firing_rate': 1},
             "run_on_qc_units": True,
-            "spike_bin_width": 0.025,
+            "unit_ids_to_use": None,
+            "spike_bin_width": 0.1,
+            "smooth_spikes_half_gaussian": False,
+            "half_gaussian_std_dev": 0.05,
             "areas_to_include": None,
             "areas_to_exclude": None,
             "orthogonalize_against_context": ['facial_features'],
@@ -191,8 +201,15 @@ def define_kernels(run_params):
         for drop_key in drop_keys:
             sub_keys = categories.get(drop_key, [drop_key])
             for sub_key in sub_keys:
-                logger.info(get_timestamp() + f': dropping {sub_key}')
+                logger.info(f': dropping {sub_key}')
                 selected_keys.remove(sub_key)
+
+    shift_keys = run_params.get('linear_shift_variables', [])
+    if shift_keys and run_params['model_label'] != 'fullmodel':
+        for shift_key in shift_keys:
+            sub_keys = categories.get(shift_key, [shift_key])
+            for sub_key in sub_keys:
+                master_kernels_list[sub_key]['shift'] = True
 
     # Build kernels dictionary based on selected keys
     kernels = {key: master_kernels_list[key] for key in selected_keys}
@@ -235,13 +252,17 @@ def define_kernels(run_params):
             if key in kernels:
                 kernels[key]['orthogonalize'] = True
 
+    # update which context kernel to use based on project
+    if run_params['project'].lower() == 'templeton' and 'context' in run_params['input_variables']:
+        kernels['context']['function_call'] = 'context_templeton'
+
     run_params['kernels'] = kernels
 
     return run_params
 
 
 def _create_behavior_info(trials, performance, epochs):
-    dprimes = performance.cross_modal_dprime.values
+    dprimes = performance.cross_modality_dprime.values
     return {
         'trials': trials,
         'dprime': dprimes,
@@ -260,15 +281,28 @@ def get_session_data_from_session_obj(session):
 def get_session_data(session):
     return get_session_data_from_session_obj(session)
 
-def get_session_data_from_datacube(session_id):
-    import lazynwb
-    nwb_path = next(p for p in datacube_utils.get_nwb_paths() if p.stem == session_id)
+
+def get_session_data_from_datacube(
+    session_id,
+    lazy: bool = False,
+    get_df_kwargs: dict | None = None,
+    scan_nwb_kwargs: dict | None = None,
+) -> tuple[pl.LazyFrame, dict[str, pd.DataFrame]]:
+    nwb_path = datacube_utils.get_nwb_paths(session_id)
     behavior_info = _create_behavior_info(
-        trials=lazynwb.get_df(nwb_path, '/intervals/trials'),
-        performance=lazynwb.get_df(nwb_path, '/intervals/performance'),
-        epochs=lazynwb.get_df(nwb_path, '/intervals/epochs'),
+        trials=lazynwb.get_df(nwb_path, '/intervals/trials', exact_path=True, **(get_df_kwargs or {})),
+        performance=lazynwb.get_df(nwb_path, '/intervals/performance', exact_path=True, **(get_df_kwargs or {})),
+        epochs=lazynwb.get_df(nwb_path, '/intervals/epochs', exact_path=True, **(get_df_kwargs or {})),
     )
-    return lazynwb.get_df(nwb_path, '/units'), behavior_info
+    if lazy:
+        return lazynwb.scan_nwb(nwb_path, '/units', **(scan_nwb_kwargs or {})), behavior_info
+    else:
+        return (
+            lazynwb.get_df(
+                nwb_path, "/units", exact_path=True, as_polars=True, **(get_df_kwargs or {})
+            ),
+            behavior_info,
+        )
 
 
 def get_session_data_from_cache(session_id, version='0.0.260'):
@@ -327,6 +361,10 @@ def setup_units_table(run_params, units_table):
 
     if run_params['run_on_qc_units']:
         units_table = units_table[units_table.good_unit]
+
+    unit_ids_to_use = run_params.get('unit_ids_to_use', [])
+    if unit_ids_to_use:
+        units_table = units_table[units_table.unit_id.isin(unit_ids_to_use)]
 
     areas_to_include = run_params.get('areas_to_include', [])
     if areas_to_include:
@@ -504,6 +542,24 @@ def establish_timebins(run_params, fit, behavior_info):
     return fit
 
 
+def construct_half_gaussian_kernel(std_dev, spike_bin_width):
+    '''
+    Returns a half-gaussian kernel
+    '''
+    x = np.arange(-3 * std_dev, 3 * std_dev, spike_bin_width)
+    kernel = np.exp(-x ** 2 / (2 * std_dev ** 2))
+    kernel[:len(kernel) // 2] = 0
+    kernel = kernel / np.sum(kernel)
+    return kernel
+
+
+def half_gaussian_smoothing(spike_counts, kernel):
+    '''
+    Returns a smoothed version of spike_counts using a half-gaussian kernel
+    '''
+    return np.convolve(spike_counts, kernel, mode='same')
+
+
 def get_spike_counts(spike_times, timebins):
     '''
         spike_times, a list of spike times, sorted
@@ -534,22 +590,22 @@ def process_spikes(units_table, run_params, fit):
         Returns a  dictionary including spike counts and unit-specific information.
     '''
 
-    # identifies good units
-    units_table = setup_units_table(run_params, units_table)
-
     spikes = np.zeros((fit['timebins'].shape[0], len(units_table)))
+
+    if run_params["smooth_spikes_half_gaussian"]:
+        kernel = construct_half_gaussian_kernel(run_params["half_gaussian_std_dev"], run_params["spike_bin_width"])
+
 
     for uu, (_, unit) in tqdm(enumerate(units_table.iterrows()), total=len(units_table), desc='getting spike counts'):
         spikes[:, uu] = get_spike_counts(np.array(unit['spike_times']), fit['timebins'])
+        if run_params["smooth_spikes_half_gaussian"]:
+            spikes[:, uu] = half_gaussian_smoothing(spikes[:, uu], kernel)
+
 
     spike_count_arr = {
         'spike_counts': spikes,
         'bin_centers': fit['bin_centers'],
         'unit_id': units_table.unit_id.values,
-        'structure': units_table.structure.values,
-        'location': units_table.location.values,
-        'quality':  units_table.good_unit.values,
-        'firing_rate': units_table.firing_rate.values
     }
     fit['spike_count_arr'] = spike_count_arr
 
@@ -612,7 +668,7 @@ def add_kernel_by_label(kernel_name, design, run_params, session, fit, behavior_
         fit             the fit object for this model
     '''
 
-    logger.info(get_timestamp() + '    Adding kernel: ' + kernel_name)
+    logger.info('    Adding kernel: ' + kernel_name)
 
     try:
         kernel_function = globals().get(run_params['kernels'][kernel_name]['function_call'])
@@ -630,7 +686,7 @@ def add_kernel_by_label(kernel_name, design, run_params, session, fit, behavior_
             input_x = standardize_inputs(input_x)
 
     except Exception as e:
-        logger.warning(get_timestamp() + f"Exception: {e}")
+        logger.warning(f"Exception: {e}")
         logger.warning('Attempting to continue without this kernel.')
 
         fit['failed_kernels'].add(kernel_name)
@@ -662,9 +718,43 @@ def context(kernel_name, session, fit, behavior_info):
     for n, epoch in enumerate(epoch_trace):
         if 'trial' in epoch:
             trial_no = int(''.join(filter(str.isdigit, epoch)))
-            this_kernel[n] = 1 if behavior_info['trials'].loc[trial_no, 'is_vis_context'] else -1
+            this_kernel[n] = 1 if behavior_info['trials'].loc[trial_no, 'is_vis_rewarded'] else -1
 
     return this_kernel
+
+
+def context_templeton(kernel_name, session, fit, behavior_info):
+    this_kernel = np.zeros(len(fit['bin_centers_all']))
+    epoch_trace = fit['epoch_trace_all']
+    trial_indexes = [n for n, epoch in enumerate(epoch_trace) if 'trial' in epoch]
+
+    # find index corresponding to passage of every 10 minutes from fit['bin_centers_all']
+    trial_times = fit['bin_centers_all'][trial_indexes]
+    block_length = 10 * 60  # 10 minutes in seconds
+    switch_times = trial_times[0] + np.arange(0, block_length*6, block_length)
+    signed_context = np.random.choice([-1, 1], size=1)[0]
+    for i in range(1, len(switch_times)):
+        this_kernel[np.where((fit['bin_centers_all'] >= switch_times[i-1]) & (fit['bin_centers_all'] < switch_times[i]))] = signed_context
+        signed_context = -signed_context
+    # Handle the last segment
+    this_kernel[np.where((fit['bin_centers_all'] >= switch_times[-1]) & (fit['bin_centers_all'] <= trial_times[-1]))] = signed_context
+
+    return this_kernel
+
+
+@typing.overload
+def _datacube_data(session_id: str, internal_path: str, is_timeseries: Literal[False]) -> pd.DataFrame:
+    ...
+
+@typing.overload
+def _datacube_data(session_id: str, internal_path: str, is_timeseries: Literal[True]) -> lazynwb.TimeSeries:
+    ...
+
+def _datacube_data(session_id: str, internal_path: str, is_timeseries: bool = False) -> pd.DataFrame | lazynwb.TimeSeries:
+    if is_timeseries:
+        return lazynwb.get_timeseries(datacube_utils.get_nwb_paths(session_id), internal_path, exact_path=True, match_all=False)
+    else:
+        return lazynwb.get_df(datacube_utils.get_nwb_paths(session_id), internal_path, exact_path=True)
 
 
 def pupil(kernel_name, session, fit, behavior_info):
@@ -680,29 +770,40 @@ def pupil(kernel_name, session, fit, behavior_info):
             # Apply threshold and set outliers to NaN within the epoch
             df.loc[epoch_mask & (df['pupil_area'] > threshold), 'pupil_area'] = np.nan
         df['pupil_area'] = df['pupil_area'].interpolate(method='linear')
+        df['pupil_area'] = df['pupil_area'].ffill()
+        df['pupil_area'] = df['pupil_area'].bfill()
         return df
 
-    df = process_pupil_data(session.processing['behavior']['eye_tracking'][:], behavior_info)
+    if isinstance(session, str) and datacube_utils.is_datacube_available():
+        df = process_pupil_data(_datacube_data(session, '/processing/behavior/eye_tracking'), behavior_info)
+    else:
+        df = process_pupil_data(session.processing['behavior']['eye_tracking'][:], behavior_info)
     this_kernel = bin_timeseries(df.pupil_area.values, df.timestamps.values, fit['timebins_all'])
+    this_kernel = pd.Series(this_kernel).ffill().bfill().to_numpy()
     if np.isnan(this_kernel).all():
         raise ValueError(f"The trace is all nans for {kernel_name}")
     return this_kernel
 
 
 def running(kernel_name, session, fit, behavior_info):
-    this_kernel = bin_timeseries(
-        session.processing['behavior']['running_speed'].data[:],
-        session.processing['behavior']['running_speed'].timestamps[:],
-        fit['timebins_all']
-    )
+    if isinstance(session, str) and datacube_utils.is_datacube_available():
+        timeseries = _datacube_data(session, '/processing/behavior/running_speed', is_timeseries=True)
+    else:
+        timeseries = session.processing['behavior']['running_speed']
+    this_kernel = bin_timeseries(timeseries.data[:], timeseries.timestamps[:], fit['timebins_all'])
+    this_kernel = pd.Series(this_kernel).ffill().bfill().to_numpy()
     if np.isnan(this_kernel).all():
         raise ValueError(f"The trace is all nans for {kernel_name}")
     return this_kernel
 
 
 def licks(kernel_name, session, fit, behavior_info):
-    lick_times = session.processing['behavior']['licks'].timestamps[:]
-    lick_duration = session.processing['behavior']['licks'].data[:]
+    if isinstance(session, str) and datacube_utils.is_datacube_available():
+        timeseries = _datacube_data(session, '/processing/behavior/licks', is_timeseries=True)
+    else:
+        timeseries = session.processing['behavior']['licks']
+    lick_times = timeseries.timestamps[:]
+    lick_duration = timeseries.data[:]
     lick_duration_threshold = 0.5
     lick_times = lick_times[lick_duration < lick_duration_threshold]
 
@@ -734,15 +835,21 @@ def facial_features(kernel_name, session, fit, behavior_info):
         return xy, confidence
 
     map_names = {'ears': 'ear_base_l', 'jaw': 'jaw', 'nose': 'nose_tip', 'whisker_pad': 'whisker_pad_l_side'}
-    try:
-        df = session.processing['behavior']['lp_side_camera'][:]
-    except IndexError:
-        raise IndexError(f'{session.id} is not a session with video.')
+    if isinstance(session, str) and datacube_utils.is_datacube_available():
+        try:
+            df = _datacube_data(session, '/processing/behavior/lp_side_camera')
+        except KeyError:
+            raise IndexError(f'{session} is not a session with video.')
+    else:
+        try:
+            df = session.processing['behavior']['lp_side_camera'][:]
+        except IndexError:
+            raise IndexError(f'{session.id} is not a session with video.')
     timestamps = df['timestamps'].values.astype('float')
     lp_part_name = map_names[kernel_name]
     part_xy, confidence = part_info_LP(lp_part_name, df)
     this_kernel = bin_timeseries(part_xy, timestamps, fit['timebins_all'])
-
+    this_kernel = pd.Series(this_kernel).ffill().bfill().to_numpy()
     if np.isnan(this_kernel).all():
         raise ValueError(f"The trace is all nans for {kernel_name}")
     return this_kernel
@@ -761,12 +868,12 @@ def choice(kernel_name, session, fit, behavior_info):
 
 def stimulus(kernel_name, session, fit, behavior_info):
     if '_' in kernel_name:
-        stim_name, context_name = kernel_name.split('_')
+        stim_name, rewarded_modality = kernel_name.split('_')
         filtered_trials = behavior_info['trials'][
-            (behavior_info['trials'].stim_name == stim_name) & (behavior_info['trials'].context_name == context_name)]
+            (behavior_info['trials'].stim_name == stim_name) & (behavior_info['trials'].rewarded_modality == rewarded_modality)]
     else:
         stim_name = kernel_name
-        context_name = 'all'
+        rewarded_modality = 'all'
         filtered_trials = behavior_info['trials'][behavior_info['trials'].stim_name == stim_name]
     bin_starts, bin_stops = fit['timebins_all'][:, 0], fit['timebins_all'][:, 1]
 
@@ -774,8 +881,12 @@ def stimulus(kernel_name, session, fit, behavior_info):
         stim_times = filtered_trials.stim_start_time.values
         in_bin = (stim_times[:, None] >= bin_starts) & (stim_times[:, None] < bin_stops)
         this_kernel = np.any(in_bin, axis=0).astype(int)
+        # Ensure no consecutive 1s
+        for i in range(1, len(this_kernel)):
+            if this_kernel[i] == 1 and this_kernel[i - 1] == 1:
+                this_kernel[i] = 0
     else:
-        raise ValueError(f"No trials presented with {stim_name} stimulus in {context_name} context")
+        raise ValueError(f"No trials presented with {stim_name} stimulus in {rewarded_modality} context")
     return this_kernel
 
 
@@ -864,10 +975,7 @@ class DesignMatrix:
         # CONVERT offset to offset_samples
         offset_samples = int(np.floor((1 / self.spike_bin_width) * offset))
 
-        if np.abs(offset_samples) > 0:
-            this_kernel = toeplitz_this_kernel(input_x, kernel_length_samples, offset_samples)
-        else:
-            this_kernel = input_x.reshape(1, -1)
+        this_kernel = toeplitz_this_kernel(input_x, kernel_length_samples, offset_samples)
 
         # keep only the relevant trace for prediction
         this_kernel = this_kernel[:, self.mask]
@@ -939,14 +1047,9 @@ def bin_timeseries(x, x_timestamps, timebins_all):
     return binned
 
 
-def get_timestamp():
-    t = time.localtime()
-    return time.strftime('%Y-%m-%d: %H:%M:%S') + ' '
-
-
 def orthogonalize_this_kernel(this_kernel, y):
     mat_to_ortho = np.concatenate((y.reshape(-1, 1), this_kernel.reshape(-1, 1)), axis=1)
-    logger.info(get_timestamp() + '                 : ' + 'othogonalizing against context')
+    logger.info('                 : ' + 'orthogonalizing against context')
     Q, R = np.linalg.qr(mat_to_ortho)
     return Q[:, 1]
 
@@ -963,13 +1066,13 @@ def standardize_inputs(timeseries, mean_center=True, unit_variance=True, max_val
             'Cannot perform max_value standardization and mean_center or unit_variance standardizations together.')
 
     if mean_center:
-        logger.info(get_timestamp() + '                 : ' + 'mean centering')
+        logger.info('                 : ' + 'mean centering')
         timeseries = timeseries - np.mean(timeseries)  # mean center
     if unit_variance:
-        logger.info(get_timestamp() + '                 : ' + 'standardized to unit variance')
+        logger.info('                 : ' + 'standardized to unit variance')
         timeseries = timeseries / np.std(timeseries)
     if max_value is not None:
-        logger.info(get_timestamp() + '                 : ' + 'normalized by max value: ' + str(max_value))
+        logger.info('                 : ' + 'normalized by max value: ' + str(max_value))
         timeseries = timeseries / max_value
 
     return timeseries

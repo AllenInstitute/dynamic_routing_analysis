@@ -1,6 +1,7 @@
 # stdlib imports --------------------------------------------------- #
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import functools
 import logging
@@ -8,6 +9,7 @@ import logging.handlers
 import pathlib
 import re
 from collections.abc import Iterable
+import typing
 
 # 3rd-party imports necessary for processing ----------------------- #
 import npc_lims
@@ -131,6 +133,12 @@ def parse_version(path: str) -> str:
 def get_datacube_version() -> str:
     return parse_version(codeocean_utils.get_datacube_dir().as_posix())
 
+@functools.cache
+def is_datacube_available() -> bool:
+    with contextlib.suppress(FileNotFoundError):
+        _ = codeocean_utils.get_datacube_dir()
+        return True
+    return False
 
 # data access ------------------------------------------------------- #
 @functools.cache
@@ -150,11 +158,26 @@ def get_df(component: str) -> pl.DataFrame:
         pl.col("session_id").str.split("_").list.slice(0, 2).list.join("_")
     )
 
+@typing.overload
+def get_nwb_paths(session_id: str) -> pathlib.Path:
+    ...
+
+@typing.overload
+def get_nwb_paths(session_id: None) -> tuple[pathlib.Path, ...]:
+    ...
 
 @functools.cache
-def get_nwb_paths() -> tuple[pathlib.Path, ...]:
-    return tuple(datacube_config.nwb_dir.rglob("*.nwb"))
-
+def get_nwb_paths(session_id: str | None = None) -> pathlib.Path | tuple[pathlib.Path, ...]:
+    paths = datacube_config.nwb_dir.rglob("*.nwb")
+    if session_id:
+        try:
+            return next(p for p in paths if p.stem == session_id)
+        except StopIteration:
+            raise FileNotFoundError(
+                f"Cannot find NWB file for {session_id!r} in {datacube_config.nwb_dir}"
+            ) from None
+    else:
+        return tuple(p for p in paths if p.is_file())
 
 def _parse_nwb_path_from_input(
     session_id_or_path: str | pathlib.Path,
@@ -247,7 +270,7 @@ def combine_exprs(exprs: Iterable[pl.expr]) -> pl.expr:
 
 
 def get_passing_blocks_performance_filter(
-    cross_modal_dprime: float | None = 1.0,
+    cross_modality_dprime: float | None = 1.0,
     same_modal_dprime: float | None = None,
     min_n_blocks: int = 2,
     of_each_rewarded_modality: bool = True,
@@ -255,8 +278,8 @@ def get_passing_blocks_performance_filter(
     min_contingent_rewards: int | None = 10,
 ) -> pl.Expr:
     cross_modal_dprime_filter: pl.Expr = (
-        pl.col("cross_modal_dprime") > cross_modal_dprime
-        if cross_modal_dprime is not None
+        pl.col("cross_modality_dprime") > cross_modality_dprime
+        if cross_modality_dprime is not None
         else pl.lit(True)
     )
     same_modal_dprime_filter: pl.Expr = (
