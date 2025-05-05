@@ -715,9 +715,12 @@ def apply_shift_to_design_matrix(fit, design_mat, run_params, blocks, shift_colu
     non_shift_columns = list(set(np.arange(design_mat.data.shape[1])) - set(shift_columns))
     design_mat_shifted['data'][:, non_shift_columns] = design_mat.data[blocks][:, non_shift_columns]
 
-    design_mat_shifted = xr.Dataset(data_vars={"data": (["timestamps", "weights"], design_mat_shifted["data"])},
-                                        coords={"timestamps": design_mat_shifted["timestamps"],
-                                            "weights": design_mat_shifted["weights"]})
+    design_mat_shifted = xr.DataArray(
+            design_mat_shifted["data"],
+            dims=('timestamps', 'weights'),
+            coords={'weights': design_mat_shifted["weights"],
+                    'timestamps': design_mat_shifted["timestamps"]}
+        )
 
     fit_shift = copy.deepcopy(fit)
     fit_shift['spike_count_arr'].pop('spike_counts')
