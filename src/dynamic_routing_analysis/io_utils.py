@@ -567,22 +567,11 @@ def get_spike_counts(spike_times, timebins):
             timebins[i,0] is the start of bin i
             timbins[i,1] is the end of bin i
     '''
-
-    counts = np.zeros([np.shape(timebins)[0]])
-    spike_pointer = 0
-    bin_pointer = 0
-    while (spike_pointer < len(spike_times)) & (bin_pointer < np.shape(timebins)[0]):
-        if spike_times[spike_pointer] < timebins[bin_pointer, 0]:
-            # This spike happens before the time bin, advance spike
-            spike_pointer += 1
-        elif spike_times[spike_pointer] >= timebins[bin_pointer, 1]:
-            # This spike happens after the time bin, advance time bin
-            bin_pointer += 1
-        else:
-            counts[bin_pointer] += 1
-            spike_pointer += 1
-
-    return counts
+    # - dtype is float for consistency with previous version
+    # - operations with other float arrays also seems to be faster than converting from int to float
+    return np.array(
+        [b - a for a, b in np.searchsorted(spike_times, timebins)], dtype=np.float64
+    )
 
 
 def process_spikes(units_table, run_params, fit):
