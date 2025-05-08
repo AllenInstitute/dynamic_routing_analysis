@@ -226,7 +226,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         dec_func_all.append(decision_function)
         tidx_used.append([test])
         classes.append(clf.classes_)
-        intercept.append(clf.intercept_)
+        # intercept.append(clf.intercept_)
         params.append(clf.get_params())
         train_trials.append(train)
         test_trials.append(test)
@@ -238,17 +238,19 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
         models.append(clf)
 
+    #fit on all trials
     clf.fit(X, y)
     y_dec_func = clf.decision_function(X)
     ypred = clf.predict(X)
     if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression':
         predict_proba_all_trials = clf.predict_proba(X)
         
-
-    if decoder_type == 'LDA' or decoder_type == 'linearSVC':
+    if decoder_type == 'LDA' or decoder_type == 'linearSVC' or decoder_type == 'LogisticRegression':
         coefs = clf.coef_
     else:
         coefs = np.full((X.shape[1]), fill_value=False)
+
+    intercept = clf.intercept_
 
     #scikit-learn's classification report
     output['cr']=cr_dict_test
@@ -284,7 +286,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
     output['cr_train']=cr_dict_train
     #balanced accuracy for training data (all folds)
-    output['balanced_accuracy_train']=balanced_accuracy_train
+    output['balanced_accuracy_train']=np.nanmean(balanced_accuracy_train)
 
     output['train_trials']=train_trials
     output['test_trials']=test_trials
