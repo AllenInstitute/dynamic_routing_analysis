@@ -1219,6 +1219,8 @@ npc-sessions = [
 plot = [
     { name = "altair", extra = ["save"] },
     { name = "geopandas" },
+    { name = "numba", version = "0.60.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "numba", version = "0.61.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "pynrrd" },
     { name = "rasterio" },
     { name = "shapely", version = "2.0.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -1255,6 +1257,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.7.2" },
     { name = "npc-lims", specifier = ">=0.1.0" },
     { name = "npc-sessions", marker = "extra == 'npc-sessions'", specifier = ">=0.0.226" },
+    { name = "numba", marker = "extra == 'plot'", specifier = ">=0.60.0" },
     { name = "numpy", specifier = ">=1.24.4" },
     { name = "pandas", specifier = ">=2.0.3" },
     { name = "polars", extras = ["pandas", "plot"], specifier = ">=1.0" },
