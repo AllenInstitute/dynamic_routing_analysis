@@ -512,9 +512,9 @@ def establish_timebins(run_params, fit, behavior_info):
     bin_starts_all = bin_starts_all[sorted_indices]
     epoch_trace_all = epoch_trace_all[sorted_indices]
 
-    ind = np.where(np.diff(bin_starts_all) < fit['spike_bin_width'])[0]
-    bin_starts_all = np.delete(bin_starts_all, ind)
-    epoch_trace_all = np.delete(epoch_trace_all, ind)
+    # ind = np.where(np.diff(bin_starts_all) < fit['spike_bin_width'])[0]
+    # bin_starts_all = np.delete(bin_starts_all, ind)
+    # epoch_trace_all = np.delete(epoch_trace_all, ind)
 
     bin_ends_all = bin_starts_all + run_params['spike_bin_width']
     timebins_all = np.vstack([bin_starts_all, bin_ends_all]).T
