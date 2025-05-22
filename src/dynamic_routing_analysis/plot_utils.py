@@ -1946,7 +1946,7 @@ def plot_brain_heatmap(
         ax.set_clip_on(False)
 
     if interactive:
-        chart = plot_gdf_alt(gdfs, ccf_colors=False, cmap=cmap)
+        chart = plot_gdf_alt(gdfs, ccf_colors=False, cmap=cmap, clevels=clevels)
         return chart, tuple(gdfs)
     else:
         return fig, tuple(gdfs)
@@ -1957,6 +1957,7 @@ def plot_gdf_alt(
     ccf_colors: bool = False,
     cmap: str = "viridis",
     value_name: str = "value",
+    clevels: tuple[float, float] | None = None,
 ) -> alt.Chart:
     if isinstance(gdfs, gpd.GeoDataFrame):
         gdfs = (gdfs,)
@@ -2040,7 +2041,7 @@ def plot_gdf_alt(
             color = alt.Color(
                 "value:Q",
                 title=value_name,
-                scale=alt.Scale(scheme=cmap.lower()),
+                scale=alt.Scale(scheme=cmap.lower(), domainMax=clevels[1], domainMin=clevels[0]),
                 legend=alt.Legend(orient="bottom", direction="horizontal"),
                 # condition=condition,
             )
