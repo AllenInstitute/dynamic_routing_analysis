@@ -244,7 +244,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     ypred = clf.predict(X)
     if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression':
         predict_proba_all_trials = clf.predict_proba(X)
-        
+
     if decoder_type == 'LDA' or decoder_type == 'linearSVC' or decoder_type == 'LogisticRegression':
         coefs = clf.coef_
     else:
@@ -1355,7 +1355,7 @@ def compute_significant_decoding_by_area(all_decoder_results,combine_areas_acros
             DR_linear_shift_df=DR_linear_shift_df.query('probe.isna() or probe == "all"')
         else:
             print('ERROR: no combined probes in results')
-            return 
+            return
     else:
         DR_linear_shift_df=DR_linear_shift_df.query('probe != "all"')
 
@@ -1738,8 +1738,7 @@ def concat_trialwise_decoder_results(files,savepath=None,return_table=False,n_un
                     'ccf_ml_mean',
                     'n_units',
                 ):
-                    if key in decoder_confidence_all_trials:
-                        del decoder_confidence_all_trials[key]
+                    decoder_confidence_all_trials.pop(key, None)
                 continue
 
             if type(aa)==str:
