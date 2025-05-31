@@ -288,12 +288,12 @@ def get_passing_blocks_performance_filter(
         else pl.lit(True)
     )
     min_n_trials_filter: pl.Expr = (
-        pl.col("n_trials_in_block") > min_trials
+        pl.col("n_trials") > min_trials
         if min_trials is not None
         else pl.lit(True)
     )
     min_n_responses_filter: pl.Expr = (
-        pl.col("n_responses_in_block") > min_contingent_rewards
+        pl.col("n_responses") > min_contingent_rewards
         if min_contingent_rewards is not None
         else pl.lit(True)
     )
