@@ -133,12 +133,14 @@ def parse_version(path: str) -> str:
 def get_datacube_version() -> str:
     return parse_version(codeocean_utils.get_datacube_dir().as_posix())
 
+
 @functools.cache
 def is_datacube_available() -> bool:
     with contextlib.suppress(FileNotFoundError):
         _ = codeocean_utils.get_datacube_dir()
         return True
     return False
+
 
 # data access ------------------------------------------------------- #
 @functools.cache
@@ -158,16 +160,19 @@ def get_df(component: str) -> pl.DataFrame:
         pl.col("session_id").str.split("_").list.slice(0, 2).list.join("_")
     )
 
-@typing.overload
-def get_nwb_paths(session_id: str) -> pathlib.Path:
-    ...
 
 @typing.overload
-def get_nwb_paths(session_id: None) -> tuple[pathlib.Path, ...]:
-    ...
+def get_nwb_paths(session_id: str) -> pathlib.Path: ...
+
+
+@typing.overload
+def get_nwb_paths(session_id: None) -> tuple[pathlib.Path, ...]: ...
+
 
 @functools.cache
-def get_nwb_paths(session_id: str | None = None) -> pathlib.Path | tuple[pathlib.Path, ...]:
+def get_nwb_paths(
+    session_id: str | None = None,
+) -> pathlib.Path | tuple[pathlib.Path, ...]:
     paths = datacube_config.nwb_dir.rglob("*.nwb")
     if session_id:
         try:
@@ -178,6 +183,7 @@ def get_nwb_paths(session_id: str | None = None) -> pathlib.Path | tuple[pathlib
             ) from None
     else:
         return tuple(p for p in paths if p.is_file())
+
 
 def _parse_nwb_path_from_input(
     session_id_or_path: str | pathlib.Path,
@@ -288,9 +294,7 @@ def get_passing_blocks_performance_filter(
         else pl.lit(True)
     )
     min_n_trials_filter: pl.Expr = (
-        pl.col("n_trials") > min_trials
-        if min_trials is not None
-        else pl.lit(True)
+        pl.col("n_trials") > min_trials if min_trials is not None else pl.lit(True)
     )
     min_n_responses_filter: pl.Expr = (
         pl.col("n_responses") > min_contingent_rewards
@@ -340,7 +344,7 @@ def get_prod_trials(
     )["session_id"]
     # session_ids to use based on passing blocks:
     session_ids_by_performance: pl.Series = get_df("performance").filter(
-        PASSING_BLOCKS_PERFORMANCE_FILTER
+        PASSING_BLOCKS_PERFORMANCE_FILTER.explode()
     )["session_id"]
 
     return (
@@ -351,7 +355,7 @@ def get_prod_trials(
         )
         # add a column that indicates if the first block in a session is aud context:
         .with_columns(
-            (pl.col("context_name").first() == "aud")
+            (pl.col("rewarded_modality").first() == "aud")
             .over("session_id")
             .alias("is_first_block_aud"),
         )
