@@ -126,7 +126,7 @@ def get_ccf_structure_tree_df() -> pl.DataFrame:
         .with_columns(
             parent_ids=pl.col("structure_id_path")
             .str.split("/")
-            .cast(pl.List(int))
+            .cast(pl.List(int), strict=False)
             .list.drop_nulls()
             .list.slice(offset=0, length=pl.col("depth")),
         )

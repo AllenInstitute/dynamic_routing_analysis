@@ -45,6 +45,15 @@ EARLY_AUTOREWARDS_SESSION_FILTER = (
     pl.col("keywords").list.contains("early_autorewards").eq(True)
 )
 
+DEFAULT_UNIT_QC = pl.Expr.and_(
+    *[
+        pl.col("activity_drift") <= 0.2,
+        pl.col("isi_violations_ratio") <= 0.5,
+        pl.col("amplitude_cutoff") <= 0.1,
+        pl.col("presence_ratio") >= 0.7,
+        pl.col("decoder_label") != "noise",
+    ]
+)
 
 @dataclasses.dataclass
 class DatacubeConfig:
