@@ -167,3 +167,6 @@ install.sh
 
 results/
 .scratch/
+
+# mac stuff
+.DS_Store
