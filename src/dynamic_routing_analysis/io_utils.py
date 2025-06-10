@@ -1015,6 +1015,16 @@ class DesignMatrix:
         return X_array.T
 
 
+def timestamps_good_behavior(behavior_info, fit):
+    '''
+    Returns a boolean array indicating which timestamps in fit['bin_centers_all'] are within the good behavior periods.
+    '''
+    good_behavior = np.zeros(len(fit['bin_centers_all']), dtype=bool)
+    block_wise_performance = behavior_info['performance']
+
+    return good_behavior
+
+
 def bin_timeseries(x, x_timestamps, timebins_all):
     # Remove NaN values from x_timestamps and corresponding x values
     valid_indices = ~np.isnan(x_timestamps)
