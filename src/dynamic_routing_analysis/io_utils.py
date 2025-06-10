@@ -539,6 +539,8 @@ def establish_timebins(run_params, fit, behavior_info):
     )
     # potentially a precision problem
 
+    fit['timestamps_good_behavior'] = timestamps_good_behavior(behavior_info, fit)
+
     return fit
 
 
@@ -1019,10 +1021,26 @@ def timestamps_good_behavior(behavior_info, fit):
     '''
     Returns a boolean array indicating which timestamps in fit['bin_centers_all'] are within the good behavior periods.
     '''
-    good_behavior = np.zeros(len(fit['bin_centers_all']), dtype=bool)
-    block_wise_performance = behavior_info['performance']
+    ts_good_behavior = np.zeros(len(fit['bin_centers']), dtype=bool)
+    block_wise_performance = behavior_info['dprime']
+    trials = behavior_info["trials"]
+    if len(block_wise_performance) > 0:
+        dprime_thresh = 1
+        good_blocks = np.where(block_wise_performance >= dprime_thresh)[0]
+        good_trial_indexes = trials[trials.block_index.isin(good_blocks)].index
+        epoch_trace = fit['epoch_trace']
 
-    return good_behavior
+        for n, epoch in enumerate(epoch_trace):
+            if 'trial' in epoch:
+                trial_no = int(''.join(filter(str.isdigit, epoch)))
+                if trial_no in good_trial_indexes:
+                    ts_good_behavior[n] = True
+            else:
+                ts_good_behavior[n] = True
+    else:
+        ts_good_behavior = np.ones(len(fit['bin_centers']), dtype=bool)
+
+    return ts_good_behavior
 
 
 def bin_timeseries(x, x_timestamps, timebins_all):
