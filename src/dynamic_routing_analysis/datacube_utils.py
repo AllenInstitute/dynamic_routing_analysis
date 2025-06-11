@@ -360,8 +360,9 @@ def get_prod_trials(
     late_autorewards: If False/True, include sessions with early/late autorewards, respectively.
     If None, include both.
 
-    by_session: If False, any passing blocks will be kept in table, even if the session as a
-    whole does not meet performance criteria for good behavior.
+    by_session: If True (default), all blocks within the session are returned if the session as a
+    whole passed the performance criteria. If False, passing blocks for all sessions will be returned, even if the
+    session as a whole does not meet performance criteria for good behavior.
     """
     late_autorewards_expr = {
         True: LATE_AUTOREWARDS_SESSION_FILTER,
@@ -378,7 +379,7 @@ def get_prod_trials(
         session_ids_by_type = session_ids_by_type.append(templeton_session_ids)
 
     # session_ids to use based on performance:
-    if not by_session: 
+    if by_session: 
         # keep only sessions that pass the performance criteria
         session_ids_by_performance = get_passing_session_ids(
             cross_modality_dprime=cross_modal_dprime_threshold,
