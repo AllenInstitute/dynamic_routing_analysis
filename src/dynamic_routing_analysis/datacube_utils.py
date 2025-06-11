@@ -285,7 +285,7 @@ def unit_id_to_session_id(unit_id: str) -> str:
     return unit_id.rpartition("_")[0]
 
 
-def combine_exprs(exprs: Iterable[pl.expr]) -> pl.expr:
+def combine_exprs(exprs: Iterable[pl.Expr]) -> pl.Expr:
     return pl.Expr.and_(*exprs)
 
 def get_passing_blocks_performance_filter(
