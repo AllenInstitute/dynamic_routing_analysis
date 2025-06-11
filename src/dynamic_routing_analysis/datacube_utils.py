@@ -12,6 +12,7 @@ from collections.abc import Iterable
 import typing
 
 # 3rd-party imports necessary for processing ----------------------- #
+from matplotlib.pylab import f
 import npc_lims
 import polars as pl
 import upath
@@ -37,6 +38,7 @@ PROD_EPHYS_SESSION_FILTER = pl.Expr.and_(
         ~pl.col("keywords").list.contains("templeton"),
     ]
 )
+"""does not include Templeton sessions"""
 
 LATE_AUTOREWARDS_SESSION_FILTER: pl.Expr = (
     pl.col("keywords").list.contains("late_autorewards").eq(True)
@@ -88,7 +90,7 @@ class DatacubeConfig:
     def consolidated_parquet_dir(self) -> upath.UPath | pathlib.Path:
         if self.use_scratch_dir:
             return (
-                self.nwb_dir.parent
+                self.nwb_dir.parent.parent
                 / f"nwb_components/{self.datacube_version}/consolidated"
             )
         if codeocean_utils.is_capsule() or codeocean_utils.is_pipeline():
@@ -156,7 +158,7 @@ def is_datacube_available() -> bool:
 def get_session_table() -> pl.DataFrame:
     if codeocean_utils.is_pipeline() or codeocean_utils.is_capsule():
         return pl.read_parquet(
-            codeocean_utils.get_datacube_dir() / "session_table.parquet"
+            (codeocean_utils.get_datacube_dir() / "session_table.parquet").as_posix()
         )
     return pl.read_parquet(
         "https://github.com/AllenInstitute/dynamic_routing_analysis/raw/refs/heads/main/bin/session_table.parquet"
@@ -165,7 +167,8 @@ def get_session_table() -> pl.DataFrame:
 
 def get_df(component: str) -> pl.DataFrame:
     path = datacube_config.consolidated_parquet_dir / f"{component}.parquet"
-    return pl.read_parquet(path).with_columns(
+    return pl.read_parquet(path.as_posix()).with_columns(
+        # remove optional session_id prefix in case it's present:
         pl.col("session_id").str.split("_").list.slice(0, 2).list.join("_")
     )
 
@@ -283,64 +286,83 @@ def unit_id_to_session_id(unit_id: str) -> str:
 def combine_exprs(exprs: Iterable[pl.expr]) -> pl.expr:
     return pl.Expr.and_(*exprs)
 
-
 def get_passing_blocks_performance_filter(
     cross_modality_dprime: float | None = 1.0,
-    same_modal_dprime: float | None = None,
-    min_n_blocks: int = 2,
-    of_each_rewarded_modality: bool = True,
     min_trials: int | None = 10,
     min_contingent_rewards: int | None = 10,
 ) -> pl.Expr:
     cross_modal_dprime_filter: pl.Expr = (
-        pl.col("cross_modality_dprime") > cross_modality_dprime
+        pl.col("cross_modality_dprime") >= cross_modality_dprime
         if cross_modality_dprime is not None
         else pl.lit(True)
     )
-    same_modal_dprime_filter: pl.Expr = (
-        pl.col("same_modal_dprime") > same_modal_dprime
-        if same_modal_dprime is not None
-        else pl.lit(True)
-    )
     min_n_trials_filter: pl.Expr = (
-        pl.col("n_trials") > min_trials if min_trials is not None else pl.lit(True)
+        pl.col("n_trials") >= min_trials if min_trials is not None else pl.lit(True)
     )
     min_n_responses_filter: pl.Expr = (
-        pl.col("n_responses") > min_contingent_rewards
+        pl.col("n_responses") >= min_contingent_rewards
         if min_contingent_rewards is not None
         else pl.lit(True)
     )
+    return combine_exprs([cross_modal_dprime_filter, min_n_trials_filter, min_n_responses_filter])
+
+
+def get_passing_session_ids(
+    cross_modality_dprime: float | None = None,
+    min_trials: int | None = None,
+    min_contingent_rewards: int | None = None,
+    of_each_rewarded_modality: bool = True,
+    min_n_blocks: int = 2,
+    include_templeton: bool = False,
+) -> pl.Series:
+    passing_block_filter = get_passing_blocks_performance_filter(
+        cross_modality_dprime=cross_modality_dprime,
+        min_trials=min_trials,
+        min_contingent_rewards=min_contingent_rewards,
+    )
     n_blocks_each_context: pl.Expr = (
         pl.col("rewarded_modality")
-        .filter(
-            cross_modal_dprime_filter,
-            same_modal_dprime_filter,
-            min_n_trials_filter,
-            min_n_responses_filter,
-        )
+        .filter(passing_block_filter)
         .unique_counts()
         .over("session_id", mapping_strategy="join")
     )
+    if include_templeton:
+        templeton_session_ids = get_session_table().filter("is_templeton")["session_id"]
+        templeton_filter = pl.col("session_id").is_in(templeton_session_ids)
+    else:
+        templeton_filter = pl.lit(False)
     if of_each_rewarded_modality:
-        return (
+        passing_session_filter = (
             # at least n_blocks of each context, and two contexts:
-            n_blocks_each_context.list.eval(pl.element() >= min_n_blocks).list.all()
-            & (n_blocks_each_context.list.len() == 2)
+            (
+                n_blocks_each_context.list.eval(pl.element() >= min_n_blocks).list.all()
+                & (n_blocks_each_context.list.len() == 2)
+            ) | templeton_filter
         )
     else:
-        return (
+        passing_session_filter = (
             # at least n_blocks of any context:
-            n_blocks_each_context.list.sum()
-            >= min_n_blocks
+            (
+                n_blocks_each_context.list.sum()
+                >= min_n_blocks
+            ) | templeton_filter
         )
-
-
-PASSING_BLOCKS_PERFORMANCE_FILTER = get_passing_blocks_performance_filter()
+    return get_df("performance").filter(passing_session_filter.explode())["session_id"].unique().sort()
 
 
 def get_prod_trials(
-    cross_modal_dprime_threshold: float = 1.0, late_autorewards: bool | None = None
+    cross_modal_dprime_threshold: float = 1.0,
+    late_autorewards: bool | None = None,
+    by_session: bool = True,
+    include_templeton: bool = False,
 ) -> pl.DataFrame:
+    """
+    late_autorewards: If False/True, include sessions with early/late autorewards, respectively.
+    If None, include both.
+
+    by_session: If False, any passing blocks will be kept in table, even if the session as a
+    whole does not meet performance criteria for good behavior.
+    """
     late_autorewards_expr = {
         True: LATE_AUTOREWARDS_SESSION_FILTER,
         False: EARLY_AUTOREWARDS_SESSION_FILTER,
@@ -351,21 +373,48 @@ def get_prod_trials(
     session_ids_by_type: pl.Series = get_df("session").filter(
         PROD_EPHYS_SESSION_FILTER, late_autorewards_expr
     )["session_id"]
-    # session_ids to use based on passing blocks:
-    session_ids_by_performance: pl.Series = get_df("performance").filter(
-        PASSING_BLOCKS_PERFORMANCE_FILTER.explode()
-    )["session_id"]
+    if include_templeton:
+        templeton_session_ids = get_session_table().filter("is_templeton")["session_id"]
+        session_ids_by_type = session_ids_by_type.append(templeton_session_ids)
 
-    return (
-        get_df("trials").filter(
-            pl.col("session_id").is_in(
-                set(session_ids_by_type).intersection(session_ids_by_performance)
-            ),
+    # session_ids to use based on performance:
+    if not by_session: 
+        # keep only sessions that pass the performance criteria
+        session_ids_by_performance = get_passing_session_ids(
+            cross_modality_dprime=cross_modal_dprime_threshold,
+            include_templeton=include_templeton,
         )
+        trials = (
+            get_df("trials")
+            .filter(
+                pl.col("session_id").is_in(
+                    set(session_ids_by_type).intersection(session_ids_by_performance)
+                ),
+            )
+        )
+    else:
+        if include_templeton:
+            templeton_filter = pl.col("session_id").is_in(templeton_session_ids)
+        else:
+            templeton_filter = pl.lit(False)
+        passing_blocks: pl.DataFrame = get_df("performance").filter(
+            get_passing_blocks_performance_filter(cross_modality_dprime=cross_modal_dprime_threshold) | templeton_filter
+        )
+        trials = (
+            get_df("trials")
+            .join(
+                passing_blocks,
+                on=["session_id", 'block_index'],
+                how="semi", # filter trials to only those in passing blocks
+            )
+        )
+    return (
+        trials
         # add a column that indicates if the first block in a session is aud context:
         .with_columns(
             (pl.col("rewarded_modality").first() == "aud")
             .over("session_id")
             .alias("is_first_block_aud"),
         )
+        .sort('session_id', 'block_index', 'trial_index')
     )
