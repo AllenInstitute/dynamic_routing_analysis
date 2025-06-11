@@ -9,6 +9,7 @@ import logging.handlers
 import pathlib
 import re
 from collections.abc import Iterable
+from typing import Literal
 import typing
 
 # 3rd-party imports necessary for processing ----------------------- #
@@ -178,13 +179,14 @@ def get_nwb_paths(session_id: str) -> pathlib.Path: ...
 
 
 @typing.overload
-def get_nwb_paths(session_id: None) -> tuple[pathlib.Path, ...]: ...
+def get_nwb_paths(session_id: Literal[None] = None) -> tuple[pathlib.Path, ...]: ...
 
 
 @functools.cache
 def get_nwb_paths(
     session_id: str | None = None,
 ) -> pathlib.Path | tuple[pathlib.Path, ...]:
+    """Returns a single path if a session ID is provided"""
     paths = datacube_config.nwb_dir.rglob("*.nwb")
     if session_id:
         try:
