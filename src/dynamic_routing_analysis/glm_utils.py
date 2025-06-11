@@ -13,6 +13,11 @@ import dynamic_routing_analysis.models as mu
 
 logger = logging.getLogger(__name__) # debug < info < warning < error
 
+
+class NotEnoughGoodBlocksError(Exception):
+    pass
+
+
 np.random.seed(0)
 
 model_mapping = {
