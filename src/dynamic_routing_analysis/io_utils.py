@@ -1024,7 +1024,7 @@ def timestamps_good_behavior(behavior_info, fit):
     ts_good_behavior = np.zeros(len(fit['bin_centers']), dtype=bool)
     block_wise_performance = behavior_info['dprime']
     trials = behavior_info["trials"]
-    if len(block_wise_performance) > 0: 
+    if not np.isnan(block_wise_performance).all(): # Check if there are any valid d-prime values
 
         # TO DO replace with function from datacube_utils
         dprime_thresh = 1
@@ -1035,11 +1035,11 @@ def timestamps_good_behavior(behavior_info, fit):
         for n, epoch in enumerate(epoch_trace):
             if 'trial' in epoch:
                 trial_no = int(''.join(filter(str.isdigit, epoch)))
-                if trial_no in good_trial_indexes: 
+                if trial_no in good_trial_indexes:
                     ts_good_behavior[n] = True
-            else: 
+            else:
                 ts_good_behavior[n] = True
-    else: 
+    else:
         ts_good_behavior = np.ones(len(fit['bin_centers']), dtype=bool)
 
     return ts_good_behavior
