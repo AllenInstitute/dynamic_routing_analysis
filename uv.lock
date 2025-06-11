@@ -1213,6 +1213,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+codeocean = [
+    { name = "aind-session" },
+]
 npc-sessions = [
     { name = "npc-sessions" },
 ]
@@ -1251,6 +1254,7 @@ testing = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aind-session", marker = "extra == 'codeocean'", specifier = ">=0.3.16" },
     { name = "altair", extras = ["save"], marker = "extra == 'plot'", specifier = ">=5.4.1" },
     { name = "geopandas", marker = "extra == 'plot'", specifier = ">=1.0.1" },
     { name = "lazynwb", specifier = ">=0.2.2" },
@@ -1269,7 +1273,7 @@ requires-dist = [
     { name = "statsmodels", specifier = ">=0.14.2" },
     { name = "xarray", specifier = ">=2024.6.0" },
 ]
-provides-extras = ["plot", "pynwb", "npc-sessions"]
+provides-extras = ["plot", "pynwb", "npc-sessions", "codeocean"]
 
 [package.metadata.requires-dev]
 bump = [

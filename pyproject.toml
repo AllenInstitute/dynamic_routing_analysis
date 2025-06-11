@@ -45,6 +45,9 @@ pynwb = [
 npc_sessions = [
     "npc-sessions>=0.0.226",
 ]
+codeocean = [
+    "aind-session>=0.3.16",
+]
 
 [project.license]
 text = "MIT"
