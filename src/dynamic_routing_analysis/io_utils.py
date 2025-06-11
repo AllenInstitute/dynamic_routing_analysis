@@ -1027,10 +1027,14 @@ def timestamps_good_behavior(behavior_info, fit):
     if not np.isnan(block_wise_performance).all(): # Check if there are any valid d-prime values
 
         # TO DO replace with function from datacube_utils
-        dprime_thresh = 1
-        good_blocks = np.where(block_wise_performance >= dprime_thresh)[0]
-        good_trial_indexes = trials[trials.block_index.isin(good_blocks)].index
         epoch_trace = fit['epoch_trace']
+        good_trial_indexes = (
+            datacube_utils.get_prod_trials(
+                by_session=False, include_templeton=True
+            )
+            .filter(pl.col('session_id') == fit["session_id"])
+            ['trial_index']
+        )
 
         for n, epoch in enumerate(epoch_trace):
             if 'trial' in epoch:
