@@ -378,9 +378,8 @@ def get_prod_trials(
         templeton_session_ids = get_session_table().filter("is_templeton")["session_id"]
         session_ids_by_type = session_ids_by_type.append(templeton_session_ids)
 
-    # session_ids to use based on performance:
     if by_session: 
-        # keep only sessions that pass the performance criteria
+        # keep all blocks from sessions that pass the performance criteria
         session_ids_by_performance = get_passing_session_ids(
             cross_modality_dprime=cross_modal_dprime_threshold,
             include_templeton=include_templeton,
