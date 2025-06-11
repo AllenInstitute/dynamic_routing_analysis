@@ -9,6 +9,7 @@ import pandas as pd
 import polars as pl
 import xarray as xr
 from tqdm import tqdm
+import re
 
 import dynamic_routing_analysis.datacube_utils as datacube_utils
 
@@ -261,9 +262,10 @@ def define_kernels(run_params):
     return run_params
 
 
-def _create_behavior_info(trials, performance, epochs):
+def _create_behavior_info(session_id, trials, performance, epochs):
     dprimes = performance.cross_modality_dprime.values
     return {
+        'session_id': session_id, 
         'trials': trials,
         'dprime': dprimes,
         'epoch_info': epochs,
@@ -290,6 +292,7 @@ def get_session_data_from_datacube(
 ) -> tuple[pl.LazyFrame, dict[str, pd.DataFrame]]:
     nwb_path = datacube_utils.get_nwb_paths(session_id)
     behavior_info = _create_behavior_info(
+        session_id = session_id, 
         trials=lazynwb.get_df(nwb_path, '/intervals/trials', exact_path=True, **(get_df_kwargs or {})),
         performance=lazynwb.get_df(nwb_path, '/intervals/performance', exact_path=True, **(get_df_kwargs or {})),
         epochs=lazynwb.get_df(nwb_path, '/intervals/epochs', exact_path=True, **(get_df_kwargs or {})),
@@ -1024,23 +1027,23 @@ def timestamps_good_behavior(behavior_info, fit):
     ts_good_behavior = np.zeros(len(fit['bin_centers']), dtype=bool)
     block_wise_performance = behavior_info['dprime']
     trials = behavior_info["trials"]
+    session_id = behavior_info["session_id"]
     if not np.isnan(block_wise_performance).all(): # Check if there are any valid d-prime values
 
-        # TO DO replace with function from datacube_utils
         epoch_trace = fit['epoch_trace']
-        good_trial_indexes = (
+        good_trial_indexes = set(
             datacube_utils.get_prod_trials(
                 by_session=False, include_templeton=True
             )
-            .filter(pl.col('session_id') == fit["session_id"])
+            .filter(pl.col('session_id') == session_id)
             ['trial_index']
         )
-
+        pattern = re.compile(r'trial(\d+)')
         for n, epoch in enumerate(epoch_trace):
-            if 'trial' in epoch:
-                trial_no = int(''.join(filter(str.isdigit, epoch)))
-                if trial_no in good_trial_indexes:
-                    ts_good_behavior[n] = True
+            match = pattern.search(epoch)
+            if match:
+                trial_no = int(match.group(1))
+                ts_good_behavior[n] = trial_no in good_trial_indexes
             else:
                 ts_good_behavior[n] = True
     else:
