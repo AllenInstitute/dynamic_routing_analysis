@@ -63,6 +63,12 @@ session_ids = (
     .collect()
 )["session_id"]
 
+# Stop all running jobs:
+# for session, id_ in json.loads(pathlib.Path("computations.json").read_text()).items():
+#     client.computations.delete_computation(id_)
+# exit()
+
+
 session_ids_16gb = ["713655_2024-08-07", "706401_2024-04-22"]
 
 session_to_computation = {}
@@ -75,12 +81,14 @@ for session_id in tqdm.tqdm(session_ids, desc="Sessions", unit="session"):
     pathlib.Path("computations.json").write_text(
         json.dumps(session_to_computation, indent=4)
     )
-    time.sleep(3)  # Sleep to avoid hitting the API rate limit
+    time.sleep(5)  # Sleep to avoid hitting the API rate limit
 
-# for session, id_ in json.loads(pathlib.Path("computations.json").read_text()).items():
-#     client.computations.delete_computation(id_)
+# Wait for all computations to finish:
 for session, id_ in json.loads(pathlib.Path("computations.json").read_text()).items():
-    computation = client.computations.wait_until_completed(id_)
+    computation = client.computations.wait_until_completed(
+        client.computations.get_computation(id_),
+        polling_interval=60,
+        )
 
 if computation.end_status != codeocean.computation.ComputationEndStatus.Succeeded:
     print("at least one computation failed - not writing consolidated results")
