@@ -310,9 +310,9 @@ def get_passing_blocks_performance_filter(
 
 
 def get_passing_session_ids(
-    cross_modality_dprime: float | None = None,
-    min_trials: int | None = None,
-    min_contingent_rewards: int | None = None,
+    cross_modality_dprime: float | None = 1.0,
+    min_trials: int | None = 10,
+    min_contingent_rewards: int | None = 10,
     of_each_rewarded_modality: bool = True,
     min_n_blocks: int = 2,
     include_templeton: bool = False,
@@ -420,3 +420,5 @@ def get_prod_trials(
         )
         .sort('session_id', 'block_index', 'trial_index')
     )
+
+get_passing_session_ids()
