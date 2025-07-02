@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import upath
 import zarr
-from sklearn.metrics import balanced_accuracy_score, classification_report
+from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import RobustScaler
 
@@ -211,11 +211,9 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
         clf.fit(X[train],y[train])
         prediction=clf.predict(X[test])
-        cr_dict_train.append(classification_report(y[train], clf.predict(X[train]), output_dict=True))
         balanced_accuracy_train.append(balanced_accuracy_score(y[train], clf.predict(X[train]),
                                                                sample_weight=None, adjusted=False))
 
-        cr_dict_test.append(classification_report(y[test], clf.predict(X[test]), output_dict=True))
         balanced_accuracy_test.append(balanced_accuracy_score(y[test], clf.predict(X[test]),
                                                                sample_weight=None, adjusted=False))
 
