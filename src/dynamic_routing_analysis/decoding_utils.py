@@ -40,7 +40,8 @@ def dump_dict_to_zarr(group, data):
 # 'linearSVC' or 'LDA' or 'RandomForest'
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                    crossval_index=None,labels_as_index=False,train_test_split_input=None,
-                   regularization=None,penalty=None,solver=None,n_jobs=None):
+                   regularization=None,penalty=None,solver=None,n_jobs=None,set_random_state=None):
+    
     #helper function to decode labels from input data using different decoder models
 
     if decoder_type=='linearSVC':
@@ -206,6 +207,12 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         if train_test_split_input is None:
             raise ValueError('Must provide train_test_split_input')
         train_test_split = train_test_split_input
+
+    elif crossval=='5_fold_set_random_state':
+        if set_random_state==None:
+            set_random_state=0
+        skf = StratifiedKFold(n_splits=5,shuffle=True,random_state=set_random_state)
+        train_test_split = skf.split(input_data, labels)
 
     for train,test in train_test_split:
 
