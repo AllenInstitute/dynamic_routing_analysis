@@ -228,7 +228,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         ypred_all.append(prediction)
         ypred_train.append(clf.predict(X[train]))
         ytrue_train.append(y[train])
-        dec_func_all.append(decision_function)
+        y_dec_func.append(decision_function)
         tidx_used.append([test])
         classes.append(clf.classes_)
         # intercept.append(clf.intercept_)
@@ -245,7 +245,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
     #fit on all trials
     clf.fit(X, y)
-    y_dec_func = clf.decision_function(X)
+    dec_func_all_trials = clf.decision_function(X)
     ypred = clf.predict(X)
     if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression':
         predict_proba_all_trials = clf.predict_proba(X)
@@ -269,10 +269,10 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     #indices of trials used in test for each fold
     output['trials_used']=tidx_used
 
-    #decision function from training/testing on all trials
-    output['decision_function']=y_dec_func
     #decision function for each test fold
-    output['decision_function_all']=dec_func_all
+    output['decision_function']=y_dec_func
+    #decision function from training/testing on all trials
+    output['decision_function_all']=dec_func_all_trials
     #predict probability for each test fold
     output['predict_proba']=ypred_proba
     #predict probability from training/testing on all trials
