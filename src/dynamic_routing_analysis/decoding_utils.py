@@ -103,13 +103,13 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
     if type(y[0])==bool:
         ypred=np.full(len(y), fill_value=False)
-        ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value=False)
     elif type(y[0])==str:
         ypred=np.full(len(y), fill_value='       ')
-        ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value='       ')
     else:
         ypred=np.full(len(y), fill_value=np.nan)
-        ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
+    
+    ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value=False)
+    decision_function=np.full((len(y),len(np.unique(labels))), fill_value=False)
 
     tidx_used=[]
 
@@ -123,6 +123,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     train_trials=[]
     test_trials=[]
     dec_func_all=[]
+    y_dec_func=[]
     models=[]
     cr_dict_train = []
     balanced_accuracy_train = []
@@ -224,7 +225,6 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         balanced_accuracy_test.append(balanced_accuracy_score(y[test], clf.predict(X[test]),
                                                                sample_weight=None, adjusted=False))
 
-        decision_function=clf.decision_function(X[test])
         ypred_all.append(prediction)
         ypred_train.append(clf.predict(X[train]))
         ytrue_train.append(y[train])
@@ -238,8 +238,10 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
         if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression':
             ypred_proba[test,:] = clf.predict_proba(X[test])
+            decision_function[test,:]=clf.decision_function(X[test])
         else:
             ypred_proba[test,:] = np.full((len(test),len(np.unique(labels))), fill_value=False)
+            decision_function[test,:]=np.full((len(test),len(np.unique(labels))), fill_value=False)
 
         models.append(clf)
 
@@ -269,11 +271,11 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     #indices of trials used in test for each fold
     output['trials_used']=tidx_used
 
-    #decision function for each test fold
-    output['decision_function']=y_dec_func
+    #decision function using cross-validated folds
+    output['decision_function']=decision_function
     #decision function from training/testing on all trials
     output['decision_function_all']=dec_func_all_trials
-    #predict probability for each test fold
+    #predict probability using cross-validated folds
     output['predict_proba']=ypred_proba
     #predict probability from training/testing on all trials
     output['predict_proba_all_trials']=predict_proba_all_trials if 'predict_proba_all_trials' in locals() else None
