@@ -244,14 +244,14 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         if decoder_type=='LDA' or decoder_type=='linearSVC' or decoder_type=='LogisticRegression':
             decision_function[test]=clf.decision_function(X[test])
         else:
-            decision_function[test]=np.full((len(test),len(np.unique(labels))), fill_value=np.nan)
+            decision_function[test]=np.full((len(test)), fill_value=np.nan)
 
         models.append(clf)
 
     #fit on all trials
     clf.fit(X, y)
     ypred = clf.predict(X)
-    
+
     if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression':
         predict_proba_all_trials = clf.predict_proba(X)
     else:
@@ -262,7 +262,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         dec_func_all_trials = clf.decision_function(X)
     else:
         coefs = np.full((X.shape[1]), fill_value=False)
-        dec_func_all_trials = np.full((X.shape[0],len(np.unique(labels))), fill_value=np.nan)
+        dec_func_all_trials = np.full((X.shape[0])), fill_value=np.nan)
 
     intercept = clf.intercept_
 
