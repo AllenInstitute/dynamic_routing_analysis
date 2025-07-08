@@ -259,12 +259,12 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
     if decoder_type == 'LDA' or decoder_type == 'linearSVC' or decoder_type == 'LogisticRegression':
         coefs = clf.coef_
+        intercept = clf.intercept_
         dec_func_all_trials = clf.decision_function(X)
     else:
         coefs = np.full((X.shape[1]), fill_value=False)
-        dec_func_all_trials = np.full((X.shape[0]), fill_value=np.nan)s
-
-    intercept = clf.intercept_
+        intercept = np.full((1), fill_value=False)
+        dec_func_all_trials = np.full((X.shape[0]), fill_value=np.nan)
 
     #scikit-learn's classification report
     output['cr']=cr_dict_test
