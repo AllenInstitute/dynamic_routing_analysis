@@ -262,7 +262,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         dec_func_all_trials = clf.decision_function(X)
     else:
         coefs = np.full((X.shape[1]), fill_value=False)
-        dec_func_all_trials = np.full((X.shape[0])), fill_value=np.nan)
+        dec_func_all_trials = np.full((X.shape[0]), fill_value=np.nan)s
 
     intercept = clf.intercept_
 
