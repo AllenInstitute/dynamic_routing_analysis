@@ -138,6 +138,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     models=[]
     cr_dict_train = []
     balanced_accuracy_train = []
+    coefs_all = []
 
     cr_dict_test = []
     balanced_accuracy_test = []
@@ -250,12 +251,17 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
             ypred_proba[test,:] = clf.predict_proba(X[test])
         else:
-            ypred_proba[test,:] = np.full((len(test),len(np.unique(labels))), fill_value=np.nan)
+            ypred_proba[test,:] = np.full((len(test),len(np.unique(labels))), fill_value=False)
 
         if decoder_type=='LDA' or decoder_type=='linearSVC' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
             decision_function[test]=clf.decision_function(X[test])
         else:
-            decision_function[test]=np.full((len(test)), fill_value=np.nan)
+            decision_function[test]=np.full((len(test)), fill_value=False)
+
+        if decoder_type == 'LDA' or decoder_type == 'linearSVC' or decoder_type == 'LogisticRegression':
+            coefs_all.append(clf.coef_)
+        else:
+            coefs_all.append(np.full((X.shape[1]), fill_value=False))
 
         models.append(clf)
 
@@ -266,11 +272,15 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
         predict_proba_all_trials = clf.predict_proba(X)
     else:
-        predict_proba_all_trials = np.full((X.shape[0],len(np.unique(labels))), fill_value=np.nan)
+        predict_proba_all_trials = np.full((X.shape[0],len(np.unique(labels))), fill_value=False)
 
-    if decoder_type == 'LDA' or decoder_type == 'linearSVC' or decoder_type == 'LogisticRegression' or decoder_type=='nonlinearSVC':
+    if decoder_type == 'LDA' or decoder_type == 'linearSVC' or decoder_type == 'LogisticRegression':
         coefs = clf.coef_
         intercept = clf.intercept_
+        dec_func_all_trials = clf.decision_function(X)
+    elif decoder_type == 'nonlinearSVC':
+        coefs = np.full((X.shape[1]), fill_value=False)
+        intercept = np.full((1), fill_value=False)
         dec_func_all_trials = clf.decision_function(X)
     else:
         coefs = np.full((X.shape[1]), fill_value=False)
@@ -299,6 +309,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     output['predict_proba_all_trials']=predict_proba_all_trials if 'predict_proba_all_trials' in locals() else None
     #coefficients for each feature
     output['coefs']=coefs
+    output['coefs_all']=coefs_all
     output['classes']=classes
     output['intercept']=intercept
     #input parameters
