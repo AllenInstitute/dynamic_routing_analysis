@@ -53,7 +53,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         if solver is not None:
             logger.warning('Solver not used for LinearSVC')
         clf=LinearSVC(max_iter=5000,dual='auto',class_weight='balanced',
-                      C=regularization,penalty=penalty,n_jobs=n_jobs)
+                      C=regularization,penalty=penalty)
     elif decoder_type=='nonlinearSVC':
         from sklearn.svm import SVC
         kernel='rbf'
@@ -64,7 +64,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         if solver is not None:
             logger.warning('Solver not used for non-linear SVC')
         clf=SVC(max_iter=5000,probability=True,class_weight='balanced',
-                      C=regularization,kernel=kernel,n_jobs=n_jobs)
+                      C=regularization,kernel=kernel)
     elif decoder_type=='LDA':
         from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
         if solver is None:
@@ -73,7 +73,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             logger.warning('Regularization not used for LDA')
         if penalty is not None:
             logger.warning('Penalty not used for LDA')
-        clf=LinearDiscriminantAnalysis(solver=solver,n_jobs=n_jobs)
+        clf=LinearDiscriminantAnalysis(solver=solver)
     elif decoder_type=='RandomForest':
         from sklearn.ensemble import RandomForestClassifier
         if regularization is not None:
