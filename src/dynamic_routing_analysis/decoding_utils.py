@@ -54,6 +54,17 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             logger.warning('Solver not used for LinearSVC')
         clf=LinearSVC(max_iter=5000,dual='auto',class_weight='balanced',
                       C=regularization,penalty=penalty,n_jobs=n_jobs)
+    elif decoder_type=='nonlinearSVC':
+        from sklearn.svm import SVC
+        kernel='rbf'
+        if regularization is None:
+            regularization = 1.0
+        if penalty is not None:
+            logger.warning('Penalty not used for non-linear SVC')
+        if solver is not None:
+            logger.warning('Solver not used for non-linear SVC')
+        clf=SVC(max_iter=5000,probability=True,class_weight='balanced',
+                      C=regularization,kernel=kernel,n_jobs=n_jobs)
     elif decoder_type=='LDA':
         from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
         if solver is None:
@@ -236,12 +247,12 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         train_trials.append(train)
         test_trials.append(test)
 
-        if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression':
+        if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
             ypred_proba[test,:] = clf.predict_proba(X[test])
         else:
             ypred_proba[test,:] = np.full((len(test),len(np.unique(labels))), fill_value=np.nan)
 
-        if decoder_type=='LDA' or decoder_type=='linearSVC' or decoder_type=='LogisticRegression':
+        if decoder_type=='LDA' or decoder_type=='linearSVC' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
             decision_function[test]=clf.decision_function(X[test])
         else:
             decision_function[test]=np.full((len(test)), fill_value=np.nan)
@@ -252,12 +263,12 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     clf.fit(X, y)
     ypred = clf.predict(X)
 
-    if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression':
+    if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
         predict_proba_all_trials = clf.predict_proba(X)
     else:
         predict_proba_all_trials = np.full((X.shape[0],len(np.unique(labels))), fill_value=np.nan)
 
-    if decoder_type == 'LDA' or decoder_type == 'linearSVC' or decoder_type == 'LogisticRegression':
+    if decoder_type == 'LDA' or decoder_type == 'linearSVC' or decoder_type == 'LogisticRegression' or decoder_type=='nonlinearSVC':
         coefs = clf.coef_
         intercept = clf.intercept_
         dec_func_all_trials = clf.decision_function(X)
