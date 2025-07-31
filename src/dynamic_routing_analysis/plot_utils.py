@@ -1677,13 +1677,25 @@ def get_heatmap_gdf(
                     ids_
                 ):
                     continue
+                deepest_child_ids_with_patches = set()
+                for i in deepest_child_ids:
+                    if i in ids_:
+                        deepest_child_ids_with_patches.add(i)
+                    else:
+                        for p in ccf_utils.get_ccf_structure_tree_df().filter(pl.col('id') == i)['structure_id_path'][0].split('/')[::-1]:
+                            if not p:
+                                continue
+                            p = int(p)
+                            if p == row["id"] or p in ids_:
+                                deepest_child_ids_with_patches.add(p)
+                                break
                 combined_geometry.append(
                     shapely.union_all(
-                        [g for g, i in zip(geometry_, ids_) if i in deepest_child_ids]
+                        [g for g, i in zip(geometry_, ids_) if i in deepest_child_ids_with_patches]
                     )
                 )
                 combined_ids.append(row["id"])
-                for i in deepest_child_ids:
+                for i in deepest_child_ids_with_patches:
                     if i in ids_:
                         idx = ids_.index(i)
                         ids_.pop(idx)
