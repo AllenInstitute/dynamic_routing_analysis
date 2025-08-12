@@ -304,10 +304,13 @@ def compute_lick_modulation(trials, units, session_info, save_path=None, test=Tr
         print('incompatible project: ',session_info.project,'; skipping')
         return
 
+    unit_count=0
     #for each unit
     for uu,unit in units.iterrows():
-        if test and uu>10:
+        if test and unit_count>10:
             break
+        else:
+            unit_count+=1
         if 'Templeton' in session_info.project:
             break
 
@@ -463,9 +466,12 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
     shifts=np.arange(-negative_shift,positive_shift+1)
 
     #for each unit
+    unit_count=0
     for uu,unit in units.iterrows():
-        if test and uu>10:
+        if test and unit_count>10:
             break
+        else:
+            unit_count+=1
 
         stim_context_modulation['unit_id'].append(unit['unit_id'])
         stim_context_modulation['session_id'].append(str(session_info.id))
