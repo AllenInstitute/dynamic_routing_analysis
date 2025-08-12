@@ -260,7 +260,7 @@ def get_structure_probe(units):
     return structure_probe
 
 
-def compute_lick_modulation(trials, units, session_info, save_path=None):
+def compute_lick_modulation(trials, units, session_info, save_path=None, test=True):
 
     #computes lick modulation index, zscore, p-value, sign, and ROC AUC for each unit
     #saves or returns dataframe with lick modulation metrics and unit_id, session_id, and project
@@ -284,7 +284,7 @@ def compute_lick_modulation(trials, units, session_info, save_path=None):
 
     #make data array first
     time_before = 0.5
-    time_after = 0.5
+    time_after = 0.6
     binsize = 0.1
     trial_da = make_neuron_time_trials_tensor(units, trials, time_before, time_after, binsize)
                                                                               
@@ -306,8 +306,10 @@ def compute_lick_modulation(trials, units, session_info, save_path=None):
 
     #for each unit
     for uu,unit in units.iterrows():
+        if test and uu>10:
+            break
         if 'Templeton' in session_info.project:
-            continue
+            break
 
         lick_modulation['unit_id'].append(unit['unit_id'])
         lick_modulation['session_id'].append(str(session_info.id))
@@ -348,7 +350,7 @@ def compute_lick_modulation(trials, units, session_info, save_path=None):
         lick_modulation_df.to_parquet(os.path.join(save_path,session_info.id+'_lick_modulation.parquet'))
 
 
-def compute_stim_context_modulation(trials, units, session_info, save_path=None):
+def compute_stim_context_modulation(trials, units, session_info, save_path=None, test=False):
 
     #computes stimulus and context modulation indices, zscores, p-values, signs, and ROC AUCs for each unit
     #saves or returns new unit dataframe with modulation metrics and without spikes and waveforms
@@ -440,7 +442,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None)
 
     #make data array first
     time_before = 0.1
-    time_after = 0.3
+    time_after = 0.4
     binsize = 0.1
     trial_da = make_neuron_time_trials_tensor(units, trials, time_before, time_after, binsize)
 
@@ -462,6 +464,8 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None)
 
     #for each unit
     for uu,unit in units.iterrows():
+        if test and uu>10:
+            break
 
         stim_context_modulation['unit_id'].append(unit['unit_id'])
         stim_context_modulation['session_id'].append(str(session_info.id))
