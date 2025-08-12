@@ -285,7 +285,7 @@ def compute_lick_modulation(trials, units, session_info, save_path=None):
     #make data array first
     time_before = 0.5
     time_after = 0.5
-    binsize = 0.025
+    binsize = 0.1
     trial_da = make_neuron_time_trials_tensor(units, trials, time_before, time_after, binsize)
                                                                               
     if "Templeton" in session_info.project:
@@ -441,7 +441,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None)
     #make data array first
     time_before = 0.1
     time_after = 0.3
-    binsize = 0.025
+    binsize = 0.1
     trial_da = make_neuron_time_trials_tensor(units, trials, time_before, time_after, binsize)
 
     #get linear shifts
