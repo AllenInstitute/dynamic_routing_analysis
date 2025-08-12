@@ -202,8 +202,8 @@ def make_neuron_timebins_matrix(units, trials, bin_size, generate_context_labels
             block_trials=trials.query('start_time>=@block_start_time').index
             context[block_trials]=block_contexts[block]
             block_nums[block_trials]=block
-        trials['context_name']=context
-        context_switches=np.where(np.diff(trials['context_name'].values=='vis'))[0]+1
+        trials['rewarded_modality']=context
+        context_switches=np.where(np.diff(trials['rewarded_modality'].values=='vis'))[0]+1
         trials['is_context_switch']=np.full(len(trials), fill_value=False)
         trials['is_context_switch'].iloc[context_switches]=True
         trials['is_vis_context']=context=='vis'
@@ -294,12 +294,12 @@ def compute_lick_modulation(trials, units, session_info, save_path=None):
         baseline_trials = trials
 
     elif "DynamicRouting" in session_info.project:
-        lick_trials = trials.query('(stim_name=="vis1" and context_name=="aud" and is_response==True) or \
-                                (stim_name=="sound1" and context_name=="vis" and is_response==True)')
-        non_lick_trials = trials.query('(stim_name=="vis1" and context_name=="aud" and is_response==False) or \
-                                        (stim_name=="sound1" and context_name=="vis" and is_response==False)')
-        baseline_trials = trials.query('(stim_name=="vis1" and context_name=="aud") or \
-                                        (stim_name=="sound1" and context_name=="vis")')
+        lick_trials = trials.query('(stim_name=="vis1" and rewarded_modality=="aud" and is_response==True) or \
+                                (stim_name=="sound1" and rewarded_modality=="vis" and is_response==True)')
+        non_lick_trials = trials.query('(stim_name=="vis1" and rewarded_modality=="aud" and is_response==False) or \
+                                        (stim_name=="sound1" and rewarded_modality=="vis" and is_response==False)')
+        baseline_trials = trials.query('(stim_name=="vis1" and rewarded_modality=="aud") or \
+                                        (stim_name=="sound1" and rewarded_modality=="vis")')
     else:
         print('incompatible project: ',session_info.project,'; skipping')
         return
@@ -409,7 +409,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None)
         stim_context_modulation[ss+'_stimulus_late_modulation_roc_auc'] = []
         stim_context_modulation[ss+'_stim_latency'] = []
 
-    contexts=trials['context_name'].unique()
+    contexts=trials['rewarded_modality'].unique()
 
     if 'Templeton' in session_info.project:
         contexts = ['aud','vis']
@@ -424,7 +424,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None)
             block_contexts=['aud','vis','aud','vis','aud','vis']
 
         trials['true_block_index']=trials['block_index']
-        trials['true_context_name']=trials['context_name']
+        trials['true_rewarded_modality']=trials['rewarded_modality']
 
         for block in range(0,6):
             block_start_time=start_time+block*10*60
@@ -433,10 +433,10 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None)
             fake_context[block_trials]=block_contexts[block]
             fake_block_nums[block_trials]=block
         
-        trials['context_name']=fake_context
+        trials['rewarded_modality']=fake_context
         trials['block_index']=fake_block_nums
-        trials['is_vis_context']=trials['context_name']=='vis'
-        trials['is_aud_context']=trials['context_name']=='aud'
+        trials['is_vis_context']=trials['rewarded_modality']=='vis'
+        trials['is_aud_context']=trials['rewarded_modality']=='aud'
 
     #make data array first
     time_before = 0.1
@@ -470,8 +470,8 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None)
         #find baseline frs across all trials
         baseline_frs = trial_da.sel(unit_id=unit['unit_id'],time=slice(-0.1,0)).mean(dim='time')
 
-        vis_baseline_frs = baseline_frs.sel(trials=trials.query('context_name=="vis"').index)
-        aud_baseline_frs = baseline_frs.sel(trials=trials.query('context_name=="aud"').index)
+        vis_baseline_frs = baseline_frs.sel(trials=trials.query('rewarded_modality=="vis"').index)
+        aud_baseline_frs = baseline_frs.sel(trials=trials.query('rewarded_modality=="aud"').index)
 
         pval = st.mannwhitneyu(vis_baseline_frs.values, aud_baseline_frs.values,nan_policy='omit')[1]
         stim_context_modulation['baseline_context_modulation_p_value'].append(pval)
@@ -489,14 +489,14 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None)
         stim_context_modulation['baseline_context_modulation_sign'].append(baseline_mod_sign)
 
         #auc for baseline frs
-        binary_label=trials['context_name']=='vis'
+        binary_label=trials['rewarded_modality']=='vis'
         baseline_context_auc=roc_auc_score(binary_label,baseline_frs.values)
         stim_context_modulation['baseline_context_roc_auc'].append(baseline_context_auc)
 
         #linear shifted baseline context
         temp_baseline_context_diff=[]
         for sh,shift in enumerate(shifts):
-            labels = middle_4_block_trials['context_name'].values
+            labels = middle_4_block_trials['rewarded_modality'].values
             input_data = baseline_frs.sel(trials=middle_4_blocks+shift).values
             temp_baseline_context_diff.append(input_data[labels=='vis'].mean()-input_data[labels=='aud'].mean())
         temp_baseline_context_diff=np.asarray(temp_baseline_context_diff)
@@ -649,8 +649,8 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None)
             stim_context_modulation[ss+'_stim_latency'].append(stim_latency)
 
             #find stim trials in same vs. other context
-            same_context_trials = trials.query('context_name==@same_context and stim_name==@ss')
-            other_context_trials = trials.query('context_name==@other_context and stim_name==@ss')
+            same_context_trials = trials.query('rewarded_modality==@same_context and stim_name==@ss')
+            other_context_trials = trials.query('rewarded_modality==@other_context and stim_name==@ss')
 
             same_context_baseline_frs = baseline_frs.sel(trials=same_context_trials.index)
             other_context_baseline_frs = baseline_frs.sel(trials=other_context_trials.index)
@@ -775,7 +775,7 @@ def compute_metrics_for_alignment(trials, units, session_info, save_path):
     }
 
     if trials is not None:
-        contexts=trials['context_name'].unique()
+        contexts=trials['rewarded_modality'].unique()
 
         if 'Templeton' in session_info.project:
             contexts = ['aud','vis']
@@ -790,7 +790,7 @@ def compute_metrics_for_alignment(trials, units, session_info, save_path):
                 block_contexts=['aud','vis','aud','vis','aud','vis']
 
             trials['true_block_index']=trials['block_index']
-            trials['true_context_name']=trials['context_name']
+            trials['true_rewarded_modality']=trials['rewarded_modality']
 
             for block in range(0,6):
                 block_start_time=start_time+block*10*60
@@ -799,10 +799,10 @@ def compute_metrics_for_alignment(trials, units, session_info, save_path):
                 fake_context[block_trials]=block_contexts[block]
                 fake_block_nums[block_trials]=block
             
-            trials['context_name']=fake_context
+            trials['rewarded_modality']=fake_context
             trials['block_index']=fake_block_nums
-            trials['is_vis_context']=trials['context_name']=='vis'
-            trials['is_aud_context']=trials['context_name']=='aud'
+            trials['is_vis_context']=trials['rewarded_modality']=='vis'
+            trials['is_aud_context']=trials['rewarded_modality']=='aud'
 
         #make data array first
         time_before = 0.5
@@ -955,10 +955,10 @@ def compute_metrics_for_alignment(trials, units, session_info, save_path):
 
             #lick modulation
             if "DynamicRouting" in session_info.project:
-                lick_trials = trials.query('(stim_name=="vis1" and context_name=="aud" and is_response==True) or \
-                                        (stim_name=="sound1" and context_name=="vis" and is_response==True)')
-                non_lick_trials = trials.query('(stim_name=="vis1" and context_name=="aud" and is_response==False) or \
-                                                (stim_name=="sound1" and context_name=="vis" and is_response==False)')
+                lick_trials = trials.query('(stim_name=="vis1" and rewarded_modality=="aud" and is_response==True) or \
+                                        (stim_name=="sound1" and rewarded_modality=="vis" and is_response==True)')
+                non_lick_trials = trials.query('(stim_name=="vis1" and rewarded_modality=="aud" and is_response==False) or \
+                                                (stim_name=="sound1" and rewarded_modality=="vis" and is_response==False)')
             elif "Templeton" in session_info.project:
                 lick_trials = trials.query('is_response==True')
                 non_lick_trials = trials.query('is_response==False')
