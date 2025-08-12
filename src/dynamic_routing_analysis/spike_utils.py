@@ -345,7 +345,7 @@ def compute_lick_modulation(trials, units, session_info, save_path=None):
     if save_path==None:
         return lick_modulation_df
     else:
-        lick_modulation_df.to_pickle(os.path.join(save_path,session_info.id+'_lick_modulation.pkl'))
+        lick_modulation_df.to_parquet(os.path.join(save_path,session_info.id+'_lick_modulation.parquet'))
 
 
 def compute_stim_context_modulation(trials, units, session_info, save_path=None):
@@ -714,7 +714,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None)
     if save_path==None:
         return unit_metric_merge
     else:
-        unit_metric_merge.to_pickle(os.path.join(save_path,session_info.id+'_stim_context_modulation.pkl'))
+        unit_metric_merge.to_parquet(os.path.join(save_path,session_info.id+'_stim_context_modulation.parquet'))
 
 
 #calculate metrics for channel alignment
