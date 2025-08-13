@@ -327,11 +327,11 @@ def compute_lick_modulation(trials, units, session_info, save_path=None, test=Tr
         
         # lick_diff = lick_frs_by_trial - non_lick_frs_by_trial
 
-        lick_frs_by_trial_zscore = (lick_frs_by_trial.mean(skipna=True)-non_lick_frs_by_trial.mean(skipna=True))/baseline_frs_by_trial.std(skipna=True)
-        lick_modulation['lick_modulation_zscore'].append(lick_frs_by_trial_zscore.mean(skipna=True).values)
+        lick_frs_by_trial_zscore = (np.nanmean(lick_frs_by_trial.values)-np.nanmean(non_lick_frs_by_trial.values))/np.nanstd(baseline_frs_by_trial.values)
+        lick_modulation['lick_modulation_zscore'].append(lick_frs_by_trial_zscore)
 
-        lick_modulation_index=(lick_frs_by_trial.mean(skipna=True)-non_lick_frs_by_trial.mean(skipna=True))/(lick_frs_by_trial.mean(skipna=True)+non_lick_frs_by_trial.mean(skipna=True))
-        lick_modulation['lick_modulation_index'].append(lick_modulation_index.values)
+        lick_modulation_index=(np.nanmean(lick_frs_by_trial.values)-np.nanmean(non_lick_frs_by_trial.values))/(np.nanmean(lick_frs_by_trial.values)+np.nanmean(non_lick_frs_by_trial.values))
+        lick_modulation['lick_modulation_index'].append(lick_modulation_index)
         
         pval = st.mannwhitneyu(lick_frs_by_trial.values, non_lick_frs_by_trial.values,nan_policy='omit')[1]
         # pval = st.ranksums(lick_frs_by_trial.values, non_lick_frs_by_trial.values,nan_policy='omit')[1]
@@ -445,8 +445,8 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
 
     #make data array first
     time_before = 0.1
-    time_after = 0.4
-    binsize = 0.1
+    time_after = 0.31
+    binsize = 0.025
     trial_da = make_neuron_time_trials_tensor(units, trials, time_before, time_after, binsize)
 
     #get linear shifts
@@ -486,11 +486,11 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         pval = st.mannwhitneyu(vis_baseline_frs.values, aud_baseline_frs.values,nan_policy='omit')[1]
         stim_context_modulation['baseline_context_modulation_p_value'].append(pval)
 
-        vis_baseline_frs = vis_baseline_frs.mean(skipna=True).values
-        aud_baseline_frs = aud_baseline_frs.mean(skipna=True).values
+        vis_baseline_frs = np.nanmean(vis_baseline_frs.values)
+        aud_baseline_frs = np.nanmean(aud_baseline_frs.values)
 
-        baseline_modulation_zscore=(vis_baseline_frs-aud_baseline_frs)/baseline_frs.std(skipna=True)
-        stim_context_modulation['baseline_context_modulation_zscore'].append(baseline_modulation_zscore.values)
+        baseline_modulation_zscore=(vis_baseline_frs-aud_baseline_frs)/np.nanstd(baseline_frs.values)
+        stim_context_modulation['baseline_context_modulation_zscore'].append(baseline_modulation_zscore)
 
         baseline_modulation_index=(vis_baseline_frs-aud_baseline_frs)/(vis_baseline_frs+aud_baseline_frs)
         stim_context_modulation['baseline_context_modulation_index'].append(baseline_modulation_index)
@@ -511,12 +511,12 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
             temp_baseline_context_diff.append(input_data[labels=='vis'].mean()-input_data[labels=='aud'].mean())
         temp_baseline_context_diff=np.asarray(temp_baseline_context_diff)
         
-        true_value = temp_baseline_context_diff[shifts==1]
-        null_median = np.median(temp_baseline_context_diff[shifts!=1])
-        null_mean = np.mean(temp_baseline_context_diff[shifts!=1])
-        null_std = np.std(temp_baseline_context_diff[shifts!=1])
-        pval_higher = np.mean(temp_baseline_context_diff[shifts!=1]>=true_value)
-        pval_lower = np.mean(temp_baseline_context_diff[shifts!=1]<=true_value)
+        true_value = temp_baseline_context_diff[shifts==0][0]
+        null_median = np.median(temp_baseline_context_diff[shifts!=0])
+        null_mean = np.mean(temp_baseline_context_diff[shifts!=0])
+        null_std = np.std(temp_baseline_context_diff[shifts!=0])
+        pval_higher = np.mean(temp_baseline_context_diff[shifts!=0]>=true_value)
+        pval_lower = np.mean(temp_baseline_context_diff[shifts!=0]<=true_value)
 
         stim_context_modulation['linear_shift_baseline_context_true_value'].append(true_value)
         stim_context_modulation['linear_shift_baseline_context_null_median'].append(null_median)
@@ -622,10 +622,10 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
             stim_trials = trials.query('stim_name==@ss')
             stim_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(0,0.1),trials=stim_trials.index).mean(dim='time',skipna=True)
             stim_baseline_frs_by_trial = baseline_frs.sel(trials=stim_trials.index)
-            stim_frs_by_trial_zscore = (stim_frs_by_trial-stim_baseline_frs_by_trial.mean(skipna=True))/stim_baseline_frs_by_trial.std(skipna=True)
-            stim_context_modulation[ss+'_stimulus_modulation_zscore'].append(stim_frs_by_trial_zscore.mean(skipna=True).values)
-            stimulus_modulation_index=(stim_frs_by_trial-stim_baseline_frs_by_trial).mean(skipna=True)/(stim_frs_by_trial+stim_baseline_frs_by_trial).mean(skipna=True)
-            stim_context_modulation[ss+'_stimulus_modulation_index'].append(stimulus_modulation_index.values)
+            stim_frs_by_trial_zscore = np.nanmean(stim_frs_by_trial-stim_baseline_frs_by_trial)/np.nanstd(stim_baseline_frs_by_trial)
+            stim_context_modulation[ss+'_stimulus_modulation_zscore'].append(stim_frs_by_trial_zscore)
+            stimulus_modulation_index=np.nanmean(stim_frs_by_trial-stim_baseline_frs_by_trial)/np.nanmean(stim_frs_by_trial+stim_baseline_frs_by_trial)
+            stim_context_modulation[ss+'_stimulus_modulation_index'].append(stimulus_modulation_index)
 
             pval = st.wilcoxon(stim_frs_by_trial.values, stim_baseline_frs_by_trial.values,nan_policy='omit',zero_method='zsplit')[1]
             stim_context_modulation[ss+'_stimulus_modulation_p_value'].append(pval)
@@ -639,10 +639,10 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
 
             #stimulus late modulation
             stim_late_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(0.1,0.2),trials=stim_trials.index).mean(dim='time',skipna=True)
-            stim_late_frs_by_trial_zscore = (stim_late_frs_by_trial-stim_baseline_frs_by_trial.mean(skipna=True))/stim_baseline_frs_by_trial.std(skipna=True)
-            stim_context_modulation[ss+'_stimulus_late_modulation_zscore'].append(stim_late_frs_by_trial_zscore.mean(skipna=True).values)
-            stimulus_late_modulation_index=(stim_late_frs_by_trial-stim_baseline_frs_by_trial).mean(skipna=True)/(stim_late_frs_by_trial+stim_baseline_frs_by_trial).mean(skipna=True)
-            stim_context_modulation[ss+'_stimulus_late_modulation_index'].append(stimulus_late_modulation_index.values)
+            stim_late_frs_by_trial_zscore = np.nanmean(stim_late_frs_by_trial-stim_baseline_frs_by_trial)/np.nanstd(stim_baseline_frs_by_trial)
+            stim_context_modulation[ss+'_stimulus_late_modulation_zscore'].append(stim_late_frs_by_trial_zscore)
+            stimulus_late_modulation_index=np.nanmean(stim_late_frs_by_trial-stim_baseline_frs_by_trial)/np.nanmean(stim_late_frs_by_trial+stim_baseline_frs_by_trial)
+            stim_context_modulation[ss+'_stimulus_late_modulation_index'].append(stimulus_late_modulation_index)
 
             pval = st.wilcoxon(stim_late_frs_by_trial.values, stim_baseline_frs_by_trial.values,nan_policy='omit',zero_method='zsplit')[1]
             stim_context_modulation[ss+'_stimulus_late_modulation_p_value'].append(pval)
@@ -656,7 +656,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
 
             #latency
             stim_latency = np.abs(trial_da).sel(unit_id=unit['unit_id'],time=slice(0,0.3),trials=stim_trials.index).mean(dim='trials',skipna=True).idxmax(dim='time').values
-            stim_context_modulation[ss+'_stim_latency'].append(stim_latency)
+            stim_context_modulation[ss+'_stim_latency'].append(np.nanmean(stim_latency))
 
             #find stim trials in same vs. other context
             same_context_trials = trials.query('rewarded_modality==@same_context and stim_name==@ss')
@@ -675,11 +675,11 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
             same_context_frs = same_context_frs_by_trial.mean(skipna=True).values
             other_context_frs = other_context_frs_by_trial.mean(skipna=True).values
 
-            context_modulation_zscore=((same_context_frs-other_context_frs))/stim_baseline_frs_by_trial.std(skipna=True)
-            stim_context_modulation[ss+'_context_modulation_zscore'].append(context_modulation_zscore.values)
+            context_modulation_zscore=(same_context_frs-other_context_frs)/np.nanstd(stim_baseline_frs_by_trial)
+            stim_context_modulation[ss+'_context_modulation_zscore'].append(context_modulation_zscore)
 
             # stim context modulation sign
-            context_mod_sign=np.sign(np.mean(same_context_frs-other_context_frs))
+            context_mod_sign=np.sign(np.nanmean(same_context_frs-other_context_frs))
             stim_context_modulation[ss+'_context_modulation_sign'].append(context_mod_sign)
 
             # stim context modulation auc
@@ -697,8 +697,8 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
             same_context_evoked_frs = same_context_evoked_frs_by_trial.mean(skipna=True).values
             other_context_evoked_frs = other_context_evoked_frs_by_trial.mean(skipna=True).values
 
-            context_modulation_evoked_zscore=((same_context_evoked_frs-other_context_evoked_frs))/stim_baseline_frs_by_trial.std(skipna=True)
-            stim_context_modulation[ss+'_evoked_context_modulation_zscore'].append(context_modulation_evoked_zscore.values)
+            context_modulation_evoked_zscore=(same_context_evoked_frs-other_context_evoked_frs)/np.nanstd(stim_baseline_frs_by_trial)
+            stim_context_modulation[ss+'_evoked_context_modulation_zscore'].append(context_modulation_evoked_zscore)
 
             # evoked stim context modulation sign
             context_mod_evoked_sign=np.sign(np.mean(same_context_evoked_frs-other_context_evoked_frs))
@@ -720,7 +720,8 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         unit_metric_merge=units.reset_index(drop=True).merge(pd.DataFrame(stim_context_modulation),on=['unit_id','session_id'])
     else:
         unit_metric_merge=units.reset_index(drop=True).merge(pd.DataFrame(stim_context_modulation),on=['unit_id'])
-    unit_metric_merge.drop(columns=['spike_times','waveform_sd','waveform_mean'], inplace=True, errors='ignore')
+    unit_metric_merge.drop(columns=['spike_times','waveform_sd','waveform_mean','obs_intervals'], inplace=True, errors='ignore')
+    
     if save_path==None:
         return unit_metric_merge
     else:
