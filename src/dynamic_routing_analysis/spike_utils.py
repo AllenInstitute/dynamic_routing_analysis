@@ -269,6 +269,9 @@ def compute_lick_modulation(trials, units, session_info, save_path=None, test=Tr
     #session_info: session_info object i.e. from npc_lims.get_session_info()
     #save_path: path to save lick modulation dataframe - if None, returns dataframe
 
+    if test:
+        units=units.head(10)
+
     lick_modulation=pd.DataFrame({
         'unit_id':units['unit_id'].values.tolist(),
     })
@@ -346,6 +349,9 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
     #units: dataframe of units
     #session_info: session_info object i.e. from npc_lims.get_session_info()
     #save_path: path to save stim_context_modulation dataframe - if None, returns unit dataframe
+
+    if test:
+        units=units.head(10)
 
     stim_context_modulation = pd.DataFrame({
         'unit_id':units['unit_id'].values.tolist(),
@@ -545,9 +551,9 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
                 binary_label=np.concatenate([np.ones(len(hit_frs_by_trial)),np.zeros(len(fa_frs_by_trial))])
                 hit_vs_fa_auc.append(roc_auc_score(binary_label,hit_and_fa_frs))
 
-            stim_context_modulation['cr_vs_fa_'+time_window+'_roc_auc'].append(cr_vs_fa_auc)
-            stim_context_modulation['hit_vs_cr_'+time_window+'_roc_auc'].append(hit_vs_cr_auc)
-            stim_context_modulation['hit_vs_fa_'+time_window+'_roc_auc'].append(hit_vs_fa_auc)
+            stim_context_modulation['cr_vs_fa_'+time_window+'_roc_auc'] = cr_vs_fa_auc
+            stim_context_modulation['hit_vs_cr_'+time_window+'_roc_auc'] = hit_vs_cr_auc
+            stim_context_modulation['hit_vs_fa_'+time_window+'_roc_auc'] = hit_vs_fa_auc
 
     else:
         for tw,time_window in enumerate(behav_time_window_labels):
