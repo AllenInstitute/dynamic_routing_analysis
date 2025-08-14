@@ -474,7 +474,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
     for uu,unit in units.iterrows():
         
         #baseline context auc
-        binary_label=trials['rewarded_modality']=='vis'
+        binary_label=trials['rewarded_modality'].values=='vis'
         baseline_context_auc.append(roc_auc_score(binary_label,baseline_frs.sel(unit_id=unit['unit_id']).values))
 
         #cross stimulus discrimination
