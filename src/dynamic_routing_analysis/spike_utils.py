@@ -259,7 +259,6 @@ def get_structure_probe(units):
 
     return structure_probe
 
-
 def compute_lick_modulation(trials, units, session_info, save_path=None, test=True):
 
     #computes lick modulation index, zscore, p-value, sign, and ROC AUC for each unit
@@ -272,12 +271,11 @@ def compute_lick_modulation(trials, units, session_info, save_path=None, test=Tr
     if test:
         units=units.head(10)
 
-    lick_modulation=pd.DataFrame({
+    lick_modulation={
         'unit_id':units['unit_id'].values.tolist(),
-    })
-
-    lick_modulation['session_id'] = session_info.id
-    lick_modulation['project'] = session_info.project
+        'session_id':str(session_info.id)*len(units),
+        'project':str(session_info.project)*len(units),
+    }
 
     #make data array first
     time_before = 0.5
@@ -335,6 +333,8 @@ def compute_lick_modulation(trials, units, session_info, save_path=None, test=Tr
 
     lick_modulation['lick_modulation_roc_auc'] = lick_roc_auc
 
+    lick_modulation = pd.DataFrame(lick_modulation)
+
     if save_path==None:
         return lick_modulation
     else:
@@ -353,11 +353,12 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
     if test:
         units=units.head(10)
 
-    stim_context_modulation = pd.DataFrame({
+    stim_context_modulation = {
         'unit_id':units['unit_id'].values.tolist(),
-    })
-    stim_context_modulation['project'] = session_info.project
-
+        'session_id':str(session_info.id)*len(units),
+        'project':str(session_info.project)*len(units),
+    }
+  
     contexts=trials['rewarded_modality'].unique()
 
     #make fake context labels for Templeton (if not already present)
@@ -706,6 +707,8 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         stim_context_modulation[ss+'_stimulus_late_modulation_roc_auc']=stim_late_auc
         stim_context_modulation[ss+'_context_modulation_roc_auc']=stim_context_auc
         stim_context_modulation[ss+'_evoked_context_modulation_roc_auc']=evoked_stim_context_auc
+
+    stim_context_modulation = pd.DataFrame(stim_context_modulation)
 
     unit_metric_merge=units.drop(columns=['spike_times','waveform_sd','waveform_mean','obs_intervals'], errors='ignore'
                                  ).merge(stim_context_modulation,on=['unit_id']).sort_values(by='unit_id').reset_index()
