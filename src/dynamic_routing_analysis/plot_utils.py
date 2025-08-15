@@ -1271,7 +1271,7 @@ def plot_context_mod_stim_resp_pie_chart(adj_pvals, sel_project, savepath=None):
 
     fig, ax = plt.subplots()
     ax.pie(sizes, labels=labels, autopct="%1.1f%%")
-    ax.set_title("n = " + str(len(adj_pvals)) + " units")
+    ax.set_title("n = " + str(len(adj_pvals.query('any_stim<0.05'))) + " units")
     # ax.set_title('n = '+str(len(stim_and_context))+' units')
 
     fig.suptitle("context modulation of stimulus response")
@@ -1322,7 +1322,7 @@ def plot_context_mod_stim_resp_pie_chart(adj_pvals, sel_project, savepath=None):
 
     fig, ax = plt.subplots()
     ax.pie(sizes, labels=labels, autopct="%1.1f%%")
-    ax.set_title("n = " + str(len(adj_pvals)) + " units")
+    ax.set_title("n = " + str(len(adj_pvals.query('any_stim<0.05'))) + " units")
 
     fig.suptitle("context modulation of evoked stimulus response")
     fig.tight_layout()
