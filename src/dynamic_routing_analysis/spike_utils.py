@@ -273,8 +273,8 @@ def compute_lick_modulation(trials, units, session_info, save_path=None, test=Tr
 
     lick_modulation={
         'unit_id':units['unit_id'].values.tolist(),
-        'session_id':str(session_info.id)*len(units),
-        'project':str(session_info.project)*len(units),
+        'session_id':[str(session_info.id),]*len(units),
+        'project':[str(session_info.project),]*len(units),
     }
 
     #make data array first
@@ -355,8 +355,8 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
 
     stim_context_modulation = {
         'unit_id':units['unit_id'].values.tolist(),
-        'session_id':str(session_info.id)*len(units),
-        'project':str(session_info.project)*len(units),
+        'session_id':[str(session_info.id),]*len(units),
+        'project':[str(session_info.project),]*len(units),
     }
   
     contexts=trials['rewarded_modality'].unique()
@@ -1084,17 +1084,17 @@ def calculate_single_unit_metric_adjusted_pvals(sel_units,sel_project):
         'sound2_late':fdrcorrection(sel_units['sound2_stimulus_late_modulation_p_value'])[1],
         'catch_late':fdrcorrection(sel_units['catch_stimulus_late_modulation_p_value'])[1],
         'context':fdrcorrection(sel_units['baseline_context_modulation_p_value'])[1],
-        'context_linear_shift':sel_units[['linear_shift_baseline_context_p_value_higher',
-                                        'linear_shift_baseline_context_p_value_lower']].min(axis=1),
-        'context_linear_shift_diff_from_null':((sel_units['linear_shift_baseline_context_true_value']-
-                                            sel_units['linear_shift_baseline_context_null_median'])/
-                                                sel_units['linear_shift_baseline_context_null_std']),
+        # 'context_linear_shift':sel_units[['linear_shift_baseline_context_p_value_higher',
+        #                                 'linear_shift_baseline_context_p_value_lower']].min(axis=1),
+        # 'context_linear_shift_diff_from_null':((sel_units['linear_shift_baseline_context_true_value']-
+        #                                     sel_units['linear_shift_baseline_context_null_median'])/
+        #                                         sel_units['linear_shift_baseline_context_null_std']),
 
-        'vis1_latency':sel_units['vis1_stim_latency'],
-        'vis2_latency':sel_units['vis2_stim_latency'],
-        'sound1_latency':sel_units['sound1_stim_latency'],
-        'sound2_latency':sel_units['sound2_stim_latency'],
-        'catch_latency':sel_units['catch_stim_latency'],
+        'vis1_latency':sel_units['vis1_stimulus_latency'],
+        'vis2_latency':sel_units['vis2_stimulus_latency'],
+        'sound1_latency':sel_units['sound1_stimulus_latency'],
+        'sound2_latency':sel_units['sound2_stimulus_latency'],
+        'catch_latency':sel_units['catch_stimulus_latency'],
 
         'vis1_roc_auc':sel_units['vis1_stimulus_modulation_roc_auc'],
         'vis2_roc_auc':sel_units['vis2_stimulus_modulation_roc_auc'],
@@ -1141,8 +1141,8 @@ def calculate_single_unit_metric_adjusted_pvals(sel_units,sel_project):
         'ccf_ml':sel_units['ccf_ml'],
     })
 
-    if 'Templeton' in sel_project:
-        adj_pvals['lick']=np.ones(len(adj_pvals))
+    # if 'Templeton' in sel_project:
+    #     adj_pvals['lick']=np.ones(len(adj_pvals))
 
     adj_pvals['any_stim']=adj_pvals[['vis1','vis2','sound1','sound2']].min(axis=1)
 
