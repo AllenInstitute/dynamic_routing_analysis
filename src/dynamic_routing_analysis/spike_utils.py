@@ -1325,8 +1325,8 @@ def compute_context_stim_lick_modulation_by_area(sel_units,sel_project,plot_figu
             'only_stim':[],
             'any_context':[],
             'only_context':[],
-            'any_context_linear_shift':[],
-            'only_context_linear_shift':[],
+            # 'any_context_linear_shift':[],
+            # 'only_context_linear_shift':[],
             'any_lick':[],
             'only_lick':[],
             'stim_and_context':[],
@@ -1371,8 +1371,8 @@ def compute_context_stim_lick_modulation_by_area(sel_units,sel_project,plot_figu
             'sound2_sign':area_units['sound2_stimulus_modulation_sign'],
             'context_sign':area_units['baseline_context_modulation_sign'],
             'lick_sign':area_units['lick_modulation_sign'],
-            'context_linear_shift':area_units[['linear_shift_baseline_context_p_value_higher',
-                                            'linear_shift_baseline_context_p_value_lower']].min(axis=1),
+            # 'context_linear_shift':area_units[['linear_shift_baseline_context_p_value_higher',
+            #                                 'linear_shift_baseline_context_p_value_lower']].min(axis=1),
             })
 
             #lick modulation only
@@ -1396,10 +1396,10 @@ def compute_context_stim_lick_modulation_by_area(sel_units,sel_project,plot_figu
             #any context modulation
             any_context_resp=adj_pvals.query('context<0.05')
 
-            #linear-shifted conext modulation
-            only_context_linear_shift_resp=adj_pvals.query('context_linear_shift<0.05 and vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05 and lick>=0.05')
-            #any context modulation
-            any_context_linear_shift_resp=adj_pvals.query('context_linear_shift<0.05')
+            # #linear-shifted conext modulation
+            # only_context_linear_shift_resp=adj_pvals.query('context_linear_shift<0.05 and vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05 and lick>=0.05')
+            # #any context modulation
+            # any_context_linear_shift_resp=adj_pvals.query('context_linear_shift<0.05')
 
             #stim and context modulation
             stim_and_context_resp=adj_pvals.query('context<0.05 and (vis1<0.05 or vis2<0.05 or sound1<0.05 or sound2<0.05) and lick>=0.05')
@@ -1422,8 +1422,8 @@ def compute_context_stim_lick_modulation_by_area(sel_units,sel_project,plot_figu
             area_number_context_mod['any_stim'].append(len(any_stim_resp))
             area_number_context_mod['only_context'].append(len(only_context_resp))
             area_number_context_mod['any_context'].append(len(any_context_resp))
-            area_number_context_mod['any_context_linear_shift'].append(len(any_context_linear_shift_resp))
-            area_number_context_mod['only_context_linear_shift'].append(len(only_context_linear_shift_resp))
+            # area_number_context_mod['any_context_linear_shift'].append(len(any_context_linear_shift_resp))
+            # area_number_context_mod['only_context_linear_shift'].append(len(only_context_linear_shift_resp))
             area_number_context_mod['only_lick'].append(len(only_lick_resp))
             area_number_context_mod['any_lick'].append(len(any_lick_resp))
             area_number_context_mod['stim_and_context'].append(len(stim_and_context_resp))
