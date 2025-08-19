@@ -358,9 +358,11 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
 
     stim_context_modulation = {
         'unit_id':units['unit_id'].values.tolist(),
-        'session_id':[str(session_info.id),]*len(units),
         'project':[str(session_info.project),]*len(units),
     }
+
+    if 'session_id' not in units.columns:
+        stim_context_modulation['session_id'] = [str(session_info.id),]*len(units)
   
     contexts=trials['rewarded_modality'].unique()
 
@@ -419,7 +421,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
     shifts=np.arange(-negative_shift,positive_shift+1)
 
     #find baseline frs across all trials
-    baseline_frs = trial_da.sel(time=slice(-0.1,0)).mean(dim='time')
+    baseline_frs = trial_da.sel(time=slice(-0.1,0),trials=trials['trial_index'].values).mean(dim='time')
 
     vis_baseline_frs = baseline_frs.sel(trials=trials.query('rewarded_modality=="vis"')['trial_index'].values)
     aud_baseline_frs = baseline_frs.sel(trials=trials.query('rewarded_modality=="aud"')['trial_index'].values)
@@ -482,7 +484,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         
         #baseline context auc
         binary_label=trials['rewarded_modality'].values=='vis'
-        baseline_context_auc.append(roc_auc_score(binary_label,baseline_frs.sel(unit_id=unit['unit_id']).values))
+        baseline_context_auc.append(roc_auc_score(binary_label,baseline_frs.sel(unit_id=unit['unit_id'],trials=trials['trial_index'].values).values))
 
         #cross stimulus discrimination
         #vis1 vs. vis2
@@ -728,10 +730,10 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
             unit_other_context_frs_by_trial = other_context_frs_by_trial.sel(unit_id=unit['unit_id'])
             unit_same_context_evoked_frs_by_trial = same_context_evoked_frs_by_trial.sel(unit_id=unit['unit_id'])
             unit_other_context_evoked_frs_by_trial = other_context_evoked_frs_by_trial.sel(unit_id=unit['unit_id'])
-            unit_same_context_late_frs_by_trial = stim_late_same_context_frs_by_trial.sel(unit_id=unit['unit_id'])
-            unit_other_context_late_frs_by_trial = stim_late_other_context_frs_by_trial.sel(unit_id=unit['unit_id'])
-            unit_same_context_late_evoked_frs_by_trial = stim_late_same_context_evoked_frs_by_trial.sel(unit_id=unit['unit_id'])
-            unit_other_context_late_evoked_frs_by_trial = stim_late_other_context_evoked_frs_by_trial.sel(unit_id=unit['unit_id'])
+            unit_same_context_late_frs_by_trial = same_context_late_frs_by_trial.sel(unit_id=unit['unit_id'])
+            unit_other_context_late_frs_by_trial = other_context_late_frs_by_trial.sel(unit_id=unit['unit_id'])
+            unit_same_context_late_evoked_frs_by_trial = same_context_late_evoked_frs_by_trial.sel(unit_id=unit['unit_id'])
+            unit_other_context_late_evoked_frs_by_trial = other_context_late_evoked_frs_by_trial.sel(unit_id=unit['unit_id'])
 
             #auc for stimulus frs
             stim_and_baseline_frs=np.concatenate([unit_stim_frs_by_trial.values,unit_stim_baseline_frs_by_trial.values])
