@@ -341,7 +341,7 @@ def compute_lick_modulation(trials, units, session_info, save_path=None, test=Tr
         lick_modulation.to_parquet(os.path.join(save_path,session_info.id+'_lick_modulation.parquet'))
 
 
-def compute_stim_context_modulation(trials, units, session_info, save_path=None, test=False):
+def compute_stim_context_modulation(trials, units, session_info, save_path=None, test=False, exclude_instruction_trials=True):
 
     #computes stimulus and context modulation indices, zscores, p-values, signs, and ROC AUCs for each unit
     #saves or returns new unit dataframe with modulation metrics and without spikes and waveforms
@@ -394,6 +394,10 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
     time_after = 0.31
     binsize = 0.025
     trial_da = make_neuron_time_trials_tensor(units, trials, time_before, time_after, binsize)
+
+    #remove instruction trials after making data array to ensure correct indexing
+    if exclude_instruction_trials==True:
+        trials = trials.query('is_instruction==False')
 
     #get linear shifts
     #find middle 4 block labels
@@ -670,11 +674,48 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         evoked_fr_metric=(same_context_evoked_frs-other_context_evoked_frs)/(same_context_evoked_frs+other_context_evoked_frs)
         stim_context_modulation[ss+'_evoked_context_modulation_index'] = evoked_fr_metric
 
+        #late stimulus context modulation
+        same_context_late_frs_by_trial = trial_da.sel(time=slice(0.1,0.2),trials=same_context_trials.index).mean(dim='time',skipna=True)
+        other_context_late_frs_by_trial = trial_da.sel(time=slice(0.1,0.2),trials=other_context_trials.index).mean(dim='time',skipna=True)
+        pval = st.mannwhitneyu(same_context_late_frs_by_trial.values.T, other_context_late_frs_by_trial.values.T, nan_policy='omit')[1]
+        stim_context_modulation[ss+'_stimulus_late_context_modulation_p_value'] = pval
+        same_context_late_frs = same_context_late_frs_by_trial.mean(dim='trials',skipna=True).values
+        other_context_late_frs = other_context_late_frs_by_trial.mean(dim='trials',skipna=True).values
+        stim_late_context_modulation_zscore=(same_context_late_frs-other_context_late_frs)/(stim_baseline_frs_by_trial.std(dim='trials',skipna=True).values)
+        stim_context_modulation[ss+'_stimulus_late_context_modulation_zscore'] = stim_late_context_modulation_zscore
+
+        # stim late context modulation sign
+        context_mod_late_sign=np.sign(same_context_late_frs-other_context_late_frs)
+        stim_context_modulation[ss+'_stimulus_late_context_modulation_sign'] = context_mod_late_sign
+        stim_context_modulation[ss+'_stimulus_late_context_modulation_raw'] = (same_context_late_frs - other_context_late_frs)
+        stim_late_context_modulation_metric=(same_context_late_frs-other_context_late_frs)/(same_context_late_frs+other_context_late_frs)
+        stim_context_modulation[ss+'_stimulus_late_context_modulation_index'] = stim_late_context_modulation_metric
+
+        # evoked late stimulus context modulation
+        same_context_late_evoked_frs_by_trial = (trial_da.sel(time=slice(0.1,0.2),trials=same_context_trials.index).mean(dim=['time'],skipna=True)-same_context_baseline_frs)
+        other_context_late_evoked_frs_by_trial = (trial_da.sel(time=slice(0.1,0.2),trials=other_context_trials.index).mean(dim=['time'],skipna=True)-other_context_baseline_frs)
+        pval = st.mannwhitneyu(same_context_late_evoked_frs_by_trial.values.T, other_context_late_evoked_frs_by_trial.values.T, nan_policy='omit')[1]
+        stim_context_modulation[ss+'_evoked_stimulus_late_context_modulation_p_value'] = pval
+        same_context_late_evoked_frs = same_context_late_evoked_frs_by_trial.mean(dim='trials',skipna=True).values
+        other_context_late_evoked_frs = other_context_late_evoked_frs_by_trial.mean(dim='trials',skipna=True).values
+        context_modulation_evoked_late_zscore=(same_context_late_evoked_frs-other_context_late_evoked_frs)/(stim_baseline_frs_by_trial.std(dim='trials',skipna=True).values)
+        stim_context_modulation[ss+'_evoked_stimulus_late_context_modulation_zscore'] = context_modulation_evoked_late_zscore
+
+        # evoked late context modulation sign
+        context_modulation_evoked_late_sign=np.sign(same_context_late_evoked_frs-other_context_late_evoked_frs)
+        stim_context_modulation[ss+'_evoked_stimulus_late_context_modulation_sign'] = context_modulation_evoked_late_sign
+        stim_context_modulation[ss+'_evoked_stimulus_late_context_modulation_raw'] = (same_context_late_evoked_frs - other_context_late_evoked_frs)
+        stim_late_context_modulation_evoked_metric=(same_context_late_evoked_frs-other_context_late_evoked_frs)/(same_context_late_evoked_frs+other_context_late_evoked_frs)
+        stim_context_modulation[ss+'_evoked_stimulus_late_context_modulation_index'] = stim_late_context_modulation_evoked_metric
+
+
         #AUC calculation
         stim_auc=[]
         stim_late_auc=[]
         stim_context_auc=[]
         evoked_stim_context_auc=[]
+        stim_late_context_auc=[]
+        stim_late_evoked_context_auc=[]
         
         for uu,unit in units.iterrows():
             unit_stim_frs_by_trial = stim_frs_by_trial.sel(unit_id=unit['unit_id'])
@@ -684,6 +725,10 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
             unit_other_context_frs_by_trial = other_context_frs_by_trial.sel(unit_id=unit['unit_id'])
             unit_same_context_evoked_frs_by_trial = same_context_evoked_frs_by_trial.sel(unit_id=unit['unit_id'])
             unit_other_context_evoked_frs_by_trial = other_context_evoked_frs_by_trial.sel(unit_id=unit['unit_id'])
+            unit_same_context_late_frs_by_trial = stim_late_same_context_frs_by_trial.sel(unit_id=unit['unit_id'])
+            unit_other_context_late_frs_by_trial = stim_late_other_context_frs_by_trial.sel(unit_id=unit['unit_id'])
+            unit_same_context_late_evoked_frs_by_trial = stim_late_same_context_evoked_frs_by_trial.sel(unit_id=unit['unit_id'])
+            unit_other_context_late_evoked_frs_by_trial = stim_late_other_context_evoked_frs_by_trial.sel(unit_id=unit['unit_id'])
 
             #auc for stimulus frs
             stim_and_baseline_frs=np.concatenate([unit_stim_frs_by_trial.values,unit_stim_baseline_frs_by_trial.values])
@@ -703,10 +748,21 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
             binary_label=np.concatenate([np.ones(len(unit_same_context_evoked_frs_by_trial.values)),np.zeros(len(unit_other_context_evoked_frs_by_trial.values))])
             evoked_stim_context_auc.append(roc_auc_score(binary_label,np.concatenate([unit_same_context_evoked_frs_by_trial.values,unit_other_context_evoked_frs_by_trial.values])))
 
+            #stimulus late context modulation auc
+            binary_label=np.concatenate([np.ones(len(unit_same_context_late_frs_by_trial.values)),np.zeros(len(unit_other_context_late_frs_by_trial.values))])
+            stim_late_context_auc.append(roc_auc_score(binary_label,np.concatenate([unit_same_context_late_frs_by_trial.values,unit_other_context_late_frs_by_trial.values])))
+
+            # evoked late stimulus context modulation auc
+            binary_label=np.concatenate([np.ones(len(unit_same_context_late_evoked_frs_by_trial.values)),np.zeros(len(unit_other_context_late_evoked_frs_by_trial.values))])
+            stim_late_evoked_context_auc.append(roc_auc_score(binary_label,np.concatenate([unit_same_context_late_evoked_frs_by_trial.values,unit_other_context_late_evoked_frs_by_trial.values])))
+
+
         stim_context_modulation[ss+'_stimulus_modulation_roc_auc']=stim_auc
         stim_context_modulation[ss+'_stimulus_late_modulation_roc_auc']=stim_late_auc
         stim_context_modulation[ss+'_context_modulation_roc_auc']=stim_context_auc
         stim_context_modulation[ss+'_evoked_context_modulation_roc_auc']=evoked_stim_context_auc
+        stim_context_modulation[ss+'_stimulus_late_context_modulation_roc_auc']=stim_late_context_auc
+        stim_context_modulation[ss+'_evoked_stimulus_late_context_modulation_roc_auc']=stim_late_evoked_context_auc
 
     stim_context_modulation = pd.DataFrame(stim_context_modulation)
 
@@ -1135,6 +1191,12 @@ def calculate_single_unit_metric_adjusted_pvals(sel_units,sel_project):
         'sound1_context_evoked':fdrcorrection(sel_units['sound1_evoked_context_modulation_p_value'])[1],
         'sound2_context_evoked':fdrcorrection(sel_units['sound2_evoked_context_modulation_p_value'])[1],
         'catch_context_evoked':fdrcorrection(sel_units['catch_evoked_context_modulation_p_value'])[1],
+
+        'vis1_context_evoked_roc_auc':sel_units['vis1_evoked_context_modulation_roc_auc'],
+        'vis2_context_evoked_roc_auc':sel_units['vis2_evoked_context_modulation_roc_auc'],
+        'sound1_context_evoked_roc_auc':sel_units['sound1_evoked_context_modulation_roc_auc'],
+        'sound2_context_evoked_roc_auc':sel_units['sound2_evoked_context_modulation_roc_auc'],
+        'catch_context_evoked_roc_auc':sel_units['catch_evoked_context_modulation_roc_auc'],
 
         'ccf_ap':sel_units['ccf_ap'],
         'ccf_dv':sel_units['ccf_dv'],
