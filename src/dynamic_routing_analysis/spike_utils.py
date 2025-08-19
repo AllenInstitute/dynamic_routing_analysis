@@ -259,7 +259,7 @@ def get_structure_probe(units):
 
     return structure_probe
 
-def compute_lick_modulation(trials, units, session_info, save_path=None, test=True):
+def compute_lick_modulation(trials, units, session_info, save_path=None, test=False, exclude_instruction_trials=True):
 
     #computes lick modulation index, zscore, p-value, sign, and ROC AUC for each unit
     #saves or returns dataframe with lick modulation metrics and unit_id, session_id, and project
@@ -282,7 +282,10 @@ def compute_lick_modulation(trials, units, session_info, save_path=None, test=Tr
     time_after = 0.6
     binsize = 0.1
     trial_da = make_neuron_time_trials_tensor(units, trials, time_before, time_after, binsize)
-                                                                              
+
+    if exclude_instruction_trials:
+        trials = trials.query('is_instruction==False')
+
     if "Templeton" in session_info.project:
         lick_trials = trials.query('is_response==True')
         non_lick_trials = trials.query('is_response==False')
@@ -301,10 +304,10 @@ def compute_lick_modulation(trials, units, session_info, save_path=None, test=Tr
 
 
     #lick modulation
-    lick_frs_by_trial = trial_da.sel(time=slice(0.2,0.5),trials=lick_trials.index).mean(dim='time',skipna=True)
-    non_lick_frs_by_trial = trial_da.sel(time=slice(0.2,0.5),trials=non_lick_trials.index).mean(dim='time',skipna=True)
+    lick_frs_by_trial = trial_da.sel(time=slice(0.2,0.5),trials=lick_trials['trial_index'].values).mean(dim='time',skipna=True)
+    non_lick_frs_by_trial = trial_da.sel(time=slice(0.2,0.5),trials=non_lick_trials['trial_index'].values).mean(dim='time',skipna=True)
     
-    baseline_frs_by_trial = trial_da.sel(time=slice(-0.5,-0.2),trials=baseline_trials.index).mean(dim='time',skipna=True)
+    baseline_frs_by_trial = trial_da.sel(time=slice(-0.5,-0.2),trials=baseline_trials['trial_index'].values).mean(dim='time',skipna=True)
 
     lick_frs_by_trial_zscore = (lick_frs_by_trial.mean(dim='trials',skipna=True)-non_lick_frs_by_trial.mean(dim='trials',skipna=True)
                                 )/(baseline_frs_by_trial.std(dim='trials',skipna=True))
@@ -380,7 +383,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         for block in range(0,6):
             block_start_time=start_time+block*10*60
             block_end_time=start_time+(block+1)*10*60
-            block_trials=trials.query('start_time>=@block_start_time').index
+            block_trials=trials.query('start_time>=@block_start_time')['trial_index'].values
             fake_context[block_trials]=block_contexts[block]
             fake_block_nums[block_trials]=block
         
@@ -401,25 +404,25 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
 
     #get linear shifts
     #find middle 4 block labels
-    first_block=trials.query('block_index==0').index.values
+    first_block=trials.query('block_index==0')['trial_index'].values
     middle_of_first=first_block[np.round(len(first_block)/2).astype('int')]
 
-    last_block=trials.query('block_index==5').index.values
+    last_block=trials.query('block_index==5')['trial_index'].values
     middle_of_last=last_block[np.round(len(last_block)/2).astype('int')]
 
     middle_4_block_trials=trials.loc[middle_of_first:middle_of_last]
-    middle_4_blocks=middle_4_block_trials.index.values
+    middle_4_blocks=middle_4_block_trials['trial_index'].values
 
     #find the number of trials to shift by, from -1 to +1 block
     negative_shift=middle_4_blocks.min()
-    positive_shift=trials.index.max()-middle_4_blocks.max()
+    positive_shift=trials['trial_index'].max()-middle_4_blocks.max()
     shifts=np.arange(-negative_shift,positive_shift+1)
 
     #find baseline frs across all trials
     baseline_frs = trial_da.sel(time=slice(-0.1,0)).mean(dim='time')
 
-    vis_baseline_frs = baseline_frs.sel(trials=trials.query('rewarded_modality=="vis"').index)
-    aud_baseline_frs = baseline_frs.sel(trials=trials.query('rewarded_modality=="aud"').index)
+    vis_baseline_frs = baseline_frs.sel(trials=trials.query('rewarded_modality=="vis"')['trial_index'].values)
+    aud_baseline_frs = baseline_frs.sel(trials=trials.query('rewarded_modality=="aud"')['trial_index'].values)
 
     pval = st.mannwhitneyu(vis_baseline_frs.values.T, aud_baseline_frs.values.T, nan_policy='omit')[1]
     stim_context_modulation['baseline_context_modulation_p_value'] = pval
@@ -444,8 +447,8 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
     # for sh,shift in enumerate(shifts):
     #     # labels = middle_4_block_trials['rewarded_modality'].values
     #     input_data = baseline_frs.sel(trials=middle_4_blocks+shift)
-    #     temp_baseline_context_diff.append(input_data.sel(trials=middle_4_block_trials.query('rewarded_modality=="vis"').index).mean()-
-    #                                       input_data.sel(trials=middle_4_block_trials.query('rewarded_modality=="aud"').index).mean())
+    #     temp_baseline_context_diff.append(input_data.sel(trials=middle_4_block_trials.query('rewarded_modality=="vis"')['trial_index'].values).mean()-
+    #                                       input_data.sel(trials=middle_4_block_trials.query('rewarded_modality=="aud"')['trial_index'].values).mean())
     # temp_baseline_context_diff=np.asarray(temp_baseline_context_diff)
     
     # true_value = temp_baseline_context_diff[shifts==0][0]
@@ -483,15 +486,15 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
 
         #cross stimulus discrimination
         #vis1 vs. vis2
-        vis1_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(0,0.1),trials=vis1_trials.index).mean(dim='time',skipna=True)
-        vis2_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(0,0.1),trials=vis2_trials.index).mean(dim='time',skipna=True)
+        vis1_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(0,0.1),trials=vis1_trials['trial_index'].values).mean(dim='time',skipna=True)
+        vis2_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(0,0.1),trials=vis2_trials['trial_index'].values).mean(dim='time',skipna=True)
         vis1_and_vis2_frs=np.concatenate([vis1_frs_by_trial.values,vis2_frs_by_trial.values])
         binary_label=np.concatenate([np.ones(len(vis1_frs_by_trial)),np.zeros(len(vis2_frs_by_trial))])
         vis_discrim_auc.append(roc_auc_score(binary_label,vis1_and_vis2_frs))
 
         #aud1 vs. aud2
-        aud1_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(0,0.1),trials=aud1_trials.index).mean(dim='time',skipna=True)
-        aud2_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(0,0.1),trials=aud2_trials.index).mean(dim='time',skipna=True)
+        aud1_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(0,0.1),trials=aud1_trials['trial_index'].values).mean(dim='time',skipna=True)
+        aud2_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(0,0.1),trials=aud2_trials['trial_index'].values).mean(dim='time',skipna=True)
         aud1_and_aud2_frs=np.concatenate([aud1_frs_by_trial.values,aud2_frs_by_trial.values])
         binary_label=np.concatenate([np.ones(len(aud1_frs_by_trial)),np.zeros(len(aud2_frs_by_trial))])
         aud_discrim_auc.append(roc_auc_score(binary_label,aud1_and_aud2_frs))
@@ -537,9 +540,9 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
             hit_vs_fa_auc = []
 
             for uu, unit in units.iterrows():
-                cr_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(behav_time_windows_start[tw],behav_time_windows_end[tw]),trials=cr_trials.index).mean(dim='time',skipna=True)
-                fa_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(behav_time_windows_start[tw],behav_time_windows_end[tw]),trials=fa_trials.index).mean(dim='time',skipna=True)
-                hit_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(behav_time_windows_start[tw],behav_time_windows_end[tw]),trials=hit_trials.index).mean(dim='time',skipna=True)
+                cr_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(behav_time_windows_start[tw],behav_time_windows_end[tw]),trials=cr_trials['trial_index'].values).mean(dim='time',skipna=True)
+                fa_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(behav_time_windows_start[tw],behav_time_windows_end[tw]),trials=fa_trials['trial_index'].values).mean(dim='time',skipna=True)
+                hit_frs_by_trial = trial_da.sel(unit_id=unit['unit_id'],time=slice(behav_time_windows_start[tw],behav_time_windows_end[tw]),trials=hit_trials['trial_index'].values).mean(dim='time',skipna=True)
 
                 #cr vs. fa
                 cr_and_fa_frs=np.concatenate([cr_frs_by_trial.values,fa_frs_by_trial.values])
@@ -580,8 +583,8 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
 
         #stimulus modulation
         stim_trials = trials.query('stim_name==@ss')
-        stim_frs_by_trial = trial_da.sel(time=slice(0,0.1),trials=stim_trials.index).mean(dim='time',skipna=True)
-        stim_baseline_frs_by_trial = baseline_frs.sel(trials=stim_trials.index)
+        stim_frs_by_trial = trial_da.sel(time=slice(0,0.1),trials=stim_trials['trial_index'].values).mean(dim='time',skipna=True)
+        stim_baseline_frs_by_trial = baseline_frs.sel(trials=stim_trials['trial_index'].values)
         stim_frs_by_trial_zscore = (stim_frs_by_trial.mean(dim='trials',skipna=True)-stim_baseline_frs_by_trial.mean(dim='trials',skipna=True)
                                     )/(stim_baseline_frs_by_trial.std(dim='trials',skipna=True))
         stim_context_modulation[ss+'_stimulus_modulation_zscore']=stim_frs_by_trial_zscore
@@ -595,7 +598,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         stim_context_modulation[ss+'_stimulus_modulation_sign']=stim_mod_sign
 
         #stimulus late modulation
-        stim_late_frs_by_trial = trial_da.sel(time=slice(0.1,0.2),trials=stim_trials.index).mean(dim='time',skipna=True)
+        stim_late_frs_by_trial = trial_da.sel(time=slice(0.1,0.2),trials=stim_trials['trial_index'].values).mean(dim='time',skipna=True)
         stim_late_frs_by_trial_zscore = (stim_late_frs_by_trial.mean(dim='trials',skipna=True)-stim_baseline_frs_by_trial.mean(dim='trials',skipna=True)
                                         )/(stim_baseline_frs_by_trial.std(dim='trials',skipna=True))
         stim_context_modulation[ss+'_stimulus_late_modulation_zscore'] = stim_late_frs_by_trial_zscore
@@ -609,11 +612,11 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         stim_context_modulation[ss+'_stimulus_late_modulation_sign'] = stim_late_mod_sign
 
         #latency
-        stim_latency = np.abs(trial_da).sel(time=slice(0,0.3),trials=stim_trials.index).mean(dim='trials',skipna=True).idxmax(dim='time').values
+        stim_latency = np.abs(trial_da).sel(time=slice(0,0.3),trials=stim_trials['trial_index'].values).mean(dim='trials',skipna=True).idxmax(dim='time').values
         stim_context_modulation[ss+'_stimulus_latency'] = np.nanmean(stim_latency)
 
         #find zscore of max fr per unit
-        stim_max_frs = trial_da.sel(time=slice(0,0.3),trials=stim_trials.index).max(dim='time',skipna=True).mean(dim='trials',skipna=True)
+        stim_max_frs = trial_da.sel(time=slice(0,0.3),trials=stim_trials['trial_index'].values).max(dim='time',skipna=True).mean(dim='trials',skipna=True)
         stim_max_frs_zscore = (stim_max_frs - stim_baseline_frs_by_trial.mean(dim='trials',skipna=True)) / stim_baseline_frs_by_trial.std(dim='trials',skipna=True)
         stim_context_modulation[ss+'_stimulus_max_fr_zscore'] = stim_max_frs_zscore
 
@@ -621,12 +624,12 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         same_context_trials = trials.query('rewarded_modality==@same_context and stim_name==@ss')
         other_context_trials = trials.query('rewarded_modality==@other_context and stim_name==@ss')
 
-        same_context_baseline_frs = baseline_frs.sel(trials=same_context_trials.index)
-        other_context_baseline_frs = baseline_frs.sel(trials=other_context_trials.index)
+        same_context_baseline_frs = baseline_frs.sel(trials=same_context_trials['trial_index'].values)
+        other_context_baseline_frs = baseline_frs.sel(trials=other_context_trials['trial_index'].values)
 
         #find raw frs during stim (first 100ms)
-        same_context_frs_by_trial = trial_da.sel(time=slice(0,0.1),trials=same_context_trials.index).mean(dim='time',skipna=True)
-        other_context_frs_by_trial = trial_da.sel(time=slice(0,0.1),trials=other_context_trials.index).mean(dim='time',skipna=True)
+        same_context_frs_by_trial = trial_da.sel(time=slice(0,0.1),trials=same_context_trials['trial_index'].values).mean(dim='time',skipna=True)
+        other_context_frs_by_trial = trial_da.sel(time=slice(0,0.1),trials=other_context_trials['trial_index'].values).mean(dim='time',skipna=True)
 
         pval = st.mannwhitneyu(same_context_frs_by_trial.values.T, other_context_frs_by_trial.values.T, nan_policy='omit')[1]
         stim_context_modulation[ss+'_context_modulation_p_value'] = pval
@@ -644,8 +647,8 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         stim_context_modulation[ss+'_context_modulation_raw'] = (same_context_frs - other_context_frs)
 
         #find evoked frs during stim (first 100ms)
-        same_context_evoked_frs_by_trial = (trial_da.sel(time=slice(0,0.1),trials=same_context_trials.index).mean(dim=['time'],skipna=True)-same_context_baseline_frs)
-        other_context_evoked_frs_by_trial = (trial_da.sel(time=slice(0,0.1),trials=other_context_trials.index).mean(dim=['time'],skipna=True)-other_context_baseline_frs)
+        same_context_evoked_frs_by_trial = (trial_da.sel(time=slice(0,0.1),trials=same_context_trials['trial_index'].values).mean(dim=['time'],skipna=True)-same_context_baseline_frs)
+        other_context_evoked_frs_by_trial = (trial_da.sel(time=slice(0,0.1),trials=other_context_trials['trial_index'].values).mean(dim=['time'],skipna=True)-other_context_baseline_frs)
 
         pval = st.mannwhitneyu(same_context_evoked_frs_by_trial.values.T, other_context_evoked_frs_by_trial.values.T, nan_policy='omit')[1]
         stim_context_modulation[ss+'_evoked_context_modulation_p_value'] = pval
@@ -675,8 +678,8 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         stim_context_modulation[ss+'_evoked_context_modulation_index'] = evoked_fr_metric
 
         #late stimulus context modulation
-        same_context_late_frs_by_trial = trial_da.sel(time=slice(0.1,0.2),trials=same_context_trials.index).mean(dim='time',skipna=True)
-        other_context_late_frs_by_trial = trial_da.sel(time=slice(0.1,0.2),trials=other_context_trials.index).mean(dim='time',skipna=True)
+        same_context_late_frs_by_trial = trial_da.sel(time=slice(0.1,0.2),trials=same_context_trials['trial_index'].values).mean(dim='time',skipna=True)
+        other_context_late_frs_by_trial = trial_da.sel(time=slice(0.1,0.2),trials=other_context_trials['trial_index'].values).mean(dim='time',skipna=True)
         pval = st.mannwhitneyu(same_context_late_frs_by_trial.values.T, other_context_late_frs_by_trial.values.T, nan_policy='omit')[1]
         stim_context_modulation[ss+'_stimulus_late_context_modulation_p_value'] = pval
         same_context_late_frs = same_context_late_frs_by_trial.mean(dim='trials',skipna=True).values
@@ -692,8 +695,8 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         stim_context_modulation[ss+'_stimulus_late_context_modulation_index'] = stim_late_context_modulation_metric
 
         # evoked late stimulus context modulation
-        same_context_late_evoked_frs_by_trial = (trial_da.sel(time=slice(0.1,0.2),trials=same_context_trials.index).mean(dim=['time'],skipna=True)-same_context_baseline_frs)
-        other_context_late_evoked_frs_by_trial = (trial_da.sel(time=slice(0.1,0.2),trials=other_context_trials.index).mean(dim=['time'],skipna=True)-other_context_baseline_frs)
+        same_context_late_evoked_frs_by_trial = (trial_da.sel(time=slice(0.1,0.2),trials=same_context_trials['trial_index'].values).mean(dim=['time'],skipna=True)-same_context_baseline_frs)
+        other_context_late_evoked_frs_by_trial = (trial_da.sel(time=slice(0.1,0.2),trials=other_context_trials['trial_index'].values).mean(dim=['time'],skipna=True)-other_context_baseline_frs)
         pval = st.mannwhitneyu(same_context_late_evoked_frs_by_trial.values.T, other_context_late_evoked_frs_by_trial.values.T, nan_policy='omit')[1]
         stim_context_modulation[ss+'_evoked_stimulus_late_context_modulation_p_value'] = pval
         same_context_late_evoked_frs = same_context_late_evoked_frs_by_trial.mean(dim='trials',skipna=True).values
