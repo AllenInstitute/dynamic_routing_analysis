@@ -1291,15 +1291,17 @@ def calculate_stimulus_modulation_by_area(sel_units,sel_project,plot_figures=Fal
             #none
             no_stim_resp=adj_pvals.query('vis1>=0.05 and vis2>=0.05 and sound1>=0.05 and sound2>=0.05')
 
+            denominator=len(area_units)
+
             area_number_responsive_to_stim['area'].append(sel_area)
-            area_number_responsive_to_stim['vis1'].append(len(vis1_stim_resp))
-            area_number_responsive_to_stim['vis2'].append(len(vis2_stim_resp))
-            area_number_responsive_to_stim['sound1'].append(len(sound1_stim_resp))
-            area_number_responsive_to_stim['sound2'].append(len(sound2_stim_resp))
-            area_number_responsive_to_stim['both_vis'].append(len(both_vis_stim_resp))
-            area_number_responsive_to_stim['both_sound'].append(len(both_sound_stim_resp))
-            area_number_responsive_to_stim['mixed'].append(len(mixed_stim_resp))
-            area_number_responsive_to_stim['none'].append(len(no_stim_resp))
+            area_number_responsive_to_stim['vis1'].append(len(vis1_stim_resp)/denominator)
+            area_number_responsive_to_stim['vis2'].append(len(vis2_stim_resp)/denominator)
+            area_number_responsive_to_stim['sound1'].append(len(sound1_stim_resp)/denominator)
+            area_number_responsive_to_stim['sound2'].append(len(sound2_stim_resp)/denominator)
+            area_number_responsive_to_stim['both_vis'].append(len(both_vis_stim_resp)/denominator)
+            area_number_responsive_to_stim['both_sound'].append(len(both_sound_stim_resp)/denominator)
+            area_number_responsive_to_stim['mixed'].append(len(mixed_stim_resp)/denominator)
+            area_number_responsive_to_stim['none'].append(len(no_stim_resp)/denominator)
             area_number_responsive_to_stim['total_n'].append(len(area_units))
             area_number_responsive_to_stim['n_sessions'].append(n_sessions)
 
@@ -1332,21 +1334,21 @@ def calculate_stimulus_modulation_by_area(sel_units,sel_project,plot_figures=Fal
             #at least one vis and one aud
             mixed_neg_stim_resp=adj_pvals.query('(((vis1<0.05 and vis1_sign<0) or (vis2<0.05 and vis2_sign<0)) and ((sound1<0.05 and sound1_sign<0) and (sound2<0.05 and sound2_sign<0)))')
 
-            area_number_responsive_to_stim['vis1_pos'].append(len(vis1_pos_stim_resp))
-            area_number_responsive_to_stim['vis2_pos'].append(len(vis2_pos_stim_resp))
-            area_number_responsive_to_stim['sound1_pos'].append(len(sound1_pos_stim_resp))
-            area_number_responsive_to_stim['sound2_pos'].append(len(sound2_pos_stim_resp))
-            area_number_responsive_to_stim['both_vis_pos'].append(len(both_vis_pos_stim_resp))
-            area_number_responsive_to_stim['both_sound_pos'].append(len(both_sound_pos_stim_resp))
-            area_number_responsive_to_stim['mixed_pos'].append(len(mixed_pos_stim_resp))
+            area_number_responsive_to_stim['vis1_pos'].append(len(vis1_pos_stim_resp)/denominator)
+            area_number_responsive_to_stim['vis2_pos'].append(len(vis2_pos_stim_resp)/denominator)
+            area_number_responsive_to_stim['sound1_pos'].append(len(sound1_pos_stim_resp)/denominator)
+            area_number_responsive_to_stim['sound2_pos'].append(len(sound2_pos_stim_resp)/denominator)
+            area_number_responsive_to_stim['both_vis_pos'].append(len(both_vis_pos_stim_resp)/denominator)
+            area_number_responsive_to_stim['both_sound_pos'].append(len(both_sound_pos_stim_resp)/denominator)
+            area_number_responsive_to_stim['mixed_pos'].append(len(mixed_pos_stim_resp)/denominator)
 
-            area_number_responsive_to_stim['vis1_neg'].append(len(vis1_neg_stim_resp))
-            area_number_responsive_to_stim['vis2_neg'].append(len(vis2_neg_stim_resp))
-            area_number_responsive_to_stim['sound1_neg'].append(len(sound1_neg_stim_resp))
-            area_number_responsive_to_stim['sound2_neg'].append(len(sound2_neg_stim_resp))
-            area_number_responsive_to_stim['both_vis_neg'].append(len(both_vis_neg_stim_resp))
-            area_number_responsive_to_stim['both_sound_neg'].append(len(both_sound_neg_stim_resp))
-            area_number_responsive_to_stim['mixed_neg'].append(len(mixed_neg_stim_resp))
+            area_number_responsive_to_stim['vis1_neg'].append(len(vis1_neg_stim_resp)/denominator)
+            area_number_responsive_to_stim['vis2_neg'].append(len(vis2_neg_stim_resp)/denominator)
+            area_number_responsive_to_stim['sound1_neg'].append(len(sound1_neg_stim_resp)/denominator)
+            area_number_responsive_to_stim['sound2_neg'].append(len(sound2_neg_stim_resp)/denominator)
+            area_number_responsive_to_stim['both_vis_neg'].append(len(both_vis_neg_stim_resp)/denominator)
+            area_number_responsive_to_stim['both_sound_neg'].append(len(both_sound_neg_stim_resp)/denominator)
+            area_number_responsive_to_stim['mixed_neg'].append(len(mixed_neg_stim_resp)/denominator)
 
             labels=['vis1 only','vis2 only','both vis',
                     'sound1 only','sound2 only','both sound',
@@ -1367,9 +1369,9 @@ def calculate_stimulus_modulation_by_area(sel_units,sel_project,plot_figures=Fal
 
     area_fraction_responsive_to_stim=area_number_responsive_to_stim.copy()
 
-    for rr,row in area_fraction_responsive_to_stim.iterrows():
-        if row['total_n']>0:
-            area_fraction_responsive_to_stim.iloc[rr,1:-5]=row.iloc[1:-5]/row['total_n']
+    # for rr,row in area_fraction_responsive_to_stim.iterrows():
+    #     if row['total_n']>0:
+    #         area_fraction_responsive_to_stim.iloc[rr,1:-5]=row.iloc[1:-5]/row['total_n']
 
     if savepath is not None:
         if 'Templeton' in sel_project:
@@ -1483,30 +1485,32 @@ def compute_context_stim_lick_modulation_by_area(sel_units,sel_project,plot_figu
             #stim
             any_stim_pos=adj_pvals.query('(vis1<0.05 and vis1_sign>0) or (vis2<0.05 and vis2_sign>0) or (sound1<0.05 and sound1_sign>0) or (sound2<0.05 and sound2_sign>0)')
             any_stim_neg=adj_pvals.query('(vis1<0.05 and vis1_sign<0) or (vis2<0.05 and vis2_sign<0) or (sound1<0.05 and sound1_sign<0) or (sound2<0.05 and sound2_sign<0)')
+            
+            denominator=len(area_units)
 
             area_number_context_mod['area'].append(sel_area)
-            area_number_context_mod['only_stim'].append(len(only_stim_resp))
-            area_number_context_mod['any_stim'].append(len(any_stim_resp))
-            area_number_context_mod['only_context'].append(len(only_context_resp))
-            area_number_context_mod['any_context'].append(len(any_context_resp))
+            area_number_context_mod['only_stim'].append(len(only_stim_resp)/denominator)
+            area_number_context_mod['any_stim'].append(len(any_stim_resp)/denominator)
+            area_number_context_mod['only_context'].append(len(only_context_resp)/denominator)
+            area_number_context_mod['any_context'].append(len(any_context_resp)/denominator)
             # area_number_context_mod['any_context_linear_shift'].append(len(any_context_linear_shift_resp))
             # area_number_context_mod['only_context_linear_shift'].append(len(only_context_linear_shift_resp))
-            area_number_context_mod['only_lick'].append(len(only_lick_resp))
-            area_number_context_mod['any_lick'].append(len(any_lick_resp))
-            area_number_context_mod['stim_and_context'].append(len(stim_and_context_resp))
-            area_number_context_mod['lick_and_stim'].append(len(lick_and_stim_resp))
-            area_number_context_mod['lick_and_context'].append(len(lick_and_context_resp))
-            area_number_context_mod['lick_and_stim_and_context'].append(len(all_resp))
-            area_number_context_mod['none'].append(len(no_resp))
+            area_number_context_mod['only_lick'].append(len(only_lick_resp)/denominator)
+            area_number_context_mod['any_lick'].append(len(any_lick_resp)/denominator)
+            area_number_context_mod['stim_and_context'].append(len(stim_and_context_resp)/denominator)
+            area_number_context_mod['lick_and_stim'].append(len(lick_and_stim_resp)/denominator)
+            area_number_context_mod['lick_and_context'].append(len(lick_and_context_resp)/denominator)
+            area_number_context_mod['lick_and_stim_and_context'].append(len(all_resp)/denominator)
+            area_number_context_mod['none'].append(len(no_resp)/denominator)
             area_number_context_mod['total_n'].append(len(area_units))
             area_number_context_mod['n_sessions'].append(n_sessions)
 
-            area_number_context_mod['any_context_pos'].append(len(any_context_pos))
-            area_number_context_mod['any_context_neg'].append(len(any_context_neg))
-            area_number_context_mod['any_lick_pos'].append(len(any_lick_pos))
-            area_number_context_mod['any_lick_neg'].append(len(any_lick_neg))
-            area_number_context_mod['any_stim_pos'].append(len(any_stim_pos))
-            area_number_context_mod['any_stim_neg'].append(len(any_stim_neg))
+            area_number_context_mod['any_context_pos'].append(len(any_context_pos)/denominator)
+            area_number_context_mod['any_context_neg'].append(len(any_context_neg)/denominator)
+            area_number_context_mod['any_lick_pos'].append(len(any_lick_pos)/denominator)
+            area_number_context_mod['any_lick_neg'].append(len(any_lick_neg)/denominator)
+            area_number_context_mod['any_stim_pos'].append(len(any_stim_pos)/denominator)
+            area_number_context_mod['any_stim_neg'].append(len(any_stim_neg)/denominator)
 
             # labels=['stimulus only','stimulus and context','context only','neither']
             # sizes=[len(any_stim_resp),len(stim_and_context_resp),len(context_resp),
@@ -1533,9 +1537,9 @@ def compute_context_stim_lick_modulation_by_area(sel_units,sel_project,plot_figu
 
     area_fraction_context_mod=area_number_context_mod.copy()
 
-    for rr,row in area_fraction_context_mod.iterrows():
-        if row['total_n']>0:
-            area_fraction_context_mod.iloc[rr,1:-5]=row.iloc[1:-5]/row['total_n']
+    # for rr,row in area_fraction_context_mod.iterrows():
+    #     if row['total_n']>0:
+    #         area_fraction_context_mod.iloc[rr,1:-5]=row.iloc[1:-5]/row['total_n']
 
     if savepath is not None:
         if 'Templeton' in sel_project:
@@ -1547,7 +1551,8 @@ def compute_context_stim_lick_modulation_by_area(sel_units,sel_project,plot_figu
     return area_fraction_context_mod
 
 
-def calculate_context_mod_stim_resp_by_area(sel_units,sel_project,plot_figures=False,savepath=None):
+def calculate_context_mod_stim_resp_by_area(sel_units,sel_project,plot_figures=False,savepath=None,
+                                            denominator='total_n'):
     
         # context mod of stimulus responsiveness by area
 
@@ -1561,6 +1566,7 @@ def calculate_context_mod_stim_resp_by_area(sel_units,sel_project,plot_figures=F
                 'both_sound':[],
                 'mixed':[],
                 'none':[],
+
                 'vis1_evoked':[],
                 'vis2_evoked':[],
                 'sound1_evoked':[],
@@ -1569,9 +1575,32 @@ def calculate_context_mod_stim_resp_by_area(sel_units,sel_project,plot_figures=F
                 'both_sound_evoked':[],
                 'mixed_evoked':[],
                 'none_evoked':[],
+
+                'vis1_late':[],
+                'vis2_late':[],
+                'sound1_late':[],
+                'sound2_late':[],
+                'both_vis_late':[],
+                'both_sound_late':[],
+                'mixed_late':[],
+                'none_late':[],
+
+                'vis1_late_evoked':[],
+                'vis2_late_evoked':[],
+                'sound1_late_evoked':[],
+                'sound2_late_evoked':[],
+                'both_vis_late_evoked':[],
+                'both_sound_late_evoked':[],
+                'mixed_late_evoked':[],
+                'none_late_evoked':[],
+
                 'total_n':[],
                 'n_sessions':[],
                 'n_stim_responsive':[],
+                'n_late_stim_responsive':[],
+                'n_sessions_w_20_units':[],
+                'n_sessions_w_15_units':[],
+                'n_sessions_w_10_units':[],
         }
 
         for sel_area in sel_units['structure'].unique():
@@ -1580,12 +1609,20 @@ def calculate_context_mod_stim_resp_by_area(sel_units,sel_project,plot_figures=F
 
                 n_sessions=len(area_units['session_id'].unique())
 
+                for n_units in [20,15,10]:
+                    n_sessions_w_units=area_units.groupby('session_id').filter(lambda x: len(x)>=n_units)['session_id'].unique()
+                    area_number_context_stim_mod['n_sessions_w_'+str(n_units)+'_units'].append(len(n_sessions_w_units))
+
                 adj_pvals=pd.DataFrame({
                         'unit_id':area_units['unit_id'],
                         'vis1':fdrcorrection(area_units['vis1_stimulus_modulation_p_value'])[1],
                         'vis2':fdrcorrection(area_units['vis2_stimulus_modulation_p_value'])[1],
                         'sound1':fdrcorrection(area_units['sound1_stimulus_modulation_p_value'])[1],
                         'sound2':fdrcorrection(area_units['sound2_stimulus_modulation_p_value'])[1],
+                        'vis1_late':fdrcorrection(area_units['vis1_stimulus_late_modulation_p_value'])[1],
+                        'vis2_late':fdrcorrection(area_units['vis2_stimulus_late_modulation_p_value'])[1],
+                        'sound1_late':fdrcorrection(area_units['sound1_stimulus_late_modulation_p_value'])[1],
+                        'sound2_late':fdrcorrection(area_units['sound2_stimulus_late_modulation_p_value'])[1],
                         'vis1_context':fdrcorrection(area_units['vis1_context_modulation_p_value'])[1],
                         'vis2_context':fdrcorrection(area_units['vis2_context_modulation_p_value'])[1],
                         'sound1_context':fdrcorrection(area_units['sound1_context_modulation_p_value'])[1],
@@ -1594,9 +1631,18 @@ def calculate_context_mod_stim_resp_by_area(sel_units,sel_project,plot_figures=F
                         'vis2_evoked_context':fdrcorrection(area_units['vis2_evoked_context_modulation_p_value'])[1],
                         'sound1_evoked_context':fdrcorrection(area_units['sound1_evoked_context_modulation_p_value'])[1],
                         'sound2_evoked_context':fdrcorrection(area_units['sound2_evoked_context_modulation_p_value'])[1],
+                        'vis1_late_context':fdrcorrection(area_units['vis1_stimulus_late_context_modulation_p_value'])[1],
+                        'vis2_late_context':fdrcorrection(area_units['vis2_stimulus_late_context_modulation_p_value'])[1],
+                        'sound1_late_context':fdrcorrection(area_units['sound1_stimulus_late_context_modulation_p_value'])[1],
+                        'sound2_late_context':fdrcorrection(area_units['sound2_stimulus_late_context_modulation_p_value'])[1],
+                        'vis1_late_evoked_context':fdrcorrection(area_units['vis1_evoked_stimulus_late_context_modulation_p_value'])[1],
+                        'vis2_late_evoked_context':fdrcorrection(area_units['vis2_evoked_stimulus_late_context_modulation_p_value'])[1],
+                        'sound1_late_evoked_context':fdrcorrection(area_units['sound1_evoked_stimulus_late_context_modulation_p_value'])[1],
+                        'sound2_late_evoked_context':fdrcorrection(area_units['sound2_evoked_stimulus_late_context_modulation_p_value'])[1],
                 })
                 
                 adj_pvals['any_stim']=adj_pvals[['vis1','vis2','sound1','sound2']].min(axis=1)
+                adj_pvals['any_stim_late']=adj_pvals[['vis1_late','vis2_late','sound1_late','sound2_late']].min(axis=1)
                 
                 #stimulus context modulation
                 vis1_context_stim_mod=adj_pvals.query('vis1_context<0.05 and vis2_context>=0.05 and sound1_context>=0.05 and sound2_context>=0.05 and any_stim<0.05')
@@ -1622,27 +1668,77 @@ def calculate_context_mod_stim_resp_by_area(sel_units,sel_project,plot_figures=F
 
                 no_context_evoked_stim_mod=adj_pvals.query('vis1_evoked_context>=0.05 and vis2_evoked_context>=0.05 and sound1_evoked_context>=0.05 and sound2_evoked_context>=0.05 and any_stim<0.05')
 
+                #late stimulus context modulation
+                vis1_context_late_stim_mod=adj_pvals.query('vis1_late_context<0.05 and vis2_late_context>=0.05 and sound1_late_context>=0.05 and sound2_late_context>=0.05 and any_stim<0.05')
+                vis2_context_late_stim_mod=adj_pvals.query('vis2_late_context<0.05 and vis1_late_context>=0.05 and sound1_late_context>=0.05 and sound2_late_context>=0.05 and any_stim<0.05')
+                sound1_context_late_stim_mod=adj_pvals.query('sound1_late_context<0.05 and sound2_late_context>=0.05 and vis1_late_context>=0.05 and vis2_late_context>=0.05 and any_stim<0.05')
+                sound2_context_late_stim_mod=adj_pvals.query('sound2_late_context<0.05 and sound1_late_context>=0.05 and vis1_late_context>=0.05 and vis2_late_context>=0.05 and any_stim<0.05')
+
+                both_vis_context_late_stim_mod=adj_pvals.query('vis1_late_context<0.05 and vis2_late_context<0.05 and sound1_late_context>=0.05 and sound2_late_context>=0.05 and any_stim<0.05')
+                both_aud_context_late_stim_mod=adj_pvals.query('sound1_late_context<0.05 and sound2_late_context<0.05 and vis1_late_context>=0.05 and vis2_late_context>=0.05 and any_stim<0.05')
+                multi_modal_context_late_stim_mod=adj_pvals.query('((vis1_late_context<0.05 or vis2_late_context<0.05) and (sound1_late_context<0.05 or sound2_late_context<0.05)) and any_stim<0.05') 
+                no_context_late_stim_mod=adj_pvals.query('vis1_late_context>=0.05 and vis2_late_context>=0.05 and sound1_late_context>=0.05 and sound2_late_context>=0.05 and any_stim<0.05')   
+
+                #late evoked stimulus context modulation
+                vis1_context_late_evoked_stim_mod=adj_pvals.query('vis1_late_evoked_context<0.05 and vis2_late_evoked_context>=0.05 and sound1_late_evoked_context>=0.05 and sound2_late_evoked_context>=0.05 and any_stim<0.05')
+                vis2_context_late_evoked_stim_mod=adj_pvals.query('vis2_late_evoked_context<0.05 and vis1_late_evoked_context>=0.05 and sound1_late_evoked_context>=0.05 and sound2_late_evoked_context>=0.05 and any_stim<0.05')
+                sound1_context_late_evoked_stim_mod=adj_pvals.query('sound1_late_evoked_context<0.05 and sound2_late_evoked_context>=0.05 and vis1_late_evoked_context>=0.05 and vis2_late_evoked_context>=0.05 and any_stim<0.05')
+                sound2_context_late_evoked_stim_mod=adj_pvals.query('sound2_late_evoked_context<0.05 and sound1_late_evoked_context>=0.05 and vis1_late_evoked_context>=0.05 and vis2_late_evoked_context>=0.05 and any_stim<0.05') 
+                
+                both_vis_context_late_evoked_stim_mod=adj_pvals.query('vis1_late_evoked_context<0.05 and vis2_late_evoked_context<0.05 and sound1_late_evoked_context>=0.05 and sound2_late_evoked_context>=0.05 and any_stim<0.05')
+                both_aud_context_late_evoked_stim_mod=adj_pvals.query('sound1_late_evoked_context<0.05 and sound2_late_evoked_context<0.05 and vis1_late_evoked_context>=0.05 and vis2_late_evoked_context>=0.05 and any_stim<0.05')
+                multi_modal_context_late_evoked_stim_mod=adj_pvals.query('((vis1_late_evoked_context<0.05 or vis2_late_evoked_context<0.05) and (sound1_late_evoked_context<0.05 or sound2_late_evoked_context<0.05)) and any_stim<0.05')
+                no_context_late_evoked_stim_mod=adj_pvals.query('vis1_late_evoked_context>=0.05 and vis2_late_evoked_context>=0.05 and sound1_late_evoked_context>=0.05 and sound2_late_evoked_context>=0.05 and any_stim<0.05')
+
                 n_stim_resp_units=np.sum(adj_pvals['any_stim']<0.05)
+                n_stim_resp_late_units=np.sum(adj_pvals['any_stim_late']<0.05)
+                
+                if denominator=='total_n':
+                    denominator_value=len(adj_pvals)
+                elif denominator=='n_stim_responsive':
+                    denominator_value=n_stim_resp_units
+                elif denominator=='n_late_stim_responsive':
+                    denominator_value=n_stim_resp_late_units
+
+                if denominator_value==0:
+                    denominator_value=np.nan
 
                 area_number_context_stim_mod['area'].append(sel_area)
-                area_number_context_stim_mod['vis1'].append(len(vis1_context_stim_mod))
-                area_number_context_stim_mod['vis2'].append(len(vis2_context_stim_mod))
-                area_number_context_stim_mod['sound1'].append(len(sound1_context_stim_mod))
-                area_number_context_stim_mod['sound2'].append(len(sound2_context_stim_mod))
-                area_number_context_stim_mod['both_vis'].append(len(both_vis_context_stim_mod))
-                area_number_context_stim_mod['both_sound'].append(len(both_aud_context_stim_mod))
-                area_number_context_stim_mod['mixed'].append(len(multi_modal_context_stim_mod))
-                area_number_context_stim_mod['none'].append(len(no_context_stim_mod))
-                area_number_context_stim_mod['vis1_evoked'].append(len(vis1_context_evoked_stim_mod))
-                area_number_context_stim_mod['vis2_evoked'].append(len(vis2_context_evoked_stim_mod))
-                area_number_context_stim_mod['sound1_evoked'].append(len(sound1_context_evoked_stim_mod))
-                area_number_context_stim_mod['sound2_evoked'].append(len(sound2_context_evoked_stim_mod))
-                area_number_context_stim_mod['both_vis_evoked'].append(len(both_vis_context_evoked_stim_mod))
-                area_number_context_stim_mod['both_sound_evoked'].append(len(both_aud_context_evoked_stim_mod))
-                area_number_context_stim_mod['mixed_evoked'].append(len(multi_modal_context_evoked_stim_mod))
-                area_number_context_stim_mod['none_evoked'].append(len(no_context_evoked_stim_mod))
+                area_number_context_stim_mod['vis1'].append(len(vis1_context_stim_mod)/denominator_value)
+                area_number_context_stim_mod['vis2'].append(len(vis2_context_stim_mod)/denominator_value)
+                area_number_context_stim_mod['sound1'].append(len(sound1_context_stim_mod)/denominator_value)
+                area_number_context_stim_mod['sound2'].append(len(sound2_context_stim_mod)/denominator_value)
+                area_number_context_stim_mod['both_vis'].append(len(both_vis_context_stim_mod)/denominator_value)
+                area_number_context_stim_mod['both_sound'].append(len(both_aud_context_stim_mod)/denominator_value)
+                area_number_context_stim_mod['mixed'].append(len(multi_modal_context_stim_mod)/denominator_value)
+                area_number_context_stim_mod['none'].append(len(no_context_stim_mod)/denominator_value)
+                area_number_context_stim_mod['vis1_evoked'].append(len(vis1_context_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['vis2_evoked'].append(len(vis2_context_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['sound1_evoked'].append(len(sound1_context_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['sound2_evoked'].append(len(sound2_context_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['both_vis_evoked'].append(len(both_vis_context_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['both_sound_evoked'].append(len(both_aud_context_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['mixed_evoked'].append(len(multi_modal_context_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['none_evoked'].append(len(no_context_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['vis1_late'].append(len(vis1_context_late_stim_mod)/denominator_value)
+                area_number_context_stim_mod['vis2_late'].append(len(vis2_context_late_stim_mod)/denominator_value)
+                area_number_context_stim_mod['sound1_late'].append(len(sound1_context_late_stim_mod)/denominator_value)
+                area_number_context_stim_mod['sound2_late'].append(len(sound2_context_late_stim_mod)/denominator_value)
+                area_number_context_stim_mod['both_vis_late'].append(len(both_vis_context_late_stim_mod)/denominator_value)
+                area_number_context_stim_mod['both_sound_late'].append(len(both_aud_context_late_stim_mod)/denominator_value)
+                area_number_context_stim_mod['mixed_late'].append(len(multi_modal_context_late_stim_mod)/denominator_value)
+                area_number_context_stim_mod['none_late'].append(len(no_context_late_stim_mod)/denominator_value)
+                area_number_context_stim_mod['vis1_late_evoked'].append(len(vis1_context_late_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['vis2_late_evoked'].append(len(vis2_context_late_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['sound1_late_evoked'].append(len(sound1_context_late_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['sound2_late_evoked'].append(len(sound2_context_late_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['both_vis_late_evoked'].append(len(both_vis_context_late_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['both_sound_late_evoked'].append(len(both_aud_context_late_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['mixed_late_evoked'].append(len(multi_modal_context_late_evoked_stim_mod)/denominator_value)
+                area_number_context_stim_mod['none_late_evoked'].append(len(no_context_late_evoked_stim_mod)/denominator_value)
                 area_number_context_stim_mod['total_n'].append(len(adj_pvals))
                 area_number_context_stim_mod['n_stim_responsive'].append(n_stim_resp_units)
+                area_number_context_stim_mod['n_late_stim_responsive'].append(n_stim_resp_late_units)
                 area_number_context_stim_mod['n_sessions'].append(n_sessions)
 
                 labels=['vis1 only','vis2 only','both vis',
@@ -1664,14 +1760,10 @@ def calculate_context_mod_stim_resp_by_area(sel_units,sel_project,plot_figures=F
         area_number_context_stim_mod=pd.DataFrame(area_number_context_stim_mod)
 
         area_fraction_context_stim_mod=area_number_context_stim_mod.copy()
-
-        for rr,row in area_fraction_context_stim_mod.iterrows():
-                if row['n_stim_responsive']>0:
-                        area_fraction_context_stim_mod.iloc[rr,1:-4]=row.iloc[1:-4]/row['n_stim_responsive']
+                        
         if savepath is not None:
                 if 'Templeton' in sel_project:
                         temp_savepath=os.path.join(savepath,'area_fraction_context_stim_mod_Templeton.csv')
-
                 else:
                         temp_savepath=os.path.join(savepath,'area_fraction_context_stim_mod_DR.csv')
 
