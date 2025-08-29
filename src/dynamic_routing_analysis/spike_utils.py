@@ -1249,6 +1249,7 @@ def calculate_stimulus_modulation_by_area(sel_units,sel_project,plot_figures=Fal
             'n_sessions_w_20_units':[],
             'n_sessions_w_15_units':[],
             'n_sessions_w_10_units':[],
+            'n_sessions_w_5_units':[],
     }
 
     for sel_area in sel_units['structure'].unique():
@@ -1257,7 +1258,7 @@ def calculate_stimulus_modulation_by_area(sel_units,sel_project,plot_figures=Fal
 
             n_sessions=len(area_units['session_id'].unique())
 
-            for n_units in [20,15,10]:
+            for n_units in [20,15,10,5]:
                     n_sessions_w_units=area_units.groupby('session_id').filter(lambda x: len(x)>=n_units)['session_id'].unique()
                     area_number_responsive_to_stim['n_sessions_w_'+str(n_units)+'_units'].append(len(n_sessions_w_units))
 
@@ -1414,6 +1415,7 @@ def compute_context_stim_lick_modulation_by_area(sel_units,sel_project,plot_figu
             'n_sessions_w_20_units':[],
             'n_sessions_w_15_units':[],
             'n_sessions_w_10_units':[],
+            'n_sessions_w_5_units':[],
     }
 
     for sel_area in sel_units['structure'].unique():
@@ -1422,7 +1424,7 @@ def compute_context_stim_lick_modulation_by_area(sel_units,sel_project,plot_figu
             
             n_sessions=len(area_units['session_id'].unique())
 
-            for n_units in [20,15,10]:
+            for n_units in [20,15,10,5]:
                     n_sessions_w_units=area_units.groupby('session_id').filter(lambda x: len(x)>=n_units)['session_id'].unique()
                     area_number_context_mod['n_sessions_w_'+str(n_units)+'_units'].append(len(n_sessions_w_units))
 
@@ -1601,6 +1603,7 @@ def calculate_context_mod_stim_resp_by_area(sel_units,sel_project,plot_figures=F
                 'n_sessions_w_20_units':[],
                 'n_sessions_w_15_units':[],
                 'n_sessions_w_10_units':[],
+                'n_sessions_w_5_units':[],
         }
 
         for sel_area in sel_units['structure'].unique():
@@ -1609,7 +1612,7 @@ def calculate_context_mod_stim_resp_by_area(sel_units,sel_project,plot_figures=F
 
                 n_sessions=len(area_units['session_id'].unique())
 
-                for n_units in [20,15,10]:
+                for n_units in [20,15,10,5]:
                     n_sessions_w_units=area_units.groupby('session_id').filter(lambda x: len(x)>=n_units)['session_id'].unique()
                     area_number_context_stim_mod['n_sessions_w_'+str(n_units)+'_units'].append(len(n_sessions_w_units))
 
