@@ -33,23 +33,21 @@ from dynamic_routing_analysis import ccf_utils, spike_utils
 logger = logging.getLogger(__name__)
 
 
-def plot_unit_by_id(sel_unit, save_path=None, show_metric=None):
+def plot_unit_by_id(sel_unit, save_path=None, show_metric=None, version=None, metric_values=None, plot_lick_mod=False):
+    if version is None:
+        version="0.0.272"
 
-    unit_df = (
-        ds.dataset(
-            npc_lims.get_cache_path(
-                "units", session_id=sel_unit[:17], version="0.0.214"
-            )
-        )
-        .to_table(filter=(ds.field("unit_id") == sel_unit))
-        .to_pandas()
-    )
+    unit_df=(
+        pl.scan_parquet(npc_lims.get_cache_path("units", session_id=sel_unit[:17], version=version))
+        .filter(pl.col("unit_id") == sel_unit)
+    ).collect().to_pandas()
+
     session_id = (
         str(unit_df["subject_id"].values[0]) + "_" + str(unit_df["date"].values[0])
     )
 
     trials = pd.read_parquet(
-        npc_lims.get_cache_path("trials", session_id, version="any")
+        npc_lims.get_cache_path("trials", session_id, version=version)
     )
 
     time_before = 0.5
@@ -70,12 +68,12 @@ def plot_unit_by_id(sel_unit, save_path=None, show_metric=None):
         stim_trials = trials[:].query("stim_name==@stim")
 
         vis_context_spikes = trial_da.sel(
-            trials=stim_trials.query("is_vis_context").index,
+            trials=stim_trials.query("is_vis_rewarded").index,
             unit_id=sel_unit,
         ).mean(dim=["trials"])
 
         aud_context_spikes = trial_da.sel(
-            trials=stim_trials.query("is_aud_context").index,
+            trials=stim_trials.query("is_aud_rewarded").index,
             unit_id=sel_unit,
         ).mean(dim=["trials"])
 
@@ -93,8 +91,10 @@ def plot_unit_by_id(sel_unit, save_path=None, show_metric=None):
         )
         ax[st].axvline(0, color="k", linestyle="--", alpha=0.5)
         ax[st].axvline(0.5, color="k", linestyle="--", alpha=0.5)
-        ax[st].set_title(stim)
-        ax[st].legend()
+        if metric_values is not None:
+            ax[st].set_title(f"{stim}; {metric_values[stim]:.3f}")
+        else:
+            ax[st].set_title(stim)
         ax[st].set_xlim([-0.5, 1.0])
 
         if st > 1:
@@ -102,13 +102,15 @@ def plot_unit_by_id(sel_unit, save_path=None, show_metric=None):
         if st == 0 or st == 2:
             ax[st].set_ylabel("spikes/s")
 
+    ax[st].legend()
+
     if show_metric is not None:
         fig.suptitle(
             "unit "
             + unit_df["unit_id"].values[0]
             + "; "
             + unit_df["structure"].values[0]
-            + "; "
+            + "; \n"
             + show_metric
         )
     else:
@@ -124,7 +126,7 @@ def plot_unit_by_id(sel_unit, save_path=None, show_metric=None):
     if save_path is not None:
         fig.savefig(
             os.path.join(
-                save_path, unit_df["unit_id"].values[0] + "_context_modulation.png"
+                save_path,  unit_df["structure"].values[0] + "_" + unit_df["unit_id"].values[0] + "_context_modulation.png"
             ),
             dpi=300,
             facecolor="w",
@@ -138,83 +140,85 @@ def plot_unit_by_id(sel_unit, save_path=None, show_metric=None):
         )
         plt.close()
 
-    # plot lick vs. not lick
-    fig, ax = plt.subplots(1, 2, figsize=(6.4, 3), sharex=True, sharey=True)
-    ax = ax.flatten()
-    stims = ["vis1", "sound1"]
-    for st, stim in enumerate(stims):
+    if plot_lick_mod:
+        # plot lick vs. not lick
+        fig, ax = plt.subplots(1, 2, figsize=(6.4, 3), sharex=True, sharey=True)
+        ax = ax.flatten()
+        stims = ["vis1", "sound1"]
+        for st, stim in enumerate(stims):
 
-        if stim == "vis1":
-            sel_context = "aud"
-        elif stim == "sound1":
-            sel_context = "vis"
-        stim_trials = trials[:].query("stim_name==@stim and context_name==@sel_context")
+            if stim == "vis1":
+                sel_context = "aud"
+            elif stim == "sound1":
+                sel_context = "vis"
+            stim_trials = trials[:].query("stim_name==@stim and rewarded_modality==@sel_context")
 
-        lick_spikes = trial_da.sel(
-            trials=stim_trials.query("is_response").index,
-            unit_id=sel_unit,
-        ).mean(dim=["trials"])
+            lick_spikes = trial_da.sel(
+                trials=stim_trials.query("is_response").index,
+                unit_id=sel_unit,
+            ).mean(dim=["trials"])
 
-        non_lick_spikes = trial_da.sel(
-            trials=stim_trials.query("not is_response").index,
-            unit_id=sel_unit,
-        ).mean(dim=["trials"])
+            non_lick_spikes = trial_da.sel(
+                trials=stim_trials.query("not is_response").index,
+                unit_id=sel_unit,
+            ).mean(dim=["trials"])
 
-        ax[st].plot(
-            lick_spikes.time, lick_spikes.values, label="licks", color="tab:red"
-        )
-        ax[st].plot(
-            non_lick_spikes.time,
-            non_lick_spikes.values,
-            label="non licks",
-            color="tab:purple",
-        )
-        ax[st].axvline(0, color="k", linestyle="--", alpha=0.5)
-        ax[st].axvline(0.5, color="k", linestyle="--", alpha=0.5)
-        ax[st].set_title(stim + "; " + sel_context + " context")
+            ax[st].plot(
+                lick_spikes.time, lick_spikes.values, label="licks", color="tab:red"
+            )
+            ax[st].plot(
+                non_lick_spikes.time,
+                non_lick_spikes.values,
+                label="non licks",
+                color="tab:purple",
+            )
+            ax[st].axvline(0, color="k", linestyle="--", alpha=0.5)
+            ax[st].axvline(0.5, color="k", linestyle="--", alpha=0.5)
+            ax[st].set_title(stim + "; " + sel_context + " context")
+            ax[st].set_xlim([-0.5, 1.0])
+
+            if st > 1:
+                ax[st].set_xlabel("time (s)")
+            if st == 0 or st == 2:
+                ax[st].set_ylabel("spikes/s")
+
         ax[st].legend()
-        ax[st].set_xlim([-0.5, 1.0])
 
-        if st > 1:
-            ax[st].set_xlabel("time (s)")
-        if st == 0 or st == 2:
-            ax[st].set_ylabel("spikes/s")
+        if show_metric is not None:
+            fig.suptitle(
+                "unit "
+                + unit_df["unit_id"].values[0]
+                + "; "
+                + unit_df["structure"].values[0]
+                + "; "
+                + show_metric
+            )
+        else:
+            fig.suptitle(
+                "unit "
+                + unit_df["unit_id"].values[0]
+                + "; "
+                + unit_df["structure"].values[0]
+            )
 
-    if show_metric is not None:
-        fig.suptitle(
-            "unit "
-            + unit_df["unit_id"].values[0]
-            + "; "
-            + unit_df["structure"].values[0]
-            + "; "
-            + show_metric
-        )
-    else:
-        fig.suptitle(
-            "unit "
-            + unit_df["unit_id"].values[0]
-            + "; "
-            + unit_df["structure"].values[0]
-        )
+        fig.tight_layout()
 
-    fig.tight_layout()
-
-    if save_path is not None:
-        fig.savefig(
-            os.path.join(
-                save_path, unit_df["unit_id"].values[0] + "_lick_modulation.png"
-            ),
-            dpi=300,
-            facecolor="w",
-            edgecolor="w",
-            orientation="portrait",
-            format="png",
-            transparent=True,
-            bbox_inches="tight",
-            pad_inches=0.1,
-            metadata=None,
-        )
-        plt.close()
+        if save_path is not None:
+            fig.savefig(
+                os.path.join(
+                    save_path, unit_df["structure"].values[0] + "_" + unit_df["unit_id"].values[0] + "_lick_modulation.png"
+                ),
+                dpi=300,
+                facecolor="w",
+                edgecolor="w",
+                orientation="portrait",
+                format="png",
+                transparent=True,
+                bbox_inches="tight",
+                pad_inches=0.1,
+                metadata=None,
+            )
+            plt.close()
 
 
 def plot_stim_response_by_unit_id(sel_unit, save_path=None, show_metric=None):
@@ -399,7 +403,7 @@ def plot_motor_response_by_unit_id(sel_unit, save_path=None, show_metric=None):
         elif stim == "sound1":
             pass
         resp_trials = trials[:].query(
-            "stim_name==@stim and context_name==@sel_context and is_response==@resp"
+            "stim_name==@stim and rewarded_modality==@sel_context and is_response==@resp"
         )
         ax[rr].axvline(0, color="k", linestyle="-", alpha=0.5)
         ax[rr].set_title(response_names[rr])
@@ -479,7 +483,7 @@ def plot_motor_response_by_unit_id(sel_unit, save_path=None, show_metric=None):
         resp_trials = (
             trials[:]
             .query(
-                "stim_name==@stim and context_name==@sel_context and is_response==@resp"
+                "stim_name==@stim and rewarded_modality==@sel_context and is_response==@resp"
             )
             .index.values
         )
