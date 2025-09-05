@@ -339,7 +339,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 # incorporate additional parameters
 # add option to decode from timebins
 # add option to use inputs with top decoding weights (use_coefs)
-def decode_context_with_linear_shift(session=None,params=None,trials=None,units=None,session_info=None,use_zarr=False):
+def decode_context_with_linear_shift(session=None,params=None,trials=None,units=None,session_info=None,use_zarr=False,n_expected_blocks=6):
 
     decoder_results={}
 
@@ -495,8 +495,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         trials['context_name']=fake_context
 
     n_unique_blocks=len(trials['block_index'].unique())
-    if n_unique_blocks<6:
-        raise NotEnoughBlocksError('Not enough blocks ('+str(n_unique_blocks)+') in session '+session_id)
+    if n_unique_blocks!=n_expected_blocks:
+        raise NotEnoughBlocksError('Not enough blocks ('+str(n_unique_blocks)+'!='+str(n_expected_blocks)+') in session '+session_id)
 
     if central_section=='4_blocks':
         #find middle 4 block labels
