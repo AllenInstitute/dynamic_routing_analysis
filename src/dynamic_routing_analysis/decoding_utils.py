@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import upath
 import zarr
-from sklearn.metrics import balanced_accuracy_score, classification_report
+from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import RobustScaler
 
@@ -40,7 +40,8 @@ def dump_dict_to_zarr(group, data):
 # 'linearSVC' or 'LDA' or 'RandomForest'
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                    crossval_index=None,labels_as_index=False,train_test_split_input=None,
-                   regularization=None,penalty=None,solver=None,n_jobs=None):
+                   regularization=None,penalty=None,solver=None,n_jobs=None,set_random_state=None):
+    
     #helper function to decode labels from input data using different decoder models
 
     if decoder_type=='linearSVC':
@@ -52,7 +53,18 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         if solver is not None:
             logger.warning('Solver not used for LinearSVC')
         clf=LinearSVC(max_iter=5000,dual='auto',class_weight='balanced',
-                      C=regularization,penalty=penalty,n_jobs=n_jobs)
+                      C=regularization,penalty=penalty)
+    elif decoder_type=='nonlinearSVC':
+        from sklearn.svm import SVC
+        kernel='rbf'
+        if regularization is None:
+            regularization = 1.0
+        if penalty is not None:
+            logger.warning('Penalty not used for non-linear SVC')
+        if solver is not None:
+            logger.warning('Solver not used for non-linear SVC')
+        clf=SVC(max_iter=5000,probability=True,class_weight='balanced',
+                      C=regularization,kernel=kernel)
     elif decoder_type=='LDA':
         from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
         if solver is None:
@@ -61,7 +73,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             logger.warning('Regularization not used for LDA')
         if penalty is not None:
             logger.warning('Penalty not used for LDA')
-        clf=LinearDiscriminantAnalysis(solver=solver,n_jobs=n_jobs)
+        clf=LinearDiscriminantAnalysis(solver=solver)
     elif decoder_type=='RandomForest':
         from sklearn.ensemble import RandomForestClassifier
         if regularization is not None:
@@ -102,13 +114,13 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
     if type(y[0])==bool:
         ypred=np.full(len(y), fill_value=False)
-        ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value=False)
     elif type(y[0])==str:
         ypred=np.full(len(y), fill_value='       ')
-        ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value='       ')
     else:
         ypred=np.full(len(y), fill_value=np.nan)
-        ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
+    
+    ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
+    decision_function=np.full((len(y)), fill_value=np.nan)
 
     tidx_used=[]
 
@@ -122,9 +134,11 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     train_trials=[]
     test_trials=[]
     dec_func_all=[]
+    y_dec_func=[]
     models=[]
     cr_dict_train = []
     balanced_accuracy_train = []
+    coefs_all = []
 
     cr_dict_test = []
     balanced_accuracy_test = []
@@ -207,23 +221,26 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             raise ValueError('Must provide train_test_split_input')
         train_test_split = train_test_split_input
 
+    elif crossval=='5_fold_set_random_state':
+        if set_random_state==None:
+            set_random_state=0
+        skf = StratifiedKFold(n_splits=5,shuffle=True,random_state=set_random_state)
+        train_test_split = skf.split(input_data, labels)
+
     for train,test in train_test_split:
 
         clf.fit(X[train],y[train])
         prediction=clf.predict(X[test])
-        cr_dict_train.append(classification_report(y[train], clf.predict(X[train]), output_dict=True))
         balanced_accuracy_train.append(balanced_accuracy_score(y[train], clf.predict(X[train]),
                                                                sample_weight=None, adjusted=False))
 
-        cr_dict_test.append(classification_report(y[test], clf.predict(X[test]), output_dict=True))
         balanced_accuracy_test.append(balanced_accuracy_score(y[test], clf.predict(X[test]),
                                                                sample_weight=None, adjusted=False))
 
-        decision_function=clf.decision_function(X[test])
         ypred_all.append(prediction)
         ypred_train.append(clf.predict(X[train]))
         ytrue_train.append(y[train])
-        dec_func_all.append(decision_function)
+        y_dec_func.append(decision_function)
         tidx_used.append([test])
         classes.append(clf.classes_)
         # intercept.append(clf.intercept_)
@@ -231,26 +248,44 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         train_trials.append(train)
         test_trials.append(test)
 
-        if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression':
+        if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
             ypred_proba[test,:] = clf.predict_proba(X[test])
         else:
             ypred_proba[test,:] = np.full((len(test),len(np.unique(labels))), fill_value=False)
+
+        if decoder_type=='LDA' or decoder_type=='linearSVC' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
+            decision_function[test]=clf.decision_function(X[test])
+        else:
+            decision_function[test]=np.full((len(test)), fill_value=False)
+
+        if decoder_type == 'LDA' or decoder_type == 'linearSVC' or decoder_type == 'LogisticRegression':
+            coefs_all.append(clf.coef_)
+        else:
+            coefs_all.append(np.full((X.shape[1]), fill_value=False))
 
         models.append(clf)
 
     #fit on all trials
     clf.fit(X, y)
-    y_dec_func = clf.decision_function(X)
     ypred = clf.predict(X)
-    if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression':
+
+    if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
         predict_proba_all_trials = clf.predict_proba(X)
+    else:
+        predict_proba_all_trials = np.full((X.shape[0],len(np.unique(labels))), fill_value=False)
 
     if decoder_type == 'LDA' or decoder_type == 'linearSVC' or decoder_type == 'LogisticRegression':
         coefs = clf.coef_
+        intercept = clf.intercept_
+        dec_func_all_trials = clf.decision_function(X)
+    elif decoder_type == 'nonlinearSVC':
+        coefs = np.full((X.shape[1]), fill_value=False)
+        intercept = np.full((1), fill_value=False)
+        dec_func_all_trials = clf.decision_function(X)
     else:
         coefs = np.full((X.shape[1]), fill_value=False)
-
-    intercept = clf.intercept_
+        intercept = np.full((1), fill_value=False)
+        dec_func_all_trials = np.full((X.shape[0]), fill_value=np.nan)
 
     #scikit-learn's classification report
     output['cr']=cr_dict_test
@@ -264,16 +299,17 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     #indices of trials used in test for each fold
     output['trials_used']=tidx_used
 
+    #decision function using cross-validated folds
+    output['decision_function']=decision_function
     #decision function from training/testing on all trials
-    output['decision_function']=y_dec_func
-    #decision function for each test fold
-    output['decision_function_all']=dec_func_all
-    #predict probability for each test fold
+    output['decision_function_all']=dec_func_all_trials
+    #predict probability using cross-validated folds
     output['predict_proba']=ypred_proba
     #predict probability from training/testing on all trials
     output['predict_proba_all_trials']=predict_proba_all_trials if 'predict_proba_all_trials' in locals() else None
     #coefficients for each feature
     output['coefs']=coefs
+    output['coefs_all']=coefs_all
     output['classes']=classes
     output['intercept']=intercept
     #input parameters
@@ -303,7 +339,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 # incorporate additional parameters
 # add option to decode from timebins
 # add option to use inputs with top decoding weights (use_coefs)
-def decode_context_with_linear_shift(session=None,params=None,trials=None,units=None,session_info=None,use_zarr=False):
+def decode_context_with_linear_shift(session=None,params=None,trials=None,units=None,session_info=None,use_zarr=False,n_blocks_expected=6):
 
     decoder_results={}
 
@@ -459,8 +495,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
         trials['context_name']=fake_context
 
     n_unique_blocks=len(trials['block_index'].unique())
-    if n_unique_blocks<6:
-        raise NotEnoughBlocksError('Not enough blocks ('+str(n_unique_blocks)+') in session '+session_id)
+    if n_unique_blocks!=n_blocks_expected:
+        raise NotEnoughBlocksError('Not enough blocks ('+str(n_unique_blocks)+'!='+str(n_blocks_expected)+') in session '+session_id)
 
     if central_section=='4_blocks':
         #find middle 4 block labels

@@ -8,15 +8,15 @@ import logging
 import logging.handlers
 import pathlib
 import re
+import typing
 from collections.abc import Iterable
 from typing import Literal
-import typing
 
-# 3rd-party imports necessary for processing ----------------------- #
-from matplotlib.pylab import f
 import npc_lims
 import polars as pl
 import upath
+# 3rd-party imports necessary for processing ----------------------- #
+from matplotlib.pylab import f
 
 import dynamic_routing_analysis.codeocean_utils as codeocean_utils
 
@@ -420,5 +420,3 @@ def get_prod_trials(
         )
         .sort('session_id', 'block_index', 'trial_index')
     )
-
-get_passing_session_ids()

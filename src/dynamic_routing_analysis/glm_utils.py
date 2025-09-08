@@ -141,7 +141,7 @@ def nested_train_and_test(design_mat, spike_counts, param_grid, param2_grid = No
     X = design_mat.data
     y = spike_counts
 
-    if ts_good_behavior is None: 
+    if ts_good_behavior is None:
         ts_good_behavior = np.ones(y.shape[0], dtype=bool)
 
     kf = KFold(n_splits=folds_outer, shuffle=True, random_state=0)
@@ -155,7 +155,7 @@ def nested_train_and_test(design_mat, spike_counts, param_grid, param2_grid = No
     for k, (train_index, test_index) in enumerate(kf.split(X)):
         X_train, y_train = X[train_index], y[train_index]
         X_test, y_test = X[test_index[ts_good_behavior[test_index]]], y[test_index[ts_good_behavior[test_index]]]
-        
+
         # inner CV
         cv_inner = KFold(n_splits=folds_inner, shuffle=True, random_state=1)
         model = model_mapping.get(method)()
@@ -220,14 +220,12 @@ def simple_train_and_test(design_mat, spike_counts, param, param2 = None, folds_
         if len(param) != folds_outer:
             raise ValueError(f"Length of parameter, ({len(param)}) must match number of folds ({folds_outer}).")
         return param
-    
 
     X = design_mat.data
     y = spike_counts
 
-    if ts_good_behavior is None: 
+    if ts_good_behavior is None:
         ts_good_behavior = np.ones(y.shape[0], dtype=bool)
-
 
     kf = KFold(n_splits=folds_outer, shuffle=True, random_state=0)
     test_r2 = np.zeros((y.shape[-1], folds_outer))
@@ -236,7 +234,7 @@ def simple_train_and_test(design_mat, spike_counts, param, param2 = None, folds_
     param2 = ensure_param(param2, folds_outer)
 
     for k, (train_index, test_index) in enumerate(kf.split(X)):
-        X_train, y_train = X[train_index], y[train_index]
+        X_train, y_train = X[train_index[ts_good_behavior[train_index]]], y[train_index[ts_good_behavior[train_index]]]
         X_test, y_test = X[test_index[ts_good_behavior[test_index]]], y[test_index[ts_good_behavior[test_index]]]
 
         if method in ['ridge_regression', 'lasso_regression']:
@@ -492,7 +490,7 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
             param=param,
             param2=param2,
             folds_outer=num_outer_folds,
-            method = run_params['method'], 
+            method = run_params['method'],
             ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None
         )
     # fullmodel is completely fitted (simple or nested) or fullmodel is not fit but model parameters have beeen optimized
@@ -527,7 +525,7 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
                                                                                param=param_area,
                                                                                param2=param2_area,
                                                                                folds_outer=run_params['n_outer_folds'],
-                                                                               method = run_params['method'], 
+                                                                               method = run_params['method'],
                                                                                ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None)
                 cv_var_train[unit_ids] = cv_train
                 cv_var_test[unit_ids] = cv_test
@@ -572,7 +570,7 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
                                                                                            param2=param2,
                                                                                            folds_outer=run_params[
                                                                                                'n_outer_folds'],
-                                                                                               method = run_params['method'], 
+                                                                                               method = run_params['method'],
                                                                                             ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None)
     else: # fitting fullmodel using nested CV
         for key in param_keys:
@@ -606,7 +604,7 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
                                           folds_inner=run_params['n_inner_folds'],
                                           param_grid=param_grid,
                                           param2_grid=param2_grid,
-                                          method = run_params['method'], 
+                                          method = run_params['method'],
                                           ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None)
 
                 cv_var_train[unit_ids] = cv_train
@@ -628,7 +626,7 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
                                           folds_inner=run_params['n_inner_folds'],
                                           param_grid=param_grid,
                                           param2_grid=param2_grid,
-                                          method = run_params['method'], 
+                                          method = run_params['method'],
                                           ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None)
 
                 cv_var_train[unit_ids] = cv_train
@@ -645,7 +643,7 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
                                       folds_inner=run_params['n_inner_folds'],
                                       param_grid=param_grid,
                                       param2_grid=param2_grid,
-                                      method = run_params['method'], 
+                                      method = run_params['method'],
                                       ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None)
             fit = set_parameters_nested_CV(fit, np.arange(num_units), method, optimal_parameters)
 
@@ -747,9 +745,9 @@ def apply_shift_to_design_matrix(fit, design_mat, run_params, blocks, shift_colu
     fit_shift['spike_count_arr']['spike_counts'] = fit['spike_count_arr']['spike_counts'][blocks]
     fit_shift['bin_centers'] = fit_shift['bin_centers'][blocks]
     fit_shift['timestamps_good_behavior'] = fit["timestamps_good_behavior"][blocks]
-    if len(fit_shift["timestamps_good_behavior"]) > 0: 
+    if len(fit_shift["timestamps_good_behavior"]) > 0:
         fit_shift = evaluate_model(fit_shift, design_mat_shifted, run_params, test_on_good_behavior=True)
-    else: 
+    else:
         raise NotEnoughGoodBlocksError(f"Skipping linear shift for session_id {fit['session_id']}, not enough good behavior blocks!")
     return fit_shift
 
