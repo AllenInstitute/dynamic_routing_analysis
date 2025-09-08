@@ -180,7 +180,7 @@ def define_kernels(run_params):
             selected_keys = categories['stimulus'] + categories['movements'] + categories['choice'] + ['context',
                                                                                                     'session_time']
         elif 'quiescent' in time_of_interest:
-            selected_keys = categories['movements_no_licks'] + ['context', 'session_time']
+            selected_keys = categories['movements_no_licks'] + ['context', 'session_time'] + categories['choice']
         elif 'spontaneous' in time_of_interest:
             selected_keys = categories['movements_no_licks'] + ['session_time']
     else:
