@@ -181,6 +181,9 @@ def define_kernels(run_params):
                                                                                                     'session_time']
         elif 'quiescent' in time_of_interest:
             selected_keys = categories['movements_no_licks'] + ['context', 'session_time'] + categories['choice']
+            for choice in categories['choice']:
+                master_kernels_list[choice]['length'] = run_params['quiescent_stop_time'] - run_params['quiescent_start_time']
+                master_kernels_list[choice]['offset'] = -master_kernels_list[choice]['length']
         elif 'spontaneous' in time_of_interest:
             selected_keys = categories['movements_no_licks'] + ['session_time']
     else:
@@ -526,9 +529,7 @@ def establish_timebins(run_params, fit, behavior_info):
         fit['timebins_all'] = timebins_all
         fit['bin_centers_all'] = bin_starts_all + run_params['spike_bin_width'] / 2
         fit['epoch_trace_all'] = epoch_trace_all
-        precision = 5
-        rounded_times = np.round(timebins[:, 0], precision)
-        fit['mask'] = np.array([index for index, value in enumerate(timebins_all[:, 0]) if np.round(value, precision) in rounded_times])
+        fit['mask'] = np.where(np.isclose(timebins_all[:, 0][:, None], timebins[:, 0][None, :], atol=1e-8))[0]
     else:
         fit['timebins_all'] = timebins
         fit['bin_centers_all'] = bin_starts + run_params['spike_bin_width'] / 2
