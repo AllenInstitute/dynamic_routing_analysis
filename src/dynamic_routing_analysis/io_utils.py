@@ -1,4 +1,5 @@
 import logging
+import re
 import typing
 from typing import Literal
 
@@ -9,7 +10,6 @@ import pandas as pd
 import polars as pl
 import xarray as xr
 from tqdm import tqdm
-import re
 
 import dynamic_routing_analysis.datacube_utils as datacube_utils
 
@@ -180,7 +180,10 @@ def define_kernels(run_params):
             selected_keys = categories['stimulus'] + categories['movements'] + categories['choice'] + ['context',
                                                                                                     'session_time']
         elif 'quiescent' in time_of_interest:
-            selected_keys = categories['movements_no_licks'] + ['context', 'session_time']
+            selected_keys = categories['movements_no_licks'] + ['context', 'session_time'] + categories['choice']
+            for choice in categories['choice']:
+                master_kernels_list[choice]['length'] = run_params['quiescent_stop_time'] - run_params['quiescent_start_time']
+                master_kernels_list[choice]['offset'] = -master_kernels_list[choice]['length']
         elif 'spontaneous' in time_of_interest:
             selected_keys = categories['movements_no_licks'] + ['session_time']
     else:
@@ -265,7 +268,7 @@ def define_kernels(run_params):
 def _create_behavior_info(session_id, trials, performance, epochs):
     dprimes = performance.cross_modality_dprime.values
     return {
-        'session_id': session_id, 
+        'session_id': session_id,
         'trials': trials,
         'dprime': dprimes,
         'epoch_info': epochs,
@@ -292,7 +295,7 @@ def get_session_data_from_datacube(
 ) -> tuple[pl.LazyFrame, dict[str, pd.DataFrame]]:
     nwb_path = datacube_utils.get_nwb_paths(session_id)
     behavior_info = _create_behavior_info(
-        session_id = session_id, 
+        session_id = session_id,
         trials=lazynwb.get_df(nwb_path, '/intervals/trials', exact_path=True, **(get_df_kwargs or {})),
         performance=lazynwb.get_df(nwb_path, '/intervals/performance', exact_path=True, **(get_df_kwargs or {})),
         epochs=lazynwb.get_df(nwb_path, '/intervals/epochs', exact_path=True, **(get_df_kwargs or {})),
@@ -526,9 +529,7 @@ def establish_timebins(run_params, fit, behavior_info):
         fit['timebins_all'] = timebins_all
         fit['bin_centers_all'] = bin_starts_all + run_params['spike_bin_width'] / 2
         fit['epoch_trace_all'] = epoch_trace_all
-        precision = 5
-        rounded_times = np.round(timebins[:, 0], precision)
-        fit['mask'] = np.array([index for index, value in enumerate(timebins_all[:, 0]) if np.round(value, precision) in rounded_times])
+        fit['mask'] = np.where(np.isclose(timebins_all[:, 0][:, None], timebins[:, 0][None, :], atol=1e-8))[0]
     else:
         fit['timebins_all'] = timebins
         fit['bin_centers_all'] = bin_starts + run_params['spike_bin_width'] / 2
@@ -1051,6 +1052,40 @@ def timestamps_good_behavior(behavior_info, fit):
 
     return ts_good_behavior
 
+
+def timestamps_good_behavior(behavior_info, fit):
+    '''
+    Returns a boolean array indicating which timestamps in fit['bin_centers_all'] are within the good behavior periods.
+    '''
+    ts_good_behavior = np.zeros(len(fit['bin_centers']), dtype=bool)
+    block_wise_performance = behavior_info['dprime']
+    trials = behavior_info["trials"]
+    session_id = behavior_info["session_id"]
+    good_trial_indexes = set(trials[trials['is_correct']].index.values)
+    if not np.isnan(block_wise_performance).all(): # Check if there are any valid d-prime values
+
+        epoch_trace = fit['epoch_trace']
+        good_trial_indexes = sorted(
+            good_trial_indexes &
+            set(
+            datacube_utils.get_prod_trials(
+                by_session=False, include_templeton=True
+            )
+            .filter(pl.col('session_id') == session_id)
+            ['trial_index']
+        ))
+        pattern = re.compile(r'trial(\d+)')
+        for n, epoch in enumerate(epoch_trace):
+            match = pattern.search(epoch)
+            if match:
+                trial_no = int(match.group(1))
+                ts_good_behavior[n] = trial_no in good_trial_indexes
+            else:
+                ts_good_behavior[n] = True
+    else:
+        ts_good_behavior = np.ones(len(fit['bin_centers']), dtype=bool)
+
+    return ts_good_behavior
 
 def bin_timeseries(x, x_timestamps, timebins_all):
     # Remove NaN values from x_timestamps and corresponding x values
