@@ -120,7 +120,10 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         ypred=np.full(len(y), fill_value=np.nan)
     
     ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
-    decision_function=np.full((len(y)), fill_value=np.nan)
+    if len(np.unique(labels))>2:
+        decision_function=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
+    else:
+        decision_function=np.full((len(y)), fill_value=np.nan)
 
     tidx_used=[]
 
@@ -133,8 +136,6 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     ytrue_train=[]
     train_trials=[]
     test_trials=[]
-    dec_func_all=[]
-    y_dec_func=[]
     models=[]
     cr_dict_train = []
     balanced_accuracy_train = []
@@ -240,7 +241,6 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         ypred_all.append(prediction)
         ypred_train.append(clf.predict(X[train]))
         ytrue_train.append(y[train])
-        y_dec_func.append(decision_function)
         tidx_used.append([test])
         classes.append(clf.classes_)
         # intercept.append(clf.intercept_)
@@ -254,9 +254,15 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             ypred_proba[test,:] = np.full((len(test),len(np.unique(labels))), fill_value=False)
 
         if decoder_type=='LDA' or decoder_type=='linearSVC' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
-            decision_function[test]=clf.decision_function(X[test])
+            if len(np.unique(labels))>2:
+                decision_function[test,:]=clf.decision_function(X[test])
+            else:
+                decision_function[test]=clf.decision_function(X[test])
         else:
-            decision_function[test]=np.full((len(test)), fill_value=False)
+            if len(np.unique(labels))>2:
+                decision_function[test,:]=np.full((len(test),len(np.unique(labels))), fill_value=False)
+            else:
+                decision_function[test]=np.full((len(test)), fill_value=False)
 
         if decoder_type == 'LDA' or decoder_type == 'linearSVC' or decoder_type == 'LogisticRegression':
             coefs_all.append(clf.coef_)
