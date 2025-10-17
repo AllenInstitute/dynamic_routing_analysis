@@ -217,7 +217,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         skf = StratifiedKFold(n_splits=5,shuffle=True)
         train_test_split = skf.split(input_data, labels)
 
-    elif crossval=='5_fold_constant':
+    elif crossval=='5_fold_constant' or crossval=='custom':
         if train_test_split_input is None:
             raise ValueError('Must provide train_test_split_input')
         train_test_split = train_test_split_input
