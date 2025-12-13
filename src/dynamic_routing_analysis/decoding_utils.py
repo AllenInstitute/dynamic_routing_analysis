@@ -156,18 +156,18 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             not_block_inds=np.where(block_number!=bb)[0]
             train.append(not_block_inds)
 
-            #equalize number of trials for each condition
-            subset_ind=[]
-            conds = np.unique(y[not_block_inds])
-            cond_count=[]
-            for cc in conds:
-                cond_count.append(np.sum(y[not_block_inds]==cc))
-            use_trnum=np.min(cond_count)
-            for cc in conds:
-                cond_inds=np.where(y[not_block_inds]==cc)[0]
-                subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))
-            subset_ind=np.sort(np.hstack(subset_ind))
-            train.append(not_block_inds[subset_ind])
+            # #equalize number of trials for each condition
+            # subset_ind=[]
+            # conds = np.unique(y[not_block_inds])
+            # cond_count=[]
+            # for cc in conds:
+            #     cond_count.append(np.sum(y[not_block_inds]==cc))
+            # use_trnum=np.min(cond_count)
+            # for cc in conds:
+            #     cond_inds=np.where(y[not_block_inds]==cc)[0]
+            #     subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))
+            # subset_ind=np.sort(np.hstack(subset_ind))
+            # train.append(not_block_inds[subset_ind])
 
             block_inds=np.where(block_number==bb)[0]
             test.append(block_inds)
