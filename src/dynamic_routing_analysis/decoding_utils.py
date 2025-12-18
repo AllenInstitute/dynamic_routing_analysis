@@ -40,7 +40,8 @@ def dump_dict_to_zarr(group, data):
 # 'linearSVC' or 'LDA' or 'RandomForest'
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                    crossval_index=None,labels_as_index=False,train_test_split_input=None,
-                   regularization=None,penalty=None,solver=None,n_jobs=None,set_random_state=None):
+                   regularization=None,penalty=None,solver=None,n_jobs=None,set_random_state=None,
+                   other_data=None):
     
     #helper function to decode labels from input data using different decoder models
 
@@ -104,8 +105,10 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     unique_labels=np.unique(labels)
     if labels_as_index==True:
         labels=np.array([np.where(unique_labels==x)[0][0] for x in labels])
-
     y = labels
+
+    if other_data is not None:
+        X_other = scaler.transform(other_data)
 
     if len(np.unique(labels))>2:
         y_dec_func=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
@@ -275,23 +278,37 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     clf.fit(X, y)
     ypred = clf.predict(X)
 
+    if other_data is not None:
+        ypred_other = clf.predict(X_other)
+
     if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
         predict_proba_all_trials = clf.predict_proba(X)
+        if other_data is not None:
+            predict_proba_other = clf.predict_proba(X_other)
+
     else:
         predict_proba_all_trials = np.full((X.shape[0],len(np.unique(labels))), fill_value=False)
+        if other_data is not None:
+            predict_proba_other = np.full((X_other.shape[0],len(np.unique(labels))), fill_value=False)
 
     if decoder_type == 'LDA' or decoder_type == 'linearSVC' or decoder_type == 'LogisticRegression':
         coefs = clf.coef_
         intercept = clf.intercept_
         dec_func_all_trials = clf.decision_function(X)
+        if other_data is not None:
+            dec_func_other = clf.decision_function(X_other)
     elif decoder_type == 'nonlinearSVC':
         coefs = np.full((X.shape[1]), fill_value=False)
         intercept = np.full((1), fill_value=False)
         dec_func_all_trials = clf.decision_function(X)
+        if other_data is not None:
+            dec_func_other = clf.decision_function(X_other)
     else:
         coefs = np.full((X.shape[1]), fill_value=False)
         intercept = np.full((1), fill_value=False)
         dec_func_all_trials = np.full((X.shape[0]), fill_value=np.nan)
+        if other_data is not None:
+            dec_func_other = np.full((X_other.shape[0]), fill_value=np.nan)
 
     #scikit-learn's classification report
     output['cr']=cr_dict_test
@@ -337,6 +354,16 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     output['scaler']=scaler
     output['label_names']=unique_labels
     output['labels']=labels
+
+    #predicted labels for other data input (if provided)
+    if other_data is not None:
+        output['pred_label_other']=ypred_other
+        output['decision_function_other']=dec_func_other
+        output['predict_proba_other']=predict_proba_other
+    else:
+        output['pred_label_other']=None
+        output['decision_function_other']=None
+        output['predict_proba_other']=None
 
     return output
 
@@ -442,10 +469,10 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
     if 'predict' in params:
         predict=params['predict']
     else:
-        predict='context'
+        predict='rewarded_modality'
 
     if predict=='vis_appropriate_response':
-        trials=trials.query('(is_vis_target and is_aud_context) or (is_aud_target and is_vis_context)')
+        trials=trials.query('(is_vis_target and is_aud_rewarded) or (is_aud_target and is_vis_rewarded)')
         trials_original_index=trials.index.values
         trials=trials.reset_index()
         # is_vis_appropriate_response=np.zeros(len(trials))
@@ -498,7 +525,7 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
             fake_context[block_trials]=block_contexts[block]
             fake_block_nums[block_trials]=block
         trials['block_index']=fake_block_nums
-        trials['context_name']=fake_context
+        trials['rewarded_modality']=fake_context
 
     n_unique_blocks=len(trials['block_index'].unique())
     if n_unique_blocks!=n_blocks_expected:
@@ -681,8 +708,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                 decoder_results[session_id]['results'][aa]['no_shift'][nunits][rr]['sel_units']=sel_units
 
                 #run once with all trials and no shifts
-                if predict=='context':
-                    labels=trials['context_name'].values
+                if predict=='rewarded_modality':
+                    labels=trials['rewarded_modality'].values
                 elif predict=='vis_appropriate_response':
                     labels=is_vis_appropriate_response
 
@@ -694,14 +721,19 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                 if crossval=='5_fold_constant':
                     skf = StratifiedKFold(n_splits=5,shuffle=True,random_state=165482)
                     train_test_split = skf.split(np.zeros(len(labels)), labels)
+                    crossval_index=None
+                elif crossval=='blockwise':
+                    train_test_split=None
+                    crossval_index=trials['block_index'].values
                 else:
                     train_test_split=None
+                    crossval_index=None
                 decoder_results[session_id]['results'][aa]['no_shift'][nunits][rr] = decoder_helper(
                     input_data=input_data,
                     labels=labels,
                     decoder_type=decoder_type,
                     crossval=crossval,
-                    crossval_index=None,
+                    crossval_index=crossval_index,
                     labels_as_index=labels_as_index,
                     train_test_split_input=train_test_split,
                     regularization=regularization,
@@ -711,8 +743,8 @@ def decode_context_with_linear_shift(session=None,params=None,trials=None,units=
                 #loop through shifts
                 for sh,shift in enumerate(shifts):
 
-                    if predict=='context':
-                        labels=middle_4_block_trials['context_name'].values
+                    if predict=='rewarded_modality':
+                        labels=middle_4_block_trials['rewarded_modality'].values
                     elif predict=='vis_appropriate_response':
                         labels=is_vis_appropriate_response[middle_4_blocks]
 
