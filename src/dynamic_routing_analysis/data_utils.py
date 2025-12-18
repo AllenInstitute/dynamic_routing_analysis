@@ -1,6 +1,7 @@
 import glob
 import os
 
+import lazynwb
 import npc_lims
 import numpy as np
 import pandas as pd
@@ -45,6 +46,98 @@ def load_trials_or_units(session, table_name, version='any'):
                 return None
     return table
 
+
+def generate_spontaneous_trials_table(session_id,distribution='DR',n_trials=1000,min_iti=5.5,datacube_version='any',random_seed=None):
+    # function to generate spontaneous trials for dynamic routing sessions
+    
+    epochs=pd.read_parquet(
+                    npc_lims.get_cache_path('epochs',session_id,version=datacube_version)
+                )
+    
+    path = 's3://aind-scratch-data/dynamic-routing/cache/nwb/v0.0.272/{session_id}.nwb'
+    internal_path = 'processing/behavior/rewards'
+    rewards = lazynwb.get_df(path.format(session_id=session_id), internal_path, as_polars=False)
+    
+    spont_epochs=epochs.query('script_name.str.contains("Spontaneous")')
+
+    if len(spont_epochs)==0:
+        raise ValueError(f'No spontaneous epochs found for session {session_id}')
+    
+    spont_trials={
+        'start_time':[],
+        'epoch_idx':[],
+        'epoch_name':[],
+        'is_rewarded':[]
+    }
+
+    for rr,row in spont_epochs.iterrows():
+        spont_start=row['start_time']
+        spont_end=row['stop_time']
+        # spont_duration=spont_end-spont_start
+        
+        sampleITIs=generate_itis(distribution=distribution,n_trials=n_trials,min_iti=min_iti,random_seed=random_seed)
+        cum_sampleITIs=np.cumsum(sampleITIs)
+        valid_starts=spont_start+cum_sampleITIs[cum_sampleITIs+spont_start<spont_end]
+        is_rewarded=np.zeros(len(valid_starts),dtype=bool)
+
+        #find rewards and align trials to them, prevent any overlapping trials
+        reward_times=rewards.query('timestamps>=@spont_start and timestamps<=@spont_end')['timestamps'].to_numpy()
+        if len(reward_times)>0:
+            #remove any valid_starts that would overlap with reward times
+            for rt in reward_times:
+                incl_idx=np.abs(valid_starts-rt)>(min_iti)
+                valid_starts=valid_starts[incl_idx]
+                is_rewarded= is_rewarded[incl_idx]
+            #add trials aligned to rewards
+            valid_starts = np.concatenate([valid_starts, reward_times])
+            is_rewarded = np.concatenate([is_rewarded, np.ones(len(reward_times), dtype=bool)])
+
+        spont_trials['start_time'].append(valid_starts)
+        spont_trials['epoch_idx'].append(np.repeat(rr,len(valid_starts)))
+        spont_trials['epoch_name'].append(np.repeat(row['script_name'],len(valid_starts)))
+        spont_trials['is_rewarded'].append(is_rewarded)
+
+    spont_trials['start_time'] = np.concatenate(spont_trials['start_time'])
+    spont_trials['epoch_idx'] = np.concatenate(spont_trials['epoch_idx'])
+    spont_trials['epoch_name'] = np.concatenate(spont_trials['epoch_name'])
+    spont_trials['is_rewarded'] =  np.concatenate(spont_trials['is_rewarded'])
+
+    return pd.DataFrame(spont_trials).sort_values('start_time').reset_index(drop=True)
+
+
+
+def generate_itis(distribution='DR',n_trials=1000,min_iti=5.5,random_seed=None):
+    #generate inter-trial intervals similar to task trial timing for DR or templeton, or fixed ITI
+
+    import random
+
+    if random_seed is not None:
+        random.seed(random_seed)
+
+    if distribution=='DR':
+        preStimFramesFixed = 90 # min frames between start of trial and stimulus onset
+        preStimFramesVariableMean = 60 # mean of additional preStim frames drawn from exponential distribution
+        preStimFramesMax = 360 # max total preStim frames
+        # quiescentFrames = 90 # frames before stim onset during which licks delay stim onset
+        responseWindow = [6,60]
+        postResponseWindowFrames = 180
+
+    elif distribution=='Templeton':
+        preStimFramesVariableMean = 30 
+        preStimFramesMax = 240
+        postResponseWindowFrames = 120
+
+    if n_trials is not None:
+        return [generate_itis(distribution=distribution,min_iti=min_iti) for _ in range(n_trials)]
+    else:
+        if distribution == 'same':
+            trial_total_length = min_iti
+        else:
+            val = preStimFramesFixed + random.expovariate(1/preStimFramesVariableMean) if preStimFramesVariableMean > 1 else preStimFramesFixed + preStimFramesVariableMean
+            trial_total_length = (int(min(val,preStimFramesMax)) + responseWindow[1] + postResponseWindowFrames)/60 #in seconds
+
+        return trial_total_length
+    
 
 def load_facemap_data(session,session_info=None,trials=None,vid_angle=None,keep_n_SVDs=500,use_s3=True):
     # function to load facemap data from s3 or local cache
