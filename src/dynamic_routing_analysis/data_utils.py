@@ -106,7 +106,7 @@ def generate_spontaneous_trials_table(session_id,distribution='DR',n_trials=1000
 
 
 
-def generate_itis(distribution='DR',n_trials=1000,min_iti=5.5,random_seed=None):
+def generate_itis(distribution='DR',n_trials=None,min_iti=5.5,random_seed=None):
     #generate inter-trial intervals similar to task trial timing for DR or templeton, or fixed ITI
 
     import random
