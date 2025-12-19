@@ -67,6 +67,7 @@ def generate_spontaneous_trials_table(session_id,distribution='DR',n_trials=1000
         'trial_index':[],
         'session_id':[],
         'start_time':[],
+        'stop_time':[], #equals start_time + min_iti
         'epoch_idx':[],
         'epoch_name':[],
         'is_rewarded':[]
@@ -102,6 +103,7 @@ def generate_spontaneous_trials_table(session_id,distribution='DR',n_trials=1000
 
     spont_trials['session_id'] = np.concatenate(spont_trials['session_id'])
     spont_trials['start_time'] = np.concatenate(spont_trials['start_time'])
+    spont_trials['stop_time'] = spont_trials['start_time'] + min_iti
     spont_trials['epoch_idx'] = np.concatenate(spont_trials['epoch_idx'])
     spont_trials['epoch_name'] = np.concatenate(spont_trials['epoch_name'])
     spont_trials['is_rewarded'] =  np.concatenate(spont_trials['is_rewarded'])
