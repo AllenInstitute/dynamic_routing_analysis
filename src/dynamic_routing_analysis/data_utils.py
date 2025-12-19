@@ -64,6 +64,7 @@ def generate_spontaneous_trials_table(session_id,distribution='DR',n_trials=1000
         raise ValueError(f'No spontaneous epochs found for session {session_id}')
     
     spont_trials={
+        'trial_index':[],
         'session_id':[],
         'start_time':[],
         'epoch_idx':[],
@@ -104,6 +105,7 @@ def generate_spontaneous_trials_table(session_id,distribution='DR',n_trials=1000
     spont_trials['epoch_idx'] = np.concatenate(spont_trials['epoch_idx'])
     spont_trials['epoch_name'] = np.concatenate(spont_trials['epoch_name'])
     spont_trials['is_rewarded'] =  np.concatenate(spont_trials['is_rewarded'])
+    spont_trials['trial_index'] = np.arange(len(spont_trials['start_time']))
 
     return pd.DataFrame(spont_trials).sort_values('start_time').reset_index(drop=True)
 
