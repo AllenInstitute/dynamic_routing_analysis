@@ -64,6 +64,7 @@ def generate_spontaneous_trials_table(session_id,distribution='DR',n_trials=1000
         raise ValueError(f'No spontaneous epochs found for session {session_id}')
     
     spont_trials={
+        'session_id':[],
         'start_time':[],
         'epoch_idx':[],
         'epoch_name':[],
@@ -92,11 +93,13 @@ def generate_spontaneous_trials_table(session_id,distribution='DR',n_trials=1000
             valid_starts = np.concatenate([valid_starts, reward_times])
             is_rewarded = np.concatenate([is_rewarded, np.ones(len(reward_times), dtype=bool)])
 
+        spont_trials['session_id'].append(np.repeat(session_id,len(valid_starts)))
         spont_trials['start_time'].append(valid_starts)
         spont_trials['epoch_idx'].append(np.repeat(rr,len(valid_starts)))
         spont_trials['epoch_name'].append(np.repeat(row['script_name'],len(valid_starts)))
         spont_trials['is_rewarded'].append(is_rewarded)
 
+    spont_trials['session_id'] = np.concatenate(spont_trials['session_id'])
     spont_trials['start_time'] = np.concatenate(spont_trials['start_time'])
     spont_trials['epoch_idx'] = np.concatenate(spont_trials['epoch_idx'])
     spont_trials['epoch_name'] = np.concatenate(spont_trials['epoch_name'])
