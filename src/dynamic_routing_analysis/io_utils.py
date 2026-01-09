@@ -142,7 +142,7 @@ class RunParams:
         """Validation logic to ensure parameters are consistent."""
 
         if self.run_params["time_of_interest"] not in ['trial', 'full_trial', 'spontaneous_trial',
-                                                        'quiescent', 'spontaneous_quiescent',
+                                                        'quiescent', 'spontaneous_quiescent', 'quiescent_spontaneous',
                                                         'full_spontaneous',
                                                         'full']:
             raise ValueError(f"Invalid time_of_interest: {self.run_params['time_of_interest']}")
@@ -1105,6 +1105,10 @@ def bin_timeseries(x, x_timestamps, timebins_all):
             binned[t_i] = np.nanmean(x[indices])
         elif t_i > 0:  # Propagate previous value
             binned[t_i] = binned[t_i - 1]
+
+    # if sampling rate of x is lower than timebins_all, fill remaining NaNs with last valid value
+    if np.isnan(binned).any():
+        binned = pd.Series(binned).ffill().bfill().to_numpy()
     return binned
 
 
