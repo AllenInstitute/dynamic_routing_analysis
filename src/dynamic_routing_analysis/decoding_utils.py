@@ -41,7 +41,7 @@ def dump_dict_to_zarr(group, data):
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                    crossval_index=None,labels_as_index=False,train_test_split_input=None,
                    regularization=None,penalty=None,solver=None,n_jobs=None,set_random_state=None,
-                   other_data=None):
+                   other_data=None,scaler='robust'):
     
     #helper function to decode labels from input data using different decoder models
 
@@ -97,8 +97,10 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
     output={}
 
-    # scaler = StandardScaler()
-    scaler = RobustScaler()
+    if scaler == 'standard':
+        scaler = StandardScaler()
+    elif scaler == 'robust':
+        scaler = RobustScaler()
 
     scaler.fit(input_data)
     X = scaler.transform(input_data)
