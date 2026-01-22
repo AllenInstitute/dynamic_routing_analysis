@@ -10,7 +10,7 @@ import upath
 import zarr
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import StratifiedKFold
-from sklearn.preprocessing import RobustScaler
+from sklearn.preprocessing import RobustScaler, StandardScaler
 
 from dynamic_routing_analysis import data_utils, spike_utils
 
