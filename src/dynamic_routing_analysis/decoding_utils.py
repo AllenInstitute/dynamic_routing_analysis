@@ -102,15 +102,22 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     elif scaler == 'robust':
         scaler = RobustScaler()
 
-    scaler.fit(input_data)
-    X = scaler.transform(input_data)
+    if scaler == 'none':
+        X = input_data
+    else:
+        scaler.fit(input_data)
+        X = scaler.transform(input_data)
+
     unique_labels=np.unique(labels)
     if labels_as_index==True:
         labels=np.array([np.where(unique_labels==x)[0][0] for x in labels])
     y = labels
 
     if other_data is not None:
-        X_other = scaler.transform(other_data)
+        if scaler == 'none':
+            X_other = other_data
+        else:
+            X_other = scaler.transform(other_data)
 
     if len(np.unique(labels))>2:
         y_dec_func=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
