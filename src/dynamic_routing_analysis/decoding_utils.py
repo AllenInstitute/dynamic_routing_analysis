@@ -1,3 +1,10 @@
+"""Utilities for decoding neural activity.
+
+This module provides functions and utilities for training and evaluating
+machine learning models to decode behavioral or task variables from neural
+activity patterns.
+"""
+
 import gc
 import logging
 import pickle
@@ -17,6 +24,7 @@ from dynamic_routing_analysis import data_utils, spike_utils
 logger = logging.getLogger(__name__)
 
 class NotEnoughBlocksError(Exception):
+    """Raised when there are insufficient blocks for blockwise cross-validation."""
     pass
 
 
@@ -25,6 +33,126 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                    crossval_index=None,labels_as_index=False,train_test_split_input=None,
                    regularization=None,penalty=None,solver=None,n_jobs=None,set_random_state=None,
                    other_data=None,scaler='robust'):
+    """Train and evaluate a decoder to predict labels from input data.
+    
+    This function provides a flexible interface for training various classification
+    models using different cross-validation strategies. It supports multiple decoder
+    types, scaling methods, and cross-validation approaches.
+    
+    Parameters
+    ----------
+    input_data : array-like, shape (n_samples, n_features)
+        Training data matrix where rows are samples and columns are features.
+    labels : array-like, shape (n_samples,)
+        Target labels for each sample.
+    decoder_type : str, default='linearSVC'
+        Type of decoder to use. Options:
+        - 'linearSVC': Linear Support Vector Classification
+        - 'nonlinearSVC': Non-linear SVC with RBF kernel
+        - 'LDA': Linear Discriminant Analysis
+        - 'RandomForest': Random Forest Classifier
+        - 'LogisticRegression': Logistic Regression
+    crossval : str, default='5_fold'
+        Cross-validation strategy. Options:
+        - '5_fold': 5-fold stratified cross-validation with shuffling
+        - '5_fold_constant': 5-fold with pre-defined splits
+        - '5_fold_set_random_state': 5-fold with specified random state
+        - 'blockwise': Leave-one-block-out cross-validation
+        - 'forecast_train_2': Forecast with 2 consecutive training blocks
+        - 'forecast_train_3': Forecast with 3 consecutive training blocks
+        - 'custom': User-defined train/test splits
+    crossval_index : array-like, optional
+        Block numbers for each trial, required for blockwise or forecast cross-validation.
+    labels_as_index : bool, default=False
+        If True, convert labels to integer indices.
+    train_test_split_input : list of tuples, optional
+        Pre-defined train/test splits for 'custom' or '5_fold_constant' cross-validation.
+    regularization : float, optional
+        Regularization parameter (C) for SVC and Logistic Regression.
+        If None, uses default value of 1.0.
+    penalty : str, optional
+        Penalty type ('l1' or 'l2') for LinearSVC and Logistic Regression.
+        If None, uses 'l2' as default.
+    solver : str, optional
+        Solver algorithm. Used for LDA and Logistic Regression.
+        If None, uses 'svd' for LDA and 'lbfgs' for Logistic Regression.
+    n_jobs : int, optional
+        Number of parallel jobs for Random Forest and Logistic Regression.
+    set_random_state : int, optional
+        Random state for reproducible 5-fold cross-validation.
+    other_data : array-like, shape (n_samples_other, n_features), optional
+        Additional data to predict on after training. Will be scaled using
+        the same scaler fitted on training data.
+    scaler : str, default='robust'
+        Type of feature scaling. Options:
+        - 'robust': RobustScaler (resistant to outliers)
+        - 'standard': StandardScaler (z-score normalization)
+        - 'none': No scaling
+    
+    Returns
+    -------
+    output : dict
+        Dictionary containing:
+        
+        - 'cr': Classification reports for test data (list)
+        - 'pred_label': Predicted labels from training on all data
+        - 'true_label': Original labels
+        - 'pred_label_all': Predicted labels for each cross-validation fold
+        - 'trials_used': Test trial indices for each fold
+        - 'decision_function': Decision values from cross-validation
+        - 'decision_function_all': Decision values from training on all data
+        - 'predict_proba': Predicted probabilities from cross-validation
+        - 'predict_proba_all_trials': Predicted probabilities from all data
+        - 'coefs': Model coefficients from training on all data
+        - 'coefs_all': Coefficients from each cross-validation fold
+        - 'classes': Class labels from each fold
+        - 'intercept': Model intercept
+        - 'params': Model parameters
+        - 'balanced_accuracy_test': Mean balanced accuracy on test data
+        - 'balanced_accuracy_train': Mean balanced accuracy on training data
+        - 'pred_label_train': Training predictions for each fold
+        - 'true_label_train': True training labels for each fold
+        - 'cr_train': Classification reports for training data
+        - 'train_trials': Training trial indices for each fold
+        - 'test_trials': Test trial indices for each fold
+        - 'models': Trained model objects for each fold
+        - 'scaler': Fitted scaler object
+        - 'label_names': Unique label values
+        - 'labels': Label indices
+        - 'pred_label_other': Predictions for other_data (if provided)
+        - 'decision_function_other': Decision values for other_data (if provided)
+        - 'predict_proba_other': Predicted probabilities for other_data (if provided)
+    
+    Raises
+    ------
+    ValueError
+        If required parameters for specific cross-validation methods are not provided.
+    
+    Notes
+    -----
+    - All models use balanced class weights to handle imbalanced datasets.
+    - For blockwise and forecast cross-validation, crossval_index must be provided.
+    - Not all decoders support all features (e.g., RandomForest doesn't have coef_).
+    - The function trains a final model on all data in addition to cross-validation.
+    
+    Examples
+    --------
+    >>> # Basic usage with linear SVC
+    >>> output = decoder_helper(neural_data, task_labels)
+    >>> print(f"Accuracy: {output['balanced_accuracy_test']:.3f}")
+    
+    >>> # Blockwise cross-validation
+    >>> output = decoder_helper(neural_data, task_labels, 
+    ...                        crossval='blockwise',
+    ...                        crossval_index=block_numbers)
+    
+    >>> # Using a different decoder with custom regularization
+    >>> output = decoder_helper(neural_data, task_labels,
+    ...                        decoder_type='LogisticRegression',
+    ...                        regularization=0.1,
+    ...                        penalty='l1',
+    ...                        solver='saga')
+    """
     
     #helper function to decode labels from input data using different decoder models
 
@@ -150,20 +278,6 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         for bb in block_numbers:
             not_block_inds=np.where(block_number!=bb)[0]
             train.append(not_block_inds)
-
-            # #equalize number of trials for each condition
-            # subset_ind=[]
-            # conds = np.unique(y[not_block_inds])
-            # cond_count=[]
-            # for cc in conds:
-            #     cond_count.append(np.sum(y[not_block_inds]==cc))
-            # use_trnum=np.min(cond_count)
-            # for cc in conds:
-            #     cond_inds=np.where(y[not_block_inds]==cc)[0]
-            #     subset_ind.append(np.random.choice(cond_inds,use_trnum,replace=False))
-            # subset_ind=np.sort(np.hstack(subset_ind))
-            # train.append(not_block_inds[subset_ind])
-
             block_inds=np.where(block_number==bb)[0]
             test.append(block_inds)
         train_test_split=zip(train,test)
