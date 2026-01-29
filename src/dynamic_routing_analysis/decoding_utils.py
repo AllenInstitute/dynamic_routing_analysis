@@ -30,7 +30,7 @@ class NotEnoughBlocksError(Exception):
 
 
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
-                   crossval_index=None,labels_as_index=False,train_test_split_input=None,
+                   crossval_index=None,labels_as_index=False,train_test_split_input=None,train_test_split_label=None,
                    regularization=None,penalty=None,solver=None,n_jobs=None,set_random_state=None,
                    other_data=None,scaler='robust'):
     """Train and evaluate a decoder to predict labels from input data.
@@ -67,6 +67,8 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         If True, convert labels to integer indices.
     train_test_split_input : list of tuples, optional
         Pre-defined train/test splits for 'custom' or '5_fold_constant' cross-validation.
+    train_test_split_label : string, optional
+        label to easily identify results from custom train_test_split_input
     regularization : float, optional
         Regularization parameter (C) for SVC and Logistic Regression.
         If None, uses default value of 1.0.
@@ -460,6 +462,12 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     output['scaler']=scaler
     output['label_names']=unique_labels
     output['labels']=labels
+
+    if train_test_split_input is not None:
+        output['train_test_split_input']=train_test_split_input
+
+    if train_test_split_label is not None:
+        output['train_test_split_label']=train_test_split_label
 
     #predicted labels for other data input (if provided)
     if other_data is not None:
