@@ -484,7 +484,34 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
 
 def get_multi_probe_expr(combine_multi_probe_rec):
-    # creates a polars expression to toggle whether to load structure results combined across probe insertions, or preserve individual probe insertion results
+    """Create a polars expression to filter multi-probe recordings.
+    
+    Generates a boolean expression that determines whether to combine results from
+    multiple probe insertions targeting the same brain structure, or to keep them
+    separate. This is useful when analyzing recordings where multiple probes recorded
+    from the same structure simultaneously.
+    
+    Parameters
+    ----------
+    combine_multi_probe_rec : bool
+        If True, combine results across probe insertions for the same structure.
+        If False, keep individual probe insertion results separate.
+    
+    Returns
+    -------
+    polars.Expr
+        A boolean polars expression that can be used to filter a DataFrame.
+        Returns True for rows that should be included based on the combination setting.
+    
+    Notes
+    -----
+    - When combine_multi_probe_rec is True, includes recordings with multiple
+      electrode groups OR recordings that are the sole recording for a structure.
+    - When combine_multi_probe_rec is False, includes only recordings with a single
+      electrode group OR recordings that are the sole recording for a structure.
+    - The 'is_sole_recording' flag identifies cases where only one probe recorded
+      from a given structure, making the combine decision irrelevant.
+    """
     if combine_multi_probe_rec:
         return pl.col('electrode_group_names').list.len().gt(1) | pl.col('is_sole_recording').eq(True)
     else:
@@ -492,7 +519,42 @@ def get_multi_probe_expr(combine_multi_probe_rec):
 
 
 def get_structure_grouping(keep_original_structure=False):
-    # structure grouping needed when merging columns from units table to decoder results
+    """Get structure grouping dictionary for consolidating brain regions.
+    
+    Returns a mapping that consolidates over-split brain structures into their
+    parent regions. This is needed because some structures were split into
+    sub-layers during processing, but should be analyzed as unified regions.
+    
+    Parameters
+    ----------
+    keep_original_structure : bool, default=False
+        If True, keep both original and grouped structure labels (n_repeats=2).
+        If False, only use grouped structure labels (n_repeats=1).
+        Note: Currently this parameter is overridden to False within the function.
+    
+    Returns
+    -------
+    structure_grouping : dict
+        Mapping from sub-structure names to parent structure names:
+        - Superior colliculus layers (SCop, SCsg, SCzo) -> 'SCs'
+        - Superior colliculus intermediate/deep layers (SCig, SCiw, SCdg, SCdw) -> 'SCm'
+        - Entorhinal cortex layers (ECT1-6) -> 'ECT'
+    n_repeats : int
+        Number of times to repeat rows when merging. 
+    
+    Notes
+    -----
+    This grouping is necessary when merging columns from the units table to
+    decoder results, ensuring consistent structure labels across datasets.
+    
+    Examples
+    --------
+    >>> grouping, n_repeats = get_structure_grouping()
+    >>> grouping['SCop']
+    'SCs'
+    >>> n_repeats
+    1
+    """
     structure_grouping = {
         'SCop': 'SCs',
         'SCsg': 'SCs',
@@ -508,7 +570,7 @@ def get_structure_grouping(keep_original_structure=False):
         "ECT6a": 'ECT', 
         "ECT4": 'ECT',
     }
-    keep_original_structure = False
+
     if keep_original_structure:
         n_repeats = 2
     else:
@@ -518,9 +580,50 @@ def get_structure_grouping(keep_original_structure=False):
 
 
 def exclude_structures_from_df(df, exclude_redundant_structures=True, exclude_general_structures=True):
-    # exclude redundant structures and/or general structures from decoder results dataframe
-    # redundant structures are those that were oversplit due to how processing code assigned structure labels
-    # general structures are those in the CCF "in between" more specific structures (or ventricles/fiber tracts). These should be excluded by default.
+    """Filter out redundant and general structures from decoder results.
+    
+    Removes structures that should not be included in analysis, either because
+    they are redundant sub-divisions of parent structures or because they represent
+    non-specific anatomical regions (e.g., fiber tracts, ventricles).
+    
+    Parameters
+    ----------
+    df : polars.DataFrame
+        Decoder results DataFrame with a 'structure' column.
+    exclude_redundant_structures : bool, default=True
+        If True, exclude structures that were over-split during processing.
+        These include superior colliculus and entorhinal cortex sub-layers that
+        should be analyzed as unified regions.
+    exclude_general_structures : bool, default=True
+        If True, exclude non-specific anatomical regions including:
+        - General parent structures (CTXsp, STR, TH, etc.)
+        - Fiber tracts and white matter
+        - Ventricles and regions outside the brain
+        - Structures with lowercase names (indicating fiber tracts)
+    
+    Returns
+    -------
+    polars.DataFrame
+        Filtered DataFrame with specified structures removed.
+    
+    Notes
+    -----
+    Redundant structures are those oversplit by the processing pipeline:
+    - Superior colliculus layers: SCop, SCsg, SCzo (superficial) and 
+      SCig, SCiw, SCdg, SCdw (intermediate/deep)
+    - Entorhinal cortex layers: ECT1, ECT2/3, ECT4, ECT5, ECT6a, ECT6b
+    
+    General structures include broad anatomical divisions and ventricles or fiber tracts:
+    - Parent structures: CTXsp, STR, PAL, TH, HY, MB, P, MY, CB
+    - Ventricles: VL, V3, V4, SEZ
+    - Fiber tracts/not in brain: fiber tracts, scwm, root, lot, out of brain, undefined
+    - Any structure name beginning with lowercase letter
+    
+    Examples
+    --------
+    >>> df_filtered = exclude_structures_from_df(df, exclude_redundant_structures=True)
+    >>> # SCop, SCsg, etc. will be removed, keeping only grouped 'SCs' and 'SCm'
+    """
     redundant_structures =['SCop', 'SCsg', 'SCzo', 'SCig', 'SCiw', 'SCdg', 'SCdw', 'ECT1', 'ECT2/3', 'ECT4', 'ECT5', 'ECT6a', 'ECT6b']
     general_structures =['CTXsp', 'STR', 'PAL', 'TH', 'HY', 'MB', 'P', 'MY', 'CB', 'VL', 'V3', 'V4', 'SEZ', 
                          'fiber tracts', 'scwm', 'root', 'lot', 'out of brain', 'undefined']
@@ -541,6 +644,51 @@ def exclude_structures_from_df(df, exclude_redundant_structures=True, exclude_ge
     return df
 
 def load_single_session_decoder_accuracy(results_path, sel_session, combine_multi_probe_rec=True):
+    """Load decoder accuracy results for a single session.
+    
+    Loads and processes decoder accuracy results from parquet files for one session,
+    including handling of multi-probe recordings and temporal shift analysis.
+    
+    Parameters
+    ----------
+    results_path : str
+        Path to parquet file(s) containing decoder results. Can be local path or S3 URI.
+    sel_session : str
+        Session ID to load (e.g., '670180_2023-07-27').
+    combine_multi_probe_rec : bool, default=True
+        If True, combine results from multiple probe insertions recording the same
+        structure. If False, keep results from each probe separate.
+    
+    Returns
+    -------
+    polars.DataFrame
+        DataFrame with columns:
+        - session_id : Session identifier
+        - structure : Brain structure name
+        - unit_subsample_size : Number of units used for decoding
+        - bin_size : Size of time bins in seconds
+        - bin_center : Center time of each bin relative to event
+        - repeat_idx : Index of repeated decoder runs
+        - balanced_accuracy_test : List of test accuracies for each temporal shift
+        - shift_idx : List of shift indices corresponding to accuracies
+        
+        Sorted by unit_subsample_size and repeat_idx.
+    
+    Notes
+    -----
+    - Filters out results where is_all_trials is True (using held-out test sets only)
+    - Groups across electrode groups when combine_multi_probe_rec=True
+    - Results are aggregated over repeat runs for each shift index
+    - shift_idx==0 corresponds to the true (aligned) temporal relationship
+    - Other shift indices represent null distributions from shuffled data
+    
+    Examples
+    --------
+    >>> df = load_single_session_decoder_accuracy(
+    ...     's3://bucket/results/', 
+    ...     '670180_2023-07-27'
+    ... )
+    """
     
     #define grouping columns
     grouping_cols = {
@@ -580,6 +728,65 @@ def load_single_session_decoder_accuracy(results_path, sel_session, combine_mult
 
 
 def load_structure_average_decoder_accuracy(results_path, session_list, combine_multi_probe_rec=True, exclude_redundant_structures=True, exclude_general_structures=True):
+    """Load and average decoder accuracy across sessions for each brain structure.
+    
+    Computes structure-wise mean decoding accuracies by aggregating results across
+    sessions. Separates aligned (true) accuracies from null distributions obtained
+    via linear shifting trials.
+    
+    Parameters
+    ----------
+    results_path : str
+        Path to parquet file(s) containing decoder results. Can be local path or S3 URI.
+    session_list : list of str
+        List of session IDs to include in analysis.
+    combine_multi_probe_rec : bool, default=True
+        If True, combine results from multiple probe insertions recording the same
+        structure. If False, keep results from each probe separate.
+    exclude_redundant_structures : bool, default=True
+        If True, exclude over-split structures (e.g., superior colliculus sub-layers).
+    exclude_general_structures : bool, default=True
+        If True, exclude general anatomical regions and non-neural tissue.
+    
+    Returns
+    -------
+    polars.DataFrame
+        DataFrame with structure-averaged metrics:
+        - structure : Brain structure name
+        - unit_subsample_size : Number of units used for decoding
+        - bin_size : Size of time bins in seconds
+        - bin_center : Center time of each bin relative to event
+        - mean_true : Mean aligned decoding accuracy across sessions
+        - sem_true : Standard error of mean for true accuracy
+        - median_null : Mean of median null accuracies across sessions
+        - sem_null : Standard error for null accuracy
+        - mean_diff : Mean difference (true - null) across sessions
+        - sem_diff : Standard error for the difference
+        - num_sessions : Number of sessions contributing to each average
+        
+        Sorted by mean_diff in descending order.
+    
+    Notes
+    -----
+    Processing pipeline:
+    1. Filters to specified sessions and multi-probe handling
+    2. Averages over repeated unit resampling and decoder runs for each recording
+    3. Separates aligned results (shift_idx==0) from null (shift_idx!=0)
+    4. Computes median null accuracy for each recording
+    5. Calculates true - null difference
+    6. Averages across sessions and computes SEM
+    
+    Structures are retained only if at least one session has data for that
+    structure and unit subsample size combination.
+    
+    Examples
+    --------
+    >>> df = load_structure_average_decoder_accuracy(
+    ...     's3://bucket/results/',
+    ...     ['session_id_1', 'session_id_2'],
+    ...     combine_multi_probe_rec=True
+    ... )
+    """
 
     #define grouping columns
     grouping_cols = {
@@ -654,6 +861,79 @@ def load_session_wise_decoder_accuracy(
         results_path, session_list, session_table, 
         combine_multi_probe_rec=True, keep_original_structure=False, 
         exclude_redundant_structures=True, exclude_general_structures=True):
+    """Load decoder accuracy with session-level metadata.
+    
+    Loads decoder results for multiple sessions and enriches them with behavioral
+    and recording metadata from the session table, including unit counts,
+    cross-modal d-prime, and block level behavior metrics.
+    
+    Parameters
+    ----------
+    results_path : str
+        Path to parquet file(s) containing decoder results. Can be local path or S3 URI.
+    session_list : list of str
+        List of session IDs to include in analysis.
+    session_table : polars.DataFrame or polars.LazyFrame
+        DataFrame containing session-level metadata. Must include columns:
+        - session_id
+        - n_passing_blocks
+        - cross_modality_dprime_vis_blocks
+        - cross_modality_dprime_aud_blocks
+    combine_multi_probe_rec : bool, default=True
+        If True, combine results from multiple probe insertions recording the same
+        structure. If False, keep results from each probe separate.
+    keep_original_structure : bool, default=False
+        If True, keep both original sub-structure labels and grouped parent structures.
+        Currently not fully implemented (overridden to False in get_structure_grouping).
+    exclude_redundant_structures : bool, default=True
+        If True, exclude over-split structures (e.g., superior colliculus sub-layers).
+    exclude_general_structures : bool, default=True
+        If True, exclude general anatomical regions and non-neural tissue.
+    
+    Returns
+    -------
+    polars.DataFrame
+        DataFrame with session-wise decoder metrics and metadata:
+        - session_id : Session identifier
+        - structure : Brain structure name
+        - unit_subsample_size : Number of units used for decoding
+        - bin_size : Size of time bins in seconds
+        - bin_center : Center time of each bin relative to event
+        - mean_true : Aligned decoding accuracy for this session
+        - median_null : Median null accuracy from temporal shuffles
+        - mean_diff : Difference (true - null) for this session
+        - balanced_accuracy_test : List of accuracies for each temporal shift
+        - shift_idx : List of shift indices
+        - total_n_units : Total number of units recorded in this structure
+        - n_passing_blocks : Number of behavioral blocks meeting quality criteria (cross modal dprime>=1)
+        - cross_modality_dprime_vis_blocks : Visual context discrimination (list)
+        - cross_modality_dprime_aud_blocks : Auditory context discrimination (list)
+        
+        Sorted by session_id, structure, and unit_subsample_size.
+    
+    Notes
+    -----
+    Processing pipeline:
+    1. Loads decoder results and filters to specified sessions
+    2. Joins with consolidated units table to get total_n_units per structure
+    3. Applies structure grouping to consolidate over-split regions
+    4. Joins with session_table to add behavioral metrics
+    5. Averages over repeated decoder runs
+    6. Separates aligned (shift_idx==0) from null results
+    7. Computes true - null difference for each session
+    
+    The total_n_units reflects the full population recorded from each structure,
+    not just the subsampled units used for decoding.
+    
+    Examples
+    --------
+    >>> session_table = pl.read_parquet('session_metadata.parquet')
+    >>> df = load_session_wise_decoder_accuracy(
+    ...     's3://bucket/results/',
+    ...     ['session1', 'session2'],
+    ...     session_table
+    ... )
+    """
 
     #define grouping columns
     grouping_cols = {
@@ -754,6 +1034,54 @@ def load_session_wise_decoder_accuracy(
 
 
 def get_average_session_structure_ccf_coords(results_session_df,all_units_table_path=None):
+    """Calculate average CCF coordinates for each session-structure combination.
+    
+    Computes the mean Allen Institute Common Coordinate Framework (CCF) coordinates
+    for recorded units in each brain structure for each session. This provides
+    spatial localization information for decoder results.
+    
+    Parameters
+    ----------
+    results_session_df : pandas.DataFrame or polars.DataFrame
+        Session-wise decoder results DataFrame. Must contain columns:
+        - session_id : Session identifier
+        - structure : Brain structure name
+    all_units_table_path : str, optional
+        Path to consolidated units table parquet file containing CCF coordinates.
+        If None, uses default path:
+        's3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet'
+    
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with average CCF coordinates:
+        - session_id : Session identifier
+        - structure : Brain structure name  
+        - ccf_dv : Mean dorsal-ventral coordinate (µm from dorsal surface)
+        - ccf_ml : Mean medial-lateral coordinate (µm from midline)
+        - ccf_ap : Mean anterior-posterior coordinate (µm from bregma)
+    
+    Notes
+    -----
+    - Coordinates are averaged across all units recorded in each structure
+    - Special handling for superior colliculus sub-regions:
+      * 'SCs' queries for 'SCop|SCsg|SCzo' (superficial layers)
+      * 'SCm' queries for 'SCig|SCiw|SCdg|SCdw' (intermediate/deep layers)
+    - NaN values in unit coordinates are handled with np.nanmean
+    - Input DataFrame will be converted to pandas if provided as polars
+    
+    Raises
+    ------
+    ValueError
+        If results_session_df is not a pandas or polars DataFrame.
+    
+    Examples
+    --------
+    >>> coords_df = get_average_session_structure_ccf_coords(results_df)
+    >>> # Plot decoding accuracy vs anatomical location
+    >>> merged = results_df.merge(coords_df, on=['session_id', 'structure'])
+    >>> plt.scatter(merged['ccf_ap'], merged['mean_diff'])
+    """
 
     if type(results_session_df) == pd.DataFrame or type(results_session_df) == pl.DataFrame:
         if type(results_session_df) == pl.DataFrame:
