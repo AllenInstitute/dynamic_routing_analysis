@@ -654,7 +654,7 @@ def load_single_session_decoder_accuracy(results_path, sel_session, combine_mult
     results_path : str
         Path to parquet file(s) containing decoder results. Can be local path or S3 URI.
     sel_session : str
-        Session ID to load (e.g., '670180_2023-07-27').
+        Session ID to load (e.g., '742903_2024-10-22').
     combine_multi_probe_rec : bool, default=True
         If True, combine results from multiple probe insertions recording the same
         structure. If False, keep results from each probe separate.
@@ -686,7 +686,7 @@ def load_single_session_decoder_accuracy(results_path, sel_session, combine_mult
     --------
     >>> df = load_single_session_decoder_accuracy(
     ...     's3://bucket/results/', 
-    ...     '670180_2023-07-27'
+    ...     '742903_2024-10-22'
     ... )
     """
     
@@ -870,7 +870,7 @@ def load_session_wise_decoder_accuracy(
     Parameters
     ----------
     results_path : str
-        Path to parquet file(s) containing decoder results. Can be local path or S3 URI.
+        Path to parquet file(s) containing decoder results. Can be local path or S3.
     session_list : list of str
         List of session IDs to include in analysis.
     session_table : polars.DataFrame or polars.LazyFrame
@@ -884,7 +884,6 @@ def load_session_wise_decoder_accuracy(
         structure. If False, keep results from each probe separate.
     keep_original_structure : bool, default=False
         If True, keep both original sub-structure labels and grouped parent structures.
-        Currently not fully implemented (overridden to False in get_structure_grouping).
     exclude_redundant_structures : bool, default=True
         If True, exclude over-split structures (e.g., superior colliculus sub-layers).
     exclude_general_structures : bool, default=True
@@ -900,9 +899,9 @@ def load_session_wise_decoder_accuracy(
         - bin_size : Size of time bins in seconds
         - bin_center : Center time of each bin relative to event
         - mean_true : Aligned decoding accuracy for this session
-        - median_null : Median null accuracy from temporal shuffles
+        - median_null : Median null accuracy from linear shifts
         - mean_diff : Difference (true - null) for this session
-        - balanced_accuracy_test : List of accuracies for each temporal shift
+        - balanced_accuracy_test : Decoder accuracy on held out test data across shifts
         - shift_idx : List of shift indices
         - total_n_units : Total number of units recorded in this structure
         - n_passing_blocks : Number of behavioral blocks meeting quality criteria (cross modal dprime>=1)
@@ -1032,6 +1031,628 @@ def load_session_wise_decoder_accuracy(
     return results_session_df
 
 
+def load_single_session_decoder_confidence(results_path, sel_session, combine_multi_probe_rec=True):
+    """Load decoder confidence (predicted probabilities) for a single session.
+    
+    Loads trial-by-trial decoder predictions and enriches them with trial metadata
+    including stimulus type, block structure, and behavioral responses. This provides
+    detailed insight into decoder performance across different task conditions.
+    
+    Parameters
+    ----------
+    results_path : str
+        Path to parquet file(s) containing decoder results. Can be local path or S3 URI.
+    sel_session : str
+        Session ID to load (e.g., '742903_2024-10-22').
+    combine_multi_probe_rec : bool, default=True
+        If True, combine results from multiple probe insertions recording the same
+        structure. If False, keep results from each probe separate.
+    
+    Returns
+    -------
+    polars.DataFrame
+        DataFrame with trial-level decoder predictions:
+        - session_id : Session identifier
+        - structure : Brain structure name
+        - bin_center : Center time of temporal bin relative to event
+        - unit_subsample_size : Number of units used for decoding
+        - repeat_idx : Index of repeated unit resample and decoder run 
+        - unit_ids : List of unit IDs used in this decoder
+        - balanced_accuracy_test : Overall decoder accuracy on held out test data
+        - total_n_units : Total units recorded in this structure
+        - predict_proba : Predict probability for each trial (list)
+        - trial_index : Trial indices (list)
+        - is_vis_rewarded : Whether visual stimuli were rewarded (list)
+        - stim_name : Stimulus identity for each trial (list)
+        - is_response : Whether animal responded (list)
+        - trial_index_in_block : Trial number within block (list)
+        - block_index : Block number (list)
+        - stim_start_time : Stimulus onset time in seconds (list)
+        - decision_function : Decision function values (if available)
+        
+        Sorted by session_id, structure, unit_subsample_size, repeat_idx, and bin_center.
+    
+    Notes
+    -----
+    - Only includes results where is_all_trials is True (using full dataset)
+    - Trial indices are taken from the 'trial_indices' column in decoder results
+    - Joins with consolidated units table to get total_n_units for each structure
+    - Joins with trials table to add task information for each trial
+    - predict_proba contains probabilities for the positive class
+    - If decision_function is present in results, it will be included in output
+    
+    Examples
+    --------
+    >>> df = load_single_session_decoder_confidence(
+    ...     's3://bucket/results/',
+    ...     '742903_2024-10-22'
+    ... )
+    """
+
+    #define grouping columns - maintain compatibility with older results
+    col_names=pl.scan_parquet(results_path)
+
+    grouping_cols = {
+        'session_id',
+        'structure',
+        'bin_center',
+        'electrode_group_names',
+        'unit_subsample_size',
+        'unit_criteria',
+        'repeat_idx', 
+        'unit_ids'
+    }
+
+    if 'labels' in col_names:
+        grouping_cols.add('labels')
+
+    final_agg_cols = {
+        'predict_proba',  
+        'trial_index', 
+        'is_vis_rewarded', 
+        'stim_name', 
+        'is_response', 
+        'trial_index_in_block', 
+        'block_index', 
+        'stim_start_time'
+    }
+
+    explode_cols={
+        'predict_proba',
+        'trial_index',
+    }
+
+    if 'decision_function' in col_names:
+        final_agg_cols.add('decision_function')
+        explode_cols.add('decision_function')
+
+    combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
+
+    decoder_confidence_with_repeats_single_session = (
+        pl.scan_parquet(results_path)
+        .with_columns(
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(grouping_cols - {'electrode_group_names'}).alias('is_sole_recording'),     
+        )
+        .filter(
+            combine_multi_probe_expr,
+            pl.col('is_all_trials'),
+            pl.col('session_id').eq(sel_session),
+        )
+        .join(
+            other=(
+                pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet')
+                .with_columns(
+                    pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
+                )
+                .group_by('session_id','structure')
+                .agg(
+                    pl.col('unit_id').len().alias('total_n_units')
+                )
+            ),
+            on=['session_id','structure'],
+            how='inner',
+        )
+        .with_columns(
+            pl.col('trial_indices').alias('trial_index')
+        )
+        .drop('shift_idx', 'is_all_trials', 'electrode_group_names', 'unit_criteria', 'is_sole_recording')
+        .explode(explode_cols)
+        .join(
+            other=(
+                pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/trials.parquet')
+                .with_columns(
+                    pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
+                )
+                .select('session_id', 'trial_index', 'is_vis_rewarded', 'stim_name', 'is_response', 'trial_index_in_block', 'block_index', 'stim_start_time',)
+            ),
+            on=['session_id','trial_index'],
+            how='inner',
+        ) 
+        .group_by(grouping_cols - {'electrode_group_names', 'unit_criteria'})
+        .agg(
+            pl.col('balanced_accuracy_test', 'total_n_units').first(),
+            pl.col(final_agg_cols),
+        )
+        .sort('session_id','structure', 'unit_subsample_size', 'repeat_idx', 'bin_center')
+        .collect()
+    )
+
+    return decoder_confidence_with_repeats_single_session
+
+def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session, combine_multi_probe_rec=True):
+    """Load decoder predictions for spontaneous (non-task) epochs in a single session.
+    
+    Applies trained decoders to spontaneous activity epochs to assess whether context 
+    representations persist outside of active task engagement.
+    
+    Parameters
+    ----------
+    results_path : str
+        Path to parquet file(s) containing decoder results. Can be local path or S3 URI.
+        Must contain 'predict_proba_spont' or 'decision_function_spont' columns.
+    sel_session : str
+        Session ID to load (e.g., '742903_2024-10-22').
+    combine_multi_probe_rec : bool, default=True
+        If True, combine results from multiple probe insertions recording the same
+        structure. If False, keep results from each probe separate.
+    
+    Returns
+    -------
+    polars.DataFrame
+        DataFrame with spontaneous epoch predictions:
+        - session_id : Session identifier
+        - structure : Brain structure name
+        - bin_center : Center time of temporal bin relative to event
+        - unit_subsample_size : Number of units used for decoding
+        - repeat_idx : Index of repeated decoder run
+        - unit_ids : List of unit IDs used in this decoder
+        - balanced_accuracy_test : Test accuracy on task trials
+        - total_n_units : Total units recorded in this structure
+        - predict_proba_spont : Predicted probabilities for spontaneous epochs (list)
+        - trial_index : Pseudo-trial indices for spontaneous epochs (list)
+        - pred_label_spont : Predicted labels for spontaneous epochs (list)
+        - spont_trial_times : Time stamps for spontaneous epochs (list)
+        - spont_epoch_name : Epoch type (i.e., 'Spontaneous') (list)
+        - spont_trial_is_rewarded : Whether a free reward was delivered on this trial (list)
+        - decision_function_spont : Decision values (if available)
+        
+        Sorted by session_id, structure, unit_subsample_size, repeat_idx, and bin_center.
+    
+    Raises
+    ------
+    ValueError
+        If neither 'predict_proba_spont' nor 'decision_function_spont' columns are
+        found in the results file.
+    
+    Notes
+    -----
+    - Spontaneous epochs are occur outside of the task epoch
+    - trial_index is generated as a sequential index, not linked to actual trials
+    - spont_trial_is_rewarded indicates whether a free reward was delivered during this spontaneous epoch
+    - Decoders are trained on task trials, then applied to spontaneous periods
+    
+    Examples
+    --------
+    >>> df = load_single_session_decoder_confidence_spont_epoch(
+    ...     's3://bucket/results/',
+    ...     '742903_2024-10-22'
+    ... )
+    """
+
+    #define grouping columns - maintain compatibility with older results
+    col_names=pl.scan_parquet(results_path)
+
+    if 'predict_proba_spont' not in col_names and 'decision_function_spont' not in col_names:
+        raise ValueError("Neither 'predict_proba_spont' nor 'decision_function_spont' columns found in the results. Please check the results file for the expected columns.")
+
+    grouping_cols = {
+        'session_id',
+        'structure',
+        'bin_center',
+        'electrode_group_names',
+        'unit_subsample_size',
+        'unit_criteria',
+        'repeat_idx', 
+        'unit_ids'
+    }
+
+    if 'labels' in col_names:
+        grouping_cols.add('labels')
+
+    final_agg_cols = {
+        'predict_proba_spont',  
+        'trial_index',
+        'pred_label_spont',
+        'spont_trial_times',
+        'spont_epoch_name',
+        'spont_trial_is_rewarded'
+    }
+
+    explode_cols={
+        'predict_proba_spont',
+        'trial_index',
+        'pred_label_spont',
+        'spont_trial_times',
+        'spont_epoch_name',
+        'spont_trial_is_rewarded',
+    }
+
+    if 'decision_function_spont' in col_names:
+        final_agg_cols.add('decision_function_spont')
+        explode_cols.add('decision_function_spont')
+
+    combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
+
+    decoder_confidence_with_repeats_single_session_spontaneous = (
+        pl.scan_parquet(results_path)
+        .with_columns(
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(grouping_cols - {'electrode_group_names'}).alias('is_sole_recording'),
+        )
+        .filter(
+            combine_multi_probe_expr,
+            pl.col('is_all_trials'),
+            pl.col('session_id').eq(sel_session),
+        )#.drop('unit_ids') 
+        # .sort('session_id', descending=True)
+        .join(
+            other=(
+                pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet')
+                .with_columns(
+                    pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
+                )
+                .group_by('session_id','structure')
+                .agg(
+                    pl.col('unit_id').len().alias('total_n_units')
+                )
+            ),
+            on=['session_id','structure'],
+            how='inner',
+        )
+        .with_columns(
+            pl.int_ranges(0, pl.col('predict_proba_spont').list.len()).alias('trial_index')
+            # pl.col('trial_indices').alias('trial_index')
+        )
+        .drop('shift_idx', 'is_all_trials', 'electrode_group_names', 'unit_criteria', 'is_sole_recording')
+        .explode(explode_cols)
+        .group_by(grouping_cols - {'electrode_group_names', 'unit_criteria'})
+        .agg(
+            pl.col('balanced_accuracy_test', 'total_n_units').first(),
+            pl.col(final_agg_cols),
+        )
+        .sort('session_id','structure', 'unit_subsample_size', 'repeat_idx', 'bin_center')
+        # .group_by('session_id','structure')
+        .collect()
+    )
+
+    return decoder_confidence_with_repeats_single_session_spontaneous
+
+
+def load_session_wise_decoder_confidence(
+        results_path, session_list, combine_multi_probe_rec=True, 
+        exclude_redundant_structures=True, exclude_general_structures=True):
+    """Load decoder confidence across multiple sessions with trial-level predictions.
+    
+    Aggregates trial-by-trial decoder predictions across sessions, averaging over
+    repeated decoder runs while maintaining trial-level resolution. Useful for
+    population-level analyses of decoder confidence patterns.
+    
+    Parameters
+    ----------
+    results_path : str
+        Path to parquet file(s) containing decoder results. Can be local path or S3 URI.
+    session_list : list of str
+        List of session IDs to include in analysis.
+    combine_multi_probe_rec : bool, default=True
+        If True, combine results from multiple probe insertions recording the same
+        structure. If False, keep results from each probe separate.
+    exclude_redundant_structures : bool, default=True
+        If True, exclude over-split structures (e.g., superior colliculus sub-layers).
+    exclude_general_structures : bool, default=True
+        If True, exclude general anatomical regions and non-neural tissue.
+    
+    Returns
+    -------
+    polars.DataFrame
+        DataFrame with session-wise trial predictions:
+        - session_id : Session identifier
+        - structure : Brain structure name
+        - unit_subsample_size : Number of units used for decoding
+        - bin_center : Center time of temporal bin relative to event
+        - bin_size : Size of time bins in seconds
+        - time_aligned_to : Event to which time bins are aligned
+        - balanced_accuracy_test : Mean test accuracy across repeats
+        - predict_proba : Mean predicted probabilities across repeats (list per trial)
+        - trial_index : Trial indices (list)
+        - is_vis_rewarded : Whether visual context is rewarded (list)
+        - stim_name : Stimulus identity for each trial (list)
+        - is_response : Whether animal responded (list)
+        - trial_index_in_block : Trial number within block (list)
+        - block_index : Block number (list)
+        - stim_start_time : Stimulus onset time in seconds (list)
+        - decision_function : Mean decision values across repeats (if available)
+        
+        Sorted by session_id, structure, unit_subsample_size, and bin_center.
+    
+    Notes
+    -----
+    Processing pipeline:
+    1. Filters to specified sessions and multi-probe handling
+    2. Keeps only rows where is_all_trials is True
+    3. Explodes list columns to individual trial rows for averaging
+    4. Averages predict_proba and decision_function across repeated decoder runs
+    5. Joins with trials table to add behavioral metadata
+    6. Re-aggregates to maintain trial lists within session-structure-subsample groups
+    7. Filters out redundant and general structures
+    
+    The averaging step (step 4) reduces variability from unit subsampling while
+    preserving trial-by-trial prediction patterns.
+    
+    Examples
+    --------
+    >>> df = load_session_wise_decoder_confidence(
+    ...     's3://bucket/results/',
+    ...     ['session1', 'session2'],
+    ...     combine_multi_probe_rec=True
+    ... )
+    """
+    
+    col_names=pl.scan_parquet(results_path)
+
+    grouping_cols = {
+        'session_id',
+        'structure',
+        'bin_center',
+        'bin_size',
+        'electrode_group_names',
+        'unit_subsample_size',
+        'unit_criteria',
+        'time_aligned_to',
+    }
+
+    final_agg_cols = {
+        'predict_proba',  
+        'trial_index', 
+        'is_vis_rewarded', 
+        'stim_name', 
+        'is_response', 
+        'trial_index_in_block',
+        'block_index',
+        'stim_start_time'
+    }
+
+    explode_cols={
+        'predict_proba',
+        'trial_index',
+    }
+
+    explode_agg_expr=(
+        pl.col('balanced_accuracy_test').mean(),
+        pl.col('predict_proba').mean(),
+    )
+
+    if 'decision_function' in col_names:
+        final_agg_cols.add('decision_function')
+        explode_cols.add('decision_function')
+        explode_agg_expr += (pl.col('decision_function').mean(),)
+
+    combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
+
+    decoder_confidence_df = (
+        pl.scan_parquet(results_path,extra_columns='ignore')
+        .filter(
+            pl.col('session_id').is_in(session_list),
+        )
+        #make new column that indicates whether a row is the sole recording from a structure in a session
+        .with_columns(
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(grouping_cols - {'electrode_group_names'}).alias('is_sole_recording'),     
+        )
+        #Grab only rows according to combine_multi_probe_rec toggle
+        #Grab only rows that have is_all_trials == True, only these have predict_proba
+        .filter(
+            combine_multi_probe_expr,
+            pl.col('is_all_trials'),
+        )
+        .with_columns(
+            pl.col('trial_indices').alias('trial_index')
+        )
+        .drop('shift_idx', 'is_all_trials', 'electrode_group_names', 'unit_criteria', 'is_sole_recording')
+        .explode(explode_cols)
+        .group_by('session_id', 'structure', 'unit_subsample_size', 'trial_index', 'bin_center', 'bin_size', 'time_aligned_to',)
+        .agg(explode_agg_expr)
+        .join(
+            other=(
+                pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/trials.parquet')
+                .with_columns(
+                    pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
+                    #iti column?
+                )
+                .select(
+                    'session_id', 'trial_index', 'is_vis_rewarded', 'stim_name', 'is_response', 
+                    'trial_index_in_block', 'block_index', 'stim_start_time')
+            ),
+            on=['session_id','trial_index'],
+            how='inner',
+        ) 
+        .group_by(grouping_cols - {'electrode_group_names', 'unit_criteria'})
+        .agg(
+            pl.col('balanced_accuracy_test').first(),
+            pl.col(final_agg_cols).sort_by('trial_index'),
+
+        )
+        .sort('session_id','structure', 'unit_subsample_size', 'bin_center')
+        .collect(engine='streaming')
+    )
+
+    decoder_confidence_df = exclude_structures_from_df(
+        decoder_confidence_df, 
+        exclude_redundant_structures=exclude_redundant_structures, 
+        exclude_general_structures=exclude_general_structures
+    )
+
+    return decoder_confidence_df
+
+
+def load_session_wise_decoder_confidence_spont_epoch(
+        results_path, session_list, combine_multi_probe_rec=True, 
+        exclude_redundant_structures=True, exclude_general_structures=True):
+    """Load decoder predictions for spontaneous epochs across multiple sessions.
+    
+    Aggregates decoder predictions during spontaneous (non-task) periods across
+    sessions, averaging over repeated decoder runs. Enables population-level analyses
+    of context representations during spontaneous activity.
+    
+    Parameters
+    ----------
+    results_path : str
+        Path to parquet file(s) containing decoder results. Can be local path or S3 URI.
+        Must contain 'predict_proba_spont' or 'decision_function_spont' columns.
+    session_list : list of str
+        List of session IDs to include in analysis.
+    combine_multi_probe_rec : bool, default=True
+        If True, combine results from multiple probe insertions recording the same
+        structure. If False, keep results from each probe separate.
+    exclude_redundant_structures : bool, default=True
+        If True, exclude over-split structures (e.g., superior colliculus sub-layers).
+    exclude_general_structures : bool, default=True
+        If True, exclude general anatomical regions and non-neural tissue.
+    
+    Returns
+    -------
+    polars.DataFrame
+        DataFrame with session-wise spontaneous epoch predictions:
+        - session_id : Session identifier
+        - structure : Brain structure name
+        - unit_subsample_size : Number of units used for decoding
+        - bin_center : Center time of temporal bin relative to event
+        - bin_size : Size of time bins in seconds
+        - time_aligned_to : Event to which time bins are aligned
+        - spont_trial_times : Time stamps for spontaneous epochs (list)
+        - spont_epoch_name : Epoch type (e.g., 'Spontaneous') (list)
+        - spont_trial_is_rewarded : Context during spontaneous epoch (list)
+        - predict_proba_spont : Mean predicted probabilities across repeats (list)
+        - trial_index : Pseudo-trial indices (list)
+        - decision_function_spont : Mean decision values across repeats (if available)
+        
+        Sorted by session_id, structure, unit_subsample_size, bin_center, bin_size,
+        and time_aligned_to.
+    
+    Raises
+    ------
+    ValueError
+        If neither 'predict_proba_spont' nor 'decision_function_spont' columns are
+        found in the results file.
+    
+    Notes
+    -----
+    Processing pipeline:
+    1. Filters to specified sessions and multi-probe handling
+    2. Keeps only rows where is_all_trials is True
+    3. Generates sequential trial_index for spontaneous epochs
+    4. Explodes list columns to individual epoch rows
+    5. Averages predict_proba_spont and decision_function_spont across repeats
+    6. Re-aggregates to lists within session-structure-subsample groups
+    7. Filters out redundant and general structures
+    
+    Drops several columns not relevant to spontaneous analysis including:
+    - Regular task predictions (predict_proba, decision_function)
+    - Training metrics (balanced_accuracy_train)
+    - Unit identifiers (unit_ids)
+    - Model coefficients (coefs)
+    
+    Examples
+    --------
+    >>> df = load_session_wise_decoder_confidence_spont_epoch(
+    ...     's3://bucket/results/',
+    ...     ['session1', 'session2']
+    ... )
+    """
+
+    #define grouping columns - maintain compatibility with older results
+    col_names=pl.scan_parquet(results_path)
+
+    if 'predict_proba_spont' not in col_names and 'decision_function_spont' not in col_names:
+        raise ValueError("Neither 'predict_proba_spont' nor 'decision_function_spont' columns found in the results. Please check the results file for the expected columns.")
+
+    grouping_cols = {
+        'session_id',
+        'structure',
+        'bin_center',
+        'bin_size',
+        'electrode_group_names',
+        'unit_subsample_size',
+        'unit_criteria',
+        'time_aligned_to',
+    }
+
+    final_agg_cols = {
+        'predict_proba_spont',  
+        'trial_index',
+    }
+
+    explode_cols={
+        'predict_proba_spont',
+        'trial_index',
+    }
+
+    explode_agg_expr=(
+        pl.col('predict_proba_spont').mean(),
+        pl.col('spont_trial_times').first(),
+        pl.col('spont_epoch_name').first(),
+        pl.col('spont_trial_is_rewarded').first(),
+    )
+
+    if 'decision_function_spont' in col_names:
+        final_agg_cols.add('decision_function_spont')
+        explode_cols.add('decision_function_spont')
+        explode_agg_expr += (pl.col('decision_function_spont').mean(),)
+
+    combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
+
+    decoder_confidence_spont_df = (
+        pl.scan_parquet(results_path)
+        #make new column that indicates whether a row is the sole recording from a structure in a session
+        .filter(
+            pl.col('session_id').is_in(session_list),
+        )
+        .with_columns(
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(grouping_cols - {'electrode_group_names'}).alias('is_sole_recording'),     
+        )
+        #Grab only rows according to combine_multi_probe_rec toggle
+        #Grab only rows that have is_all_trials == True, only these have predict_proba
+        .filter(
+            combine_multi_probe_expr,
+            pl.col('is_all_trials'),
+        )
+        
+        .with_columns(
+            pl.int_ranges(0, pl.col('predict_proba_spont').list.len()).alias('trial_index')
+        )
+        .drop(
+            'shift_idx', 'is_all_trials', 'electrode_group_names', 'unit_criteria', 'is_sole_recording', 
+            'predict_proba', 'predict_proba_all_trials', 'decision_function', 'decision_function_all',
+            'balanced_accuracy_test','balanced_accuracy_train','unit_ids','coefs', 'trial_indices'  
+        )
+        .explode(explode_cols)
+        .group_by('session_id', 'structure', 'unit_subsample_size', 'bin_center', 'bin_size', 'time_aligned_to', 'trial_index', )
+        .agg(explode_agg_expr)
+        .group_by(grouping_cols - {'electrode_group_names', 'unit_criteria'})
+        .agg(
+            pl.col('spont_trial_times').first(),
+            pl.col('spont_epoch_name').first(),
+            pl.col('spont_trial_is_rewarded').first(),
+            pl.col(final_agg_cols).sort_by('trial_index')
+        )
+        .sort('session_id','structure', 'unit_subsample_size', 'bin_center', 'bin_size', 'time_aligned_to', )
+        .collect(engine='streaming')
+    )
+
+    decoder_confidence_df = exclude_structures_from_df(
+        decoder_confidence_spont_df, 
+        exclude_redundant_structures=exclude_redundant_structures, 
+        exclude_general_structures=exclude_general_structures
+    )
+
+    return decoder_confidence_spont_df
 
 def get_average_session_structure_ccf_coords(results_session_df,all_units_table_path=None):
     """Calculate average CCF coordinates for each session-structure combination.
