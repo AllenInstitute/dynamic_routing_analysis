@@ -942,6 +942,7 @@ def load_session_wise_decoder_accuracy(
         'unit_subsample_size',
         'bin_size',
         'bin_center',
+        'time_aligned_to',
     }
     
     combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
@@ -1018,7 +1019,7 @@ def load_session_wise_decoder_accuracy(
         .with_columns(
             pl.col('mean_true').sub(pl.col('median_null')).alias('mean_diff'),
         )
-        .sort('session_id', 'structure', 'unit_subsample_size', descending=False)
+        .sort('session_id', 'structure', 'unit_subsample_size', 'bin_center', descending=False)
         .collect()
     )
 
@@ -1031,7 +1032,7 @@ def load_session_wise_decoder_accuracy(
     return results_session_df
 
 
-def load_single_session_decoder_confidence(results_path, sel_session, combine_multi_probe_rec=True):
+def load_single_session_decoder_confidence(results_path, sel_session, combine_multi_probe_rec=True, predict_proba_alias='predict_proba'):
     """Load decoder confidence (predicted probabilities) for a single session.
     
     Loads trial-by-trial decoder predictions and enriches them with trial metadata
@@ -1047,6 +1048,9 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
     combine_multi_probe_rec : bool, default=True
         If True, combine results from multiple probe insertions recording the same
         structure. If False, keep results from each probe separate.
+    predict_proba_alias : str, default='predict_proba'
+        Column name in results that contains predicted probabilities. Default is 'predict_proba',
+        but can be overridden if a different column name is used in the results i.e. in multiclass decoding
     
     Returns
     -------
@@ -1107,7 +1111,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
         grouping_cols.add('labels')
 
     final_agg_cols = {
-        'predict_proba',  
+        predict_proba_alias,  
         'trial_index', 
         'is_vis_rewarded', 
         'stim_name', 
@@ -1118,7 +1122,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
     }
 
     explode_cols={
-        'predict_proba',
+        predict_proba_alias,
         'trial_index',
     }
 
@@ -1179,7 +1183,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
 
     return decoder_confidence_with_repeats_single_session
 
-def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session, combine_multi_probe_rec=True):
+def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session, combine_multi_probe_rec=True, predict_proba_alias='predict_proba_spont'):
     """Load decoder predictions for spontaneous (non-task) epochs in a single session.
     
     Applies trained decoders to spontaneous activity epochs to assess whether context 
@@ -1195,6 +1199,8 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
     combine_multi_probe_rec : bool, default=True
         If True, combine results from multiple probe insertions recording the same
         structure. If False, keep results from each probe separate.
+    predict_proba_alias : str, default='predict_proba_spont'
+        Column name in results that contains predicted probabilities for spontaneous epochs.
     
     Returns
     -------
@@ -1242,8 +1248,8 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
     #define grouping columns - maintain compatibility with older results
     col_names=pl.scan_parquet(results_path)
 
-    if 'predict_proba_spont' not in col_names and 'decision_function_spont' not in col_names:
-        raise ValueError("Neither 'predict_proba_spont' nor 'decision_function_spont' columns found in the results. Please check the results file for the expected columns.")
+    if predict_proba_alias not in col_names and 'decision_function_spont' not in col_names:
+        raise ValueError(f"Neither '{predict_proba_alias}' nor 'decision_function_spont' columns found in the results. Please check the results file for the expected columns.")
 
     grouping_cols = {
         'session_id',
@@ -1260,7 +1266,7 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
         grouping_cols.add('labels')
 
     final_agg_cols = {
-        'predict_proba_spont',  
+        predict_proba_alias,  
         'trial_index',
         'pred_label_spont',
         'spont_trial_times',
@@ -1269,7 +1275,7 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
     }
 
     explode_cols={
-        'predict_proba_spont',
+        predict_proba_alias,
         'trial_index',
         'pred_label_spont',
         'spont_trial_times',
@@ -1309,8 +1315,7 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
             how='inner',
         )
         .with_columns(
-            pl.int_ranges(0, pl.col('predict_proba_spont').list.len()).alias('trial_index')
-            # pl.col('trial_indices').alias('trial_index')
+            pl.int_ranges(0, pl.col(predict_proba_alias).list.len()).alias('trial_index')
         )
         .drop('shift_idx', 'is_all_trials', 'electrode_group_names', 'unit_criteria', 'is_sole_recording')
         .explode(explode_cols)
@@ -1329,7 +1334,8 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
 
 def load_session_wise_decoder_confidence(
         results_path, session_list, combine_multi_probe_rec=True, 
-        exclude_redundant_structures=True, exclude_general_structures=True):
+        exclude_redundant_structures=True, exclude_general_structures=True, 
+        predict_proba_alias='predict_proba'):
     """Load decoder confidence across multiple sessions with trial-level predictions.
     
     Aggregates trial-by-trial decoder predictions across sessions, averaging over
@@ -1349,6 +1355,8 @@ def load_session_wise_decoder_confidence(
         If True, exclude over-split structures (e.g., superior colliculus sub-layers).
     exclude_general_structures : bool, default=True
         If True, exclude general anatomical regions and non-neural tissue.
+    predict_proba_alias : str, default='predict_proba'
+        Column name for predicted probabilities.
     
     Returns
     -------
@@ -1410,7 +1418,7 @@ def load_session_wise_decoder_confidence(
     }
 
     final_agg_cols = {
-        'predict_proba',  
+        predict_proba_alias,  
         'trial_index', 
         'is_vis_rewarded', 
         'stim_name', 
@@ -1421,13 +1429,13 @@ def load_session_wise_decoder_confidence(
     }
 
     explode_cols={
-        'predict_proba',
+        predict_proba_alias,
         'trial_index',
     }
 
     explode_agg_expr=(
         pl.col('balanced_accuracy_test').mean(),
-        pl.col('predict_proba').mean(),
+        pl.col(predict_proba_alias).mean(),
     )
 
     if 'decision_function' in col_names:
@@ -1494,7 +1502,8 @@ def load_session_wise_decoder_confidence(
 
 def load_session_wise_decoder_confidence_spont_epoch(
         results_path, session_list, combine_multi_probe_rec=True, 
-        exclude_redundant_structures=True, exclude_general_structures=True):
+        exclude_redundant_structures=True, exclude_general_structures=True,
+        predict_proba_alias='predict_proba_spont'):
     """Load decoder predictions for spontaneous epochs across multiple sessions.
     
     Aggregates decoder predictions during spontaneous (non-task) periods across
@@ -1515,6 +1524,8 @@ def load_session_wise_decoder_confidence_spont_epoch(
         If True, exclude over-split structures (e.g., superior colliculus sub-layers).
     exclude_general_structures : bool, default=True
         If True, exclude general anatomical regions and non-neural tissue.
+    predict_proba_alias : str, default='predict_proba_spont'
+        Column name for predicted probabilities during spontaneous epochs.
     
     Returns
     -------
@@ -1585,17 +1596,17 @@ def load_session_wise_decoder_confidence_spont_epoch(
     }
 
     final_agg_cols = {
-        'predict_proba_spont',  
+        predict_proba_alias,  
         'trial_index',
     }
 
     explode_cols={
-        'predict_proba_spont',
+        predict_proba_alias,
         'trial_index',
     }
 
     explode_agg_expr=(
-        pl.col('predict_proba_spont').mean(),
+        pl.col(predict_proba_alias).mean(),
         pl.col('spont_trial_times').first(),
         pl.col('spont_epoch_name').first(),
         pl.col('spont_trial_is_rewarded').first(),
@@ -1625,7 +1636,7 @@ def load_session_wise_decoder_confidence_spont_epoch(
         )
         
         .with_columns(
-            pl.int_ranges(0, pl.col('predict_proba_spont').list.len()).alias('trial_index')
+            pl.int_ranges(0, pl.col(predict_proba_alias).list.len()).alias('trial_index')
         )
         .drop(
             'shift_idx', 'is_all_trials', 'electrode_group_names', 'unit_criteria', 'is_sole_recording', 
@@ -1746,3 +1757,198 @@ def get_average_session_structure_ccf_coords(results_session_df,all_units_table_
     session_structure_ccf_coords_df=pd.DataFrame(session_structure_ccf_coords)
 
     return session_structure_ccf_coords_df
+
+
+def get_session_structure_results(predict_proba_pd, sel_session, sel_structure, sel_unit_subsample_size, sel_time_aligned_to):
+    """
+    Get the results for a specific session and structure.
+    """
+   
+    if sel_unit_subsample_size=='all':
+        example_area_results=predict_proba_pd.query(f'session_id=="{sel_session}" and structure=="{sel_structure}" and \
+                                                    time_aligned_to=="{sel_time_aligned_to}" and unit_subsample_size.isna()'
+                                                    ).sort_values('bin_center').reset_index(drop=True)
+    else:
+        example_area_results=predict_proba_pd.query(f'session_id=="{sel_session}" and structure=="{sel_structure}" and \
+                                                    time_aligned_to=="{sel_time_aligned_to}" and unit_subsample_size=={sel_unit_subsample_size}'
+                                                    ).sort_values('bin_center').reset_index(drop=True)
+    #get context switches
+    is_context_switch=np.concatenate([[0],np.diff(example_area_results['is_vis_rewarded'].iloc[0])]).astype(bool)
+    context_switch_list=[]
+    for rr in range(len(example_area_results)):
+        context_switch_list.append(is_context_switch)
+    example_area_results['is_context_switch']=context_switch_list
+
+
+    return example_area_results
+
+
+def get_context_switch_table(predict_proba_pd, session_list, sel_unit_subsample_size=None, sel_time_aligned_to='stim_start_time'):
+
+    get_trials_rel_to_switch=[-3,-2,-1,0,1,2,3,4]
+
+    all_performance=pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/performance.parquet').collect().to_pandas()
+    all_trials=pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/trials.parquet').collect().to_pandas()
+
+    if sel_unit_subsample_size is None:
+        #get the first unique unit_subsample_size
+        sel_unit_subsample_size=predict_proba_pd['unit_subsample_size'].dropna().unique()[0]
+
+    context_switch_table={
+        'session_id':[],
+        'structure':[],
+        'predict_proba':[],
+        'bin_centers':[],
+        'unit_subsample_size':[],
+        'time_aligned_to':[],
+        'trial_index':[],
+        'trial_rel_to_switch':[],
+        'switch_index_in_session':[],
+        'is_response':[],
+        'is_vis_rewarded':[],
+        'is_contingent_switch':[],
+        'stim_name':[],
+        'dprime_before_switch':[],
+        'dprime_after_switch':[],
+
+
+    }
+
+    for sel_session in predict_proba_pd['session_id'].unique():
+        if sel_session not in session_list:
+            print(f"session {sel_session} not in session_list; skipping")
+            continue
+        for sel_structure in predict_proba_pd.query('session_id==@sel_session')['structure'].unique():
+
+            #get session-structure results
+            example_area_results=get_session_structure_results(predict_proba_pd, sel_session, sel_structure, sel_unit_subsample_size, sel_time_aligned_to)
+
+            predict_proba_stack=np.vstack(example_area_results['predict_proba'].values).T
+
+            session_performance=all_performance.query(f'session_id=="{sel_session}"')
+            session_trials=all_trials.query(f'session_id=="{sel_session}"')
+
+            #choose values based on their actual, not implied, trial index
+            context_switch_trial_index=session_trials.query('is_block_switch')['trial_index'].values
+            trial_index=example_area_results['trial_index'].iloc[0]
+
+            #loop through context switches
+            for ii,tt in enumerate(context_switch_trial_index):
+                # print(f"Context switch {ii} of {len(context_switch_trial_index)}")
+                # print(f"Trial {tt} of {len(example_area_results['is_context_switch'].iloc[0])}")
+                dprime_before_switch=session_performance['cross_modality_dprime'].iloc[ii]
+                dprime_after_switch=session_performance['cross_modality_dprime'].iloc[ii+1]
+
+                is_contingent_switch=session_trials['is_response'].iloc[tt]
+
+                #get the is_vis_rewarded
+                is_vis_rewarded=session_trials['is_vis_rewarded'].iloc[tt]
+
+                for t_diff in get_trials_rel_to_switch:
+
+                    adj_tt=np.where(trial_index==tt+t_diff)[0]
+                    if len(adj_tt) == 0:
+                        # print(f"session {sel_session} structure {sel_structure} ERROR:")
+                        # print("trial index not found in predict_proba stack;")
+                        # print("skipping trial")
+                        continue
+                    else:
+                        adj_tt=adj_tt[0]
+
+                    if tt+t_diff!=trial_index[adj_tt]:
+                        print('ERROR: trial index not matching!!')
+                        break
+                    
+                    if adj_tt >= predict_proba_stack.shape[0]:
+                        print(f"session {sel_session} structure {sel_structure} ERROR:")
+                        print("trial index out of bounds of predict_proba stack;")
+                        print("skipping trial")
+                        continue
+                        
+                    #get trial from predict_proba_stack
+                    predict_proba_values=predict_proba_stack[adj_tt,:]
+
+                    #get the bin center of the trial
+                    bin_centers=example_area_results['bin_center'].values
+
+                    #get the is_response
+                    is_response=example_area_results['is_response'].iloc[0][adj_tt]
+
+                    #get the stim_name
+                    stim_name=example_area_results['stim_name'].iloc[0][adj_tt]
+
+                    #append to the context switch table
+                    context_switch_table['session_id'].append(sel_session)
+                    context_switch_table['structure'].append(sel_structure)
+                    context_switch_table['predict_proba'].append(predict_proba_values)
+                    context_switch_table['bin_centers'].append(bin_centers)
+                    context_switch_table['unit_subsample_size'].append(sel_unit_subsample_size)
+                    context_switch_table['time_aligned_to'].append(sel_time_aligned_to)
+                    context_switch_table['trial_index'].append(trial_index[adj_tt])
+                    context_switch_table['trial_rel_to_switch'].append(t_diff)
+                    context_switch_table['switch_index_in_session'].append(ii)
+                    context_switch_table['is_response'].append(is_response)
+                    context_switch_table['is_vis_rewarded'].append(is_vis_rewarded)
+                    context_switch_table['is_contingent_switch'].append(is_contingent_switch)
+                    context_switch_table['stim_name'].append(stim_name)
+                    context_switch_table['dprime_before_switch'].append(dprime_before_switch)
+                    context_switch_table['dprime_after_switch'].append(dprime_after_switch)
+
+    context_switch_table=pd.DataFrame(context_switch_table)
+    context_switch_table['bin_centers']=context_switch_table['bin_centers'].round(4)
+
+    delta_predict_proba_2_bins=[]
+    delta_predict_proba_3_bins=[]
+
+    for ii, rr in context_switch_table.iterrows():
+        
+        # get the predict proba for the trial
+        predict_proba_trial = np.array(rr['predict_proba'])
+
+        delta_2_bins=predict_proba_trial[-2:].mean() - predict_proba_trial[:2].mean()
+        delta_predict_proba_2_bins.append(delta_2_bins)
+
+        delta_3_bins=predict_proba_trial[-3:].mean() - predict_proba_trial[:3].mean()
+        delta_predict_proba_3_bins.append(delta_3_bins)
+
+    context_switch_table['delta_predict_proba_2_bins'] = delta_predict_proba_2_bins
+    context_switch_table['delta_predict_proba_3_bins'] = delta_predict_proba_3_bins
+
+    return context_switch_table
+
+
+#subtract blockwise means
+def subtract_blockwise_mean(input, block_indices):
+    adjusted_input = np.zeros_like(input)
+    unique_blocks = np.unique(block_indices)
+    for block in unique_blocks:
+        block_mask = (block_indices == block)
+        block_mean = np.mean(input[block_mask])
+        adjusted_input[block_mask] = input[block_mask] - block_mean
+    return adjusted_input
+
+#flip aud blocks
+def flip_auditory_blocks(input, block_indices, is_vis_rewarded, input_type=None):
+    adjusted_input = input.copy()
+    unique_blocks = np.unique(block_indices)
+    for block in unique_blocks:
+        block_mask = (block_indices == block)
+        if input_type=='predict_proba':
+            if not is_vis_rewarded[block_mask].all():
+                adjusted_input[block_mask] = 1.0 - input[block_mask]
+        elif input_type=='decision_function':
+            if not is_vis_rewarded[block_mask].all():
+                adjusted_input[block_mask] = -input[block_mask]
+        else:
+            print('ERROR: must provide input type: predict_proba or decision_function')
+            raise NotImplementedError
+    return adjusted_input
+
+#exclude is instruction
+def exclude_instruction_trials(input, is_instruction_trial):
+    adjusted_input = input.copy()
+    adjusted_input[is_instruction_trial] = np.nan
+    return adjusted_input
+
+
+
