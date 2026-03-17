@@ -177,12 +177,13 @@ def define_kernels(run_params):
     input_variables = run_params.get('input_variables', [])
 
     # Choose input variables based on 'time_of_interest'
+    context_var = 'context' if not run_params['use_context_belief'] else 'context_belief'
     if not input_variables:
         if 'trial' in time_of_interest or time_of_interest == 'full':
-            selected_keys = categories['stimulus'] + categories['movements'] + categories['choice'] + ['context',
-                                                                                                    'session_time']
+            selected_keys = categories['stimulus'] + categories['movements'] + categories['choice']\
+                 + [context_var]  +['session_time']
         elif 'quiescent' in time_of_interest:
-            selected_keys = categories['movements_no_licks'] + ['context', 'session_time'] + categories['choice']
+            selected_keys = categories['movements_no_licks'] + [context_var, 'session_time'] + categories['choice']
             for choice in categories['choice']:
                 master_kernels_list[choice]['length'] = run_params['quiescent_stop_time'] - run_params['quiescent_start_time']
                 master_kernels_list[choice]['offset'] = -master_kernels_list[choice]['length']
@@ -261,8 +262,6 @@ def define_kernels(run_params):
     # update which context kernel to use based on project
     if run_params['project'].lower() == 'templeton' and 'context' in run_params['input_variables']:
         kernels['context']['function_call'] = 'context_templeton'
-    elif run_params['use_context_belief'] and 'context' in run_params['input_variables']:
-        kernels['context']['function_call'] = 'context_belief'
 
     run_params['kernels'] = kernels
 
