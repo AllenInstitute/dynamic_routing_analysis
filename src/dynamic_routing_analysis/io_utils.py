@@ -722,7 +722,7 @@ def context(kernel_name, session, fit, behavior_info):
 def context_belief(kernel_name, session, fit, behavior_info):
 
     def get_context_belief_vals(session_id):
-        context_belief_vals = np.load('/root/capsule/data/context_belief.npy', allow_pickle=True).item()
+        context_belief_vals = np.load('/root/capsule/data/context_belief/context_belief.npy', allow_pickle=True).item()
         mouse_id = session_id.split('_')[0]
         sessiondate = session_id.split('-')[1].replace('-', '')
         context_belief_mouse = context_belief_vals[mouse_id]
