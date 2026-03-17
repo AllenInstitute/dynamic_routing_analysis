@@ -261,6 +261,8 @@ def define_kernels(run_params):
     # update which context kernel to use based on project
     if run_params['project'].lower() == 'templeton' and 'context' in run_params['input_variables']:
         kernels['context']['function_call'] = 'context_templeton'
+    elif run_params['use_context_belief'] and 'context' in run_params['input_variables']:
+        kernels['context']['function_call'] = 'context_belief'
 
     run_params['kernels'] = kernels
 
