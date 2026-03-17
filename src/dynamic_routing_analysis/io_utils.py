@@ -70,6 +70,8 @@ master_kernels_list = {
                     'orthogonalize': None, 'num_weights': None, 'shuffle': False, 'shift': False, 'text': 'lick to NO-GO trial'},
     'context': {'function_call': 'context', 'type': 'discrete', 'length': 0, 'offset': 0, 'orthogonalize': None,
                 'num_weights': None, 'shuffle': False, 'shift': False, 'text': 'block-wise context'},
+    'context_belief': {'function_call': 'context_belief', 'type': 'continuous', 'length': 0, 'offset': 0, 'orthogonalize': None,
+                        'num_weights': None, 'shuffle': False, 'shift': False, 'text': 'RL model-estimated belief about current context'},
     'session_time': {'function_call': 'session_time', 'type': 'continuous', 'length': 0, 'offset': 0,
                         'orthogonalize': None, 'num_weights': None, 'shuffle': False, 'shift': False,
                         'text': 'z-scored time in session'}
@@ -715,6 +717,26 @@ def context(kernel_name, session, fit, behavior_info):
             trial_no = int(''.join(filter(str.isdigit, epoch)))
             this_kernel[n] = 1 if behavior_info['trials'].loc[trial_no, 'is_vis_rewarded'] else -1
 
+    return this_kernel
+
+def context_belief(kernel_name, session, fit, behavior_info):
+
+    def get_context_belief_vals(session_id):
+        context_belief_vals = np.load('/root/capsule/data/context_belief.npy', allow_pickle=True).item()
+        mouse_id = session_id.split('_')[0]
+        sessiondate = session_id.split('-')[1].replace('-', '')
+        context_belief_mouse = context_belief_vals[mouse_id]
+        session_key = [key for key in context_belief_mouse.keys() if sessiondate in key]
+        return context_belief_mouse[session_key[0]]
+
+    context_belief = get_context_belief_vals(session.id)
+    this_kernel = np.zeros(len(fit['bin_centers_all']))
+    epoch_trace = fit['epoch_trace_all']
+
+    for n, epoch in enumerate(epoch_trace):
+        if 'trial' in epoch:
+            trial_no = int(''.join(filter(str.isdigit, epoch)))
+            this_kernel[n] = context_belief[trial_no]
     return this_kernel
 
 
