@@ -261,7 +261,10 @@ def define_kernels(run_params):
 
     # update which context kernel to use based on project
     if run_params['project'].lower() == 'templeton' and 'context' in run_params['input_variables']:
-        kernels['context']['function_call'] = 'context_templeton'
+        if 'context' in kernels.keys():
+            kernels['context']['function_call'] = 'context_templeton'
+        elif 'context_belief' in kernels.keys():
+            kernels['context_belief']['function_call'] = 'context_templeton'
 
     run_params['kernels'] = kernels
 
@@ -678,8 +681,13 @@ def add_kernel_by_label(kernel_name, design, run_params, session, fit, behavior_
             input_x = standardize_inputs(input_x)
 
         if run_params['kernels'][kernel_name]['orthogonalize']:
-            context_kernel = context('context', session, fit, behavior_info) \
-                if 'context' not in design.events.keys() else design.events['context']
+            context_key = 'context_belief' if run_params['use_context_belief'] else 'context'
+            context_func = context_belief if run_params['use_context_belief'] else context
+            context_kernel = (
+                design.events[context_key]
+                if context_key in design.events.keys()
+                else context_func(context_key, session, fit, behavior_info)
+            )
             input_x = orthogonalize_this_kernel(input_x, context_kernel)
             input_x = standardize_inputs(input_x)
 
