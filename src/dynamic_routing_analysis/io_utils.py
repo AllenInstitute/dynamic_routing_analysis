@@ -733,12 +733,13 @@ def context_belief(kernel_name, session, fit, behavior_info):
     def get_context_belief_vals(session_id):
         context_belief_vals = np.load('/root/capsule/data/context_belief/context_belief.npy', allow_pickle=True).item()
         mouse_id = session_id.split('_')[0]
-        sessiondate = session_id.split('-')[1].replace('-', '')
+        sessiondate = session_id.split('_')[1].replace('-', '')
         context_belief_mouse = context_belief_vals[mouse_id]
         session_key = [key for key in context_belief_mouse.keys() if sessiondate in key]
         return context_belief_mouse[session_key[0]]
 
-    context_belief = get_context_belief_vals(session.id)
+    session_id = session if isinstance(session, str) else session.id
+    context_belief = get_context_belief_vals(session_id)
     this_kernel = np.zeros(len(fit['bin_centers_all']))
     epoch_trace = fit['epoch_trace_all']
 
