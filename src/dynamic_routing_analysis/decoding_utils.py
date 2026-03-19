@@ -965,7 +965,7 @@ def load_session_wise_decoder_accuracy(
             pl.col('session_id').is_in(session_list),
         )
         .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(pl.col('session_id').alias('is_sole_recording'),
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(pl.col('session_id')).alias('is_sole_recording'),
         )
         .filter(
             combine_multi_probe_expr,
@@ -1145,7 +1145,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
     decoder_confidence_with_repeats_single_session = (
         pl.scan_parquet(results_path)
         .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(pl.col('session_id').alias('is_sole_recording'),     
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(pl.col('session_id')).alias('is_sole_recording'),     
         )
         .filter(
             combine_multi_probe_expr,
