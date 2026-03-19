@@ -70,6 +70,8 @@ master_kernels_list = {
                     'orthogonalize': None, 'num_weights': None, 'shuffle': False, 'shift': False, 'text': 'lick to NO-GO trial'},
     'context': {'function_call': 'context', 'type': 'discrete', 'length': 0, 'offset': 0, 'orthogonalize': None,
                 'num_weights': None, 'shuffle': False, 'shift': False, 'text': 'block-wise context'},
+    'context_belief': {'function_call': 'context_belief', 'type': 'continuous', 'length': 0, 'offset': 0, 'orthogonalize': None,
+                        'num_weights': None, 'shuffle': False, 'shift': False, 'text': 'RL model-estimated belief about current context'},
     'session_time': {'function_call': 'session_time', 'type': 'continuous', 'length': 0, 'offset': 0,
                         'orthogonalize': None, 'num_weights': None, 'shuffle': False, 'shift': False,
                         'text': 'z-scored time in session'}
@@ -175,12 +177,13 @@ def define_kernels(run_params):
     input_variables = run_params.get('input_variables', [])
 
     # Choose input variables based on 'time_of_interest'
+    context_var = 'context' if not run_params['use_context_belief'] else 'context_belief'
     if not input_variables:
         if 'trial' in time_of_interest or time_of_interest == 'full':
-            selected_keys = categories['stimulus'] + categories['movements'] + categories['choice'] + ['context',
-                                                                                                    'session_time']
+            selected_keys = categories['stimulus'] + categories['movements'] + categories['choice']\
+                 + [context_var]  +['session_time']
         elif 'quiescent' in time_of_interest:
-            selected_keys = categories['movements_no_licks'] + ['context', 'session_time'] + categories['choice']
+            selected_keys = categories['movements_no_licks'] + [context_var, 'session_time'] + categories['choice']
             for choice in categories['choice']:
                 master_kernels_list[choice]['length'] = run_params['quiescent_stop_time'] - run_params['quiescent_start_time']
                 master_kernels_list[choice]['offset'] = -master_kernels_list[choice]['length']
@@ -258,7 +261,10 @@ def define_kernels(run_params):
 
     # update which context kernel to use based on project
     if run_params['project'].lower() == 'templeton' and 'context' in run_params['input_variables']:
-        kernels['context']['function_call'] = 'context_templeton'
+        if 'context' in kernels.keys():
+            kernels['context']['function_call'] = 'context_templeton'
+        elif 'context_belief' in kernels.keys():
+            kernels['context_belief']['function_call'] = 'context_templeton'
 
     run_params['kernels'] = kernels
 
@@ -675,8 +681,13 @@ def add_kernel_by_label(kernel_name, design, run_params, session, fit, behavior_
             input_x = standardize_inputs(input_x)
 
         if run_params['kernels'][kernel_name]['orthogonalize']:
-            context_kernel = context('context', session, fit, behavior_info) \
-                if 'context' not in design.events.keys() else design.events['context']
+            context_key = 'context_belief' if run_params['use_context_belief'] else 'context'
+            context_func = context_belief if run_params['use_context_belief'] else context
+            context_kernel = (
+                design.events[context_key]
+                if context_key in design.events.keys()
+                else context_func(context_key, session, fit, behavior_info)
+            )
             input_x = orthogonalize_this_kernel(input_x, context_kernel)
             input_x = standardize_inputs(input_x)
 
@@ -715,6 +726,27 @@ def context(kernel_name, session, fit, behavior_info):
             trial_no = int(''.join(filter(str.isdigit, epoch)))
             this_kernel[n] = 1 if behavior_info['trials'].loc[trial_no, 'is_vis_rewarded'] else -1
 
+    return this_kernel
+
+def context_belief(kernel_name, session, fit, behavior_info):
+
+    def get_context_belief_vals(session_id):
+        context_belief_vals = np.load('/root/capsule/data/context_belief/context_belief.npy', allow_pickle=True).item()
+        mouse_id = session_id.split('_')[0]
+        sessiondate = session_id.split('_')[1].replace('-', '')
+        context_belief_mouse = context_belief_vals[mouse_id]
+        session_key = [key for key in context_belief_mouse.keys() if sessiondate in key]
+        return context_belief_mouse[session_key[0]]
+
+    session_id = session if isinstance(session, str) else session.id
+    context_belief = get_context_belief_vals(session_id)
+    this_kernel = np.zeros(len(fit['bin_centers_all']))
+    epoch_trace = fit['epoch_trace_all']
+
+    for n, epoch in enumerate(epoch_trace):
+        if 'trial' in epoch:
+            trial_no = int(''.join(filter(str.isdigit, epoch)))
+            this_kernel[n] = context_belief[trial_no]
     return this_kernel
 
 
