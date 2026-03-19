@@ -629,9 +629,15 @@ def exclude_structures_from_df(df, exclude_redundant_structures=True, exclude_ge
                          'fiber tracts', 'scwm', 'root', 'lot', 'out of brain', 'undefined']
 
     if exclude_redundant_structures:
-        df = df.filter(~pl.col('structure').is_in(redundant_structures))
+        if type(df) == pl.DataFrame:
+            df = df.filter(~pl.col('structure').is_in(redundant_structures))
+        elif type(df) == pd.DataFrame:
+             df = df.query("~structure.isin(@redundant_structures)")
     if exclude_general_structures:
-        df = df.filter(~pl.col('structure').is_in(general_structures),)
+        if type(df) == pl.DataFrame:
+            df = df.filter(~pl.col('structure').is_in(general_structures))
+        elif type(df) == pd.DataFrame:
+            df = df.query("~structure.isin(@general_structures)")
         #also remove any structure beginning with lowercase letter - indicating fiber tracts or out of brain
         unique_structures=df['structure'].unique()
         lowercase_structures=[]
@@ -639,7 +645,10 @@ def exclude_structures_from_df(df, exclude_redundant_structures=True, exclude_ge
             if ss[0].islower():
                 lowercase_structures.append(ss)
         if len(lowercase_structures)>0:
-            df = df.filter(~pl.col('structure').is_in(lowercase_structures),)
+            if type(df) == pl.DataFrame:
+                df = df.filter(~pl.col('structure').is_in(lowercase_structures))
+            elif type(df) == pd.DataFrame:
+                df = df.query("~structure.isin(@lowercase_structures)")
 
     return df
 
