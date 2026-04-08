@@ -1425,6 +1425,7 @@ def load_session_wise_decoder_confidence(
         'unit_subsample_size',
         'unit_criteria',
         'time_aligned_to',
+        'labels',
     }
 
     final_agg_cols = {
@@ -1435,7 +1436,7 @@ def load_session_wise_decoder_confidence(
         'is_response', 
         'trial_index_in_block',
         'block_index',
-        'stim_start_time'
+        'stim_start_time',
     }
 
     explode_cols={
@@ -1475,7 +1476,7 @@ def load_session_wise_decoder_confidence(
         )
         .drop('shift_idx', 'is_all_trials', 'electrode_group_names', 'unit_criteria', 'is_sole_recording')
         .explode(explode_cols)
-        .group_by('session_id', 'structure', 'unit_subsample_size', 'trial_index', 'bin_center', 'bin_size', 'time_aligned_to',)
+        .group_by('session_id', 'structure', 'unit_subsample_size', 'trial_index', 'bin_center', 'bin_size', 'time_aligned_to', 'labels')
         .agg(explode_agg_expr)
         .join(
             other=(
