@@ -714,7 +714,7 @@ def load_single_session_decoder_accuracy(results_path, sel_session, combine_mult
     example_session_df = (
         pl.scan_parquet(results_path)
         .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(pl.col('session_id')).alias('is_sole_recording'),
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
         )
         .filter(
             pl.col('session_id').eq(sel_session),
@@ -816,7 +816,7 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
             pl.col('session_id').is_in(session_list),
         )
         .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(pl.col('session_id')).alias('is_sole_recording'),
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
         )
         .filter(
             combine_multi_probe_expr,
@@ -965,7 +965,7 @@ def load_session_wise_decoder_accuracy(
             pl.col('session_id').is_in(session_list),
         )
         .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(pl.col('session_id')).alias('is_sole_recording'),
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
         )
         .filter(
             combine_multi_probe_expr,
@@ -1145,7 +1145,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
     decoder_confidence_with_repeats_single_session = (
         pl.scan_parquet(results_path)
         .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(pl.col('session_id')).alias('is_sole_recording'),     
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),     
         )
         .filter(
             combine_multi_probe_expr,
@@ -1302,7 +1302,7 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
     decoder_confidence_with_repeats_single_session_spontaneous = (
         pl.scan_parquet(results_path)
         .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(pl.col('session_id')).alias('is_sole_recording'),
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
         )
         .filter(
             combine_multi_probe_expr,
@@ -1425,8 +1425,11 @@ def load_session_wise_decoder_confidence(
         'unit_subsample_size',
         'unit_criteria',
         'time_aligned_to',
-        'labels',
+        'trial_index',
     }
+
+    if 'labels' in col_names:
+        grouping_cols.add('labels')
 
     final_agg_cols = {
         predict_proba_alias,  
@@ -1463,7 +1466,7 @@ def load_session_wise_decoder_confidence(
         )
         #make new column that indicates whether a row is the sole recording from a structure in a session
         .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(pl.col('session_id')).alias('is_sole_recording'),     
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
         )
         #Grab only rows according to combine_multi_probe_rec toggle
         #Grab only rows that have is_all_trials == True, only these have predict_proba
@@ -1476,7 +1479,7 @@ def load_session_wise_decoder_confidence(
         )
         .drop('shift_idx', 'is_all_trials', 'electrode_group_names', 'unit_criteria', 'is_sole_recording')
         .explode(explode_cols)
-        .group_by('session_id', 'structure', 'unit_subsample_size', 'trial_index', 'bin_center', 'bin_size', 'time_aligned_to', 'labels')
+        .group_by(grouping_cols - {'electrode_group_names', 'unit_criteria'})
         .agg(explode_agg_expr)
         .join(
             other=(
@@ -1492,7 +1495,7 @@ def load_session_wise_decoder_confidence(
             on=['session_id','trial_index'],
             how='inner',
         ) 
-        .group_by(grouping_cols - {'electrode_group_names', 'unit_criteria'})
+        .group_by(grouping_cols - {'electrode_group_names', 'unit_criteria', 'trial_index'})
         .agg(
             pl.col('balanced_accuracy_test').first(),
             pl.col(final_agg_cols).sort_by('trial_index'),
@@ -1637,7 +1640,7 @@ def load_session_wise_decoder_confidence_spont_epoch(
             pl.col('session_id').is_in(session_list),
         )
         .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over(pl.col('session_id')).alias('is_sole_recording'),     
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),     
         )
         #Grab only rows according to combine_multi_probe_rec toggle
         #Grab only rows that have is_all_trials == True, only these have predict_proba
