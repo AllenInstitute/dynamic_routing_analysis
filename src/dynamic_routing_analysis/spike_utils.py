@@ -1197,6 +1197,12 @@ def calculate_single_unit_metric_adjusted_pvals(sel_units,sel_project):
         'sound2_context_evoked':fdrcorrection(sel_units['sound2_evoked_context_modulation_p_value'])[1],
         'catch_context_evoked':fdrcorrection(sel_units['catch_evoked_context_modulation_p_value'])[1],
 
+        'vis1_context_evoked_sign':sel_units['vis1_evoked_context_modulation_sign'],
+        'vis2_context_evoked_sign':sel_units['vis2_evoked_context_modulation_sign'],
+        'sound1_context_evoked_sign':sel_units['sound1_evoked_context_modulation_sign'],
+        'sound2_context_evoked_sign':sel_units['sound2_evoked_context_modulation_sign'],
+        'catch_context_evoked_sign':sel_units['catch_evoked_context_modulation_sign'],
+
         'vis1_context_evoked_roc_auc':sel_units['vis1_evoked_context_modulation_roc_auc'],
         'vis2_context_evoked_roc_auc':sel_units['vis2_evoked_context_modulation_roc_auc'],
         'sound1_context_evoked_roc_auc':sel_units['sound1_evoked_context_modulation_roc_auc'],
