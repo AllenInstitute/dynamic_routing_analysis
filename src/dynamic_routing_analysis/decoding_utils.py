@@ -1671,13 +1671,96 @@ def load_session_wise_decoder_confidence_spont_epoch(
         .collect(engine='streaming')
     )
 
-    decoder_confidence_df = exclude_structures_from_df(
+    decoder_confidence_spont_df = exclude_structures_from_df(
         decoder_confidence_spont_df, 
         exclude_redundant_structures=exclude_redundant_structures, 
         exclude_general_structures=exclude_general_structures
     )
 
     return decoder_confidence_spont_df
+
+def load_decoder_coefs(results_path, session_list, combine_multi_probe_rec=True, exclude_redundant_structures=True, exclude_general_structures=True):
+    """Load decoder coefficients for each session and structure.
+    
+    Retrieves the feature importance weights (coefficients) from trained decoders
+    for each session-structure combination. This allows analysis of which units
+    contribute most to decoding performance.
+    
+    Parameters
+    ----------
+    results_path : str
+        Path to parquet file(s) containing decoder results. Can be local path or S3 URI.
+    session_list : list of str
+        List of session IDs to include in analysis.
+    combine_multi_probe_rec : bool, default=True
+        If True, combine results from multiple probe insertions recording the same
+        structure. If False, keep results from each probe separate.
+    
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with decoder coefficients:
+        - session_id : Session identifier
+        - structure : Brain structure name
+        - unit_subsample_size : Number of units used for decoding
+        - bin_center : Center time of temporal bin relative to event
+        - coefs : List of decoder coefficients for each unit
+        
+        Sorted by session_id, structure, unit_subsample_size, and bin_center.
+    
+    Notes
+    -----
+    - Coefficients are averaged across repeated decoder runs if combine_multi_probe_rec is True
+    - Joins with consolidated units table to get total_n_units for each structure
+    
+    Examples
+    --------
+    >>> decoder_coefs_df = load_decoder_coefs(
+    ...     's3://bucket/results/',
+    ...     ['session1', 'session2'],
+    ...     combine_multi_probe_rec=True
+    ... )
+    """
+
+    combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
+
+    decoder_coefs_df = (
+        pl.scan_parquet(results_path)
+        .filter(
+            pl.col('session_id').is_in(session_list),
+        )
+        .with_columns(
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),     
+        )
+        .filter(
+            combine_multi_probe_expr,
+            pl.col('is_all_trials').eq(True),
+        )
+        .sort('session_id', 'structure', 'shift_idx', 'repeat_idx', 'time_aligned_to', 'bin_center', descending=False, maintain_order=True)
+        .collect()
+        .with_columns([
+            pl.col('unit_ids').list.len().alias('n_units'),
+            pl.col("electrode_group_names").list.n_unique().alias("n_probes"),
+            pl.col("electrode_group_names")
+            .list.eval(pl.element().str.replace("probe", ""))
+            .list.join("")
+            .alias("probe")
+        ])
+        .drop(
+            'shift_idx', 'is_all_trials', 'electrode_group_names', 'unit_criteria', 'is_sole_recording', 
+            'predict_proba', 'predict_proba_all_trials', 'decision_function', 'decision_function_all',
+            'balanced_accuracy_test', 'balanced_accuracy_train', 'trial_indices', 'labels', 
+            'train_test_split_label', 
+        )
+    )
+
+    decoder_coefs_df = exclude_structures_from_df(
+        decoder_coefs_df, 
+        exclude_redundant_structures=exclude_redundant_structures, 
+        exclude_general_structures=exclude_general_structures
+    )
+
+    return decoder_coefs_df
 
 def get_average_session_structure_ccf_coords(results_session_df,all_units_table_path=None):
     """Calculate average CCF coordinates for each session-structure combination.
@@ -1773,11 +1856,11 @@ def get_average_session_structure_ccf_coords(results_session_df,all_units_table_
     return session_structure_ccf_coords_df
 
 
-def get_session_structure_results(predict_proba_pd, sel_session, sel_structure, sel_unit_subsample_size, sel_time_aligned_to):
+def get_session_structure_results(predict_proba_pd, sel_session, sel_structure, sel_unit_subsample_size, sel_time_aligned_to, sel_bin_center=None, round_bin_center_decimals=3):
     """
     Get the results for a specific session and structure.
     """
-   
+    predict_proba_pd['bin_center']=predict_proba_pd['bin_center'].round(round_bin_center_decimals)
     if sel_unit_subsample_size=='all':
         example_area_results=predict_proba_pd.query(f'session_id=="{sel_session}" and structure=="{sel_structure}" and \
                                                     time_aligned_to=="{sel_time_aligned_to}" and unit_subsample_size.isna()'
@@ -1786,6 +1869,8 @@ def get_session_structure_results(predict_proba_pd, sel_session, sel_structure, 
         example_area_results=predict_proba_pd.query(f'session_id=="{sel_session}" and structure=="{sel_structure}" and \
                                                     time_aligned_to=="{sel_time_aligned_to}" and unit_subsample_size=={sel_unit_subsample_size}'
                                                     ).sort_values('bin_center').reset_index(drop=True)
+    if sel_bin_center is not None:
+        example_area_results=example_area_results.query(f'bin_center=={sel_bin_center}').reset_index(drop=True)
     #get context switches
     is_context_switch=np.concatenate([[0],np.diff(example_area_results['is_vis_rewarded'].iloc[0])]).astype(bool)
     context_switch_list=[]
