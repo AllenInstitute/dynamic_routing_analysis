@@ -713,6 +713,67 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         stim_late_context_modulation_evoked_metric=(same_context_late_evoked_frs-other_context_late_evoked_frs)/(same_context_late_evoked_frs+other_context_late_evoked_frs)
         stim_context_modulation[ss+'_evoked_stimulus_late_context_modulation_index'] = stim_late_context_modulation_evoked_metric
 
+        # block-specific stimulus modulation (relative to baseline or raw)
+        same_context_baseline_frs = baseline_frs.sel(trials=same_context_trials['trial_index'].values)
+        same_context_stim_frs_by_trial = trial_da.sel(time=slice(0,0.1),trials=same_context_trials['trial_index'].values).mean(dim='time',skipna=True)
+        
+        stim_context_modulation[ss+'_stimulus_modulation_same_context_raw'] = (same_context_stim_frs_by_trial.mean(dim='trials',skipna=True))
+        same_context_stim_frs_by_trial_zscore = (same_context_stim_frs_by_trial.mean(dim='trials',skipna=True)-same_context_baseline_frs.mean(dim='trials',skipna=True)
+                                    )/(same_context_baseline_frs.std(dim='trials',skipna=True))
+        stim_context_modulation[ss+'_stimulus_modulation_same_context_zscore']=same_context_stim_frs_by_trial_zscore
+        stimulus_modulation_index=(same_context_stim_frs_by_trial.mean(dim='trials',skipna=True)-same_context_baseline_frs.mean(dim='trials',skipna=True)
+                                   )/(same_context_stim_frs_by_trial.mean(dim='trials',skipna=True)+same_context_baseline_frs.mean(dim='trials',skipna=True))
+        stim_context_modulation[ss+'_stimulus_modulation_same_context_index']=stimulus_modulation_index
+
+        pval = st.wilcoxon(same_context_stim_frs_by_trial.values.T, same_context_baseline_frs.values.T, nan_policy='omit',zero_method='zsplit')[1]
+        stim_context_modulation[ss+'_stimulus_modulation_same_context_p_value']=pval
+        stim_mod_sign=np.sign(same_context_stim_frs_by_trial.mean(dim='trials',skipna=True)-same_context_baseline_frs.mean(dim='trials',skipna=True))
+        stim_context_modulation[ss+'_stimulus_modulation_same_context_sign']=stim_mod_sign
+    
+        other_context_baseline_frs = baseline_frs.sel(trials=other_context_trials['trial_index'].values)
+        other_context_stim_frs_by_trial = trial_da.sel(time=slice(0,0.1),trials=other_context_trials['trial_index'].values).mean(dim='time',skipna=True)
+
+        stim_context_modulation[ss+'_stimulus_modulation_other_context_raw'] = (other_context_stim_frs_by_trial.mean(dim='trials',skipna=True))
+        other_context_stim_frs_by_trial_zscore = (other_context_stim_frs_by_trial.mean(dim='trials',skipna=True)-other_context_baseline_frs.mean(dim='trials',skipna=True)
+                                    )/(other_context_baseline_frs.std(dim='trials',skipna=True))
+        stim_context_modulation[ss+'_stimulus_modulation_other_context_zscore']=other_context_stim_frs_by_trial_zscore
+        stimulus_modulation_index=(other_context_stim_frs_by_trial.mean(dim='trials',skipna=True)-other_context_baseline_frs.mean(dim='trials',skipna=True)
+                                   )/(other_context_stim_frs_by_trial.mean(dim='trials',skipna=True)+other_context_baseline_frs.mean(dim='trials',skipna=True))
+        stim_context_modulation[ss+'_stimulus_modulation_other_context_index']=stimulus_modulation_index
+
+        pval = st.wilcoxon(other_context_stim_frs_by_trial.values.T, other_context_baseline_frs.values.T, nan_policy='omit',zero_method='zsplit')[1]
+        stim_context_modulation[ss+'_stimulus_modulation_other_context_p_value']=pval
+        stim_mod_sign=np.sign(other_context_stim_frs_by_trial.mean(dim='trials',skipna=True)-other_context_baseline_frs.mean(dim='trials',skipna=True))
+        stim_context_modulation[ss+'_stimulus_modulation_other_context_sign']=stim_mod_sign
+
+        #find evoked frs during stim (first 100ms)
+        same_context_evoked_frs_by_trial = (trial_da.sel(time=slice(0,0.1),trials=same_context_trials['trial_index'].values).mean(dim=['time'],skipna=True)-same_context_baseline_frs)
+
+        stim_context_modulation[ss+'_evoked_stimulus_modulation_same_context_raw'] = (same_context_evoked_frs_by_trial.mean(dim='trials',skipna=True))
+        same_context_evoked_frs_by_trial_zscore = (same_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)-same_context_baseline_frs.mean(dim='trials',skipna=True)
+                                    )/(same_context_baseline_frs.std(dim='trials',skipna=True))
+        stim_context_modulation[ss+'_evoked_stimulus_modulation_same_context_zscore'] = same_context_evoked_frs_by_trial_zscore
+        stimulus_modulation_index=(same_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)-same_context_baseline_frs.mean(dim='trials',skipna=True)
+                                   )/(same_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)+same_context_baseline_frs.mean(dim='trials',skipna=True))
+        stim_context_modulation[ss+'_evoked_stimulus_modulation_same_context_index'] = stimulus_modulation_index
+        pval = st.wilcoxon(same_context_evoked_frs_by_trial.values.T, same_context_baseline_frs.values.T, nan_policy='omit',zero_method='zsplit')[1]
+        stim_context_modulation[ss+'_evoked_stimulus_modulation_same_context_p_value'] = pval
+        stim_mod_sign=np.sign(same_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)-same_context_baseline_frs.mean(dim='trials',skipna=True))
+        stim_context_modulation[ss+'_evoked_stimulus_modulation_same_context_sign'] = stim_mod_sign
+
+        other_context_evoked_frs_by_trial = (trial_da.sel(time=slice(0,0.1),trials=other_context_trials['trial_index'].values).mean(dim=['time'],skipna=True)-other_context_baseline_frs)
+        stim_context_modulation[ss+'_evoked_stimulus_modulation_other_context_raw'] = (other_context_evoked_frs_by_trial.mean(dim='trials',skipna=True))
+        other_context_evoked_frs_by_trial_zscore = (other_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)-other_context_baseline_frs.mean(dim='trials',skipna=True)
+                                    )/(other_context_baseline_frs.std(dim='trials',skipna=True))
+        stim_context_modulation[ss+'_evoked_stimulus_modulation_other_context_zscore'] = other_context_evoked_frs_by_trial_zscore
+        stimulus_modulation_index=(other_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)-other_context_baseline_frs.mean(dim='trials',skipna=True)
+                                   )/(other_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)+other_context_baseline_frs.mean(dim='trials',skipna=True))
+        stim_context_modulation[ss+'_evoked_stimulus_modulation_other_context_index'] = stimulus_modulation_index
+        pval = st.wilcoxon(other_context_evoked_frs_by_trial.values.T, other_context_baseline_frs.values.T, nan_policy='omit',zero_method='zsplit')[1]
+        stim_context_modulation[ss+'_evoked_stimulus_modulation_other_context_p_value'] = pval
+        stim_mod_sign=np.sign(other_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)-other_context_baseline_frs.mean(dim='trials',skipna=True))
+        stim_context_modulation[ss+'_evoked_stimulus_modulation_other_context_sign'] = stim_mod_sign
+
 
         #AUC calculation
         stim_auc=[]
