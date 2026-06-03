@@ -587,6 +587,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         stim_trials = trials.query('stim_name==@ss')
         stim_frs_by_trial = trial_da.sel(time=slice(0,0.1),trials=stim_trials['trial_index'].values).mean(dim='time',skipna=True)
         stim_baseline_frs_by_trial = baseline_frs.sel(trials=stim_trials['trial_index'].values)
+        stim_context_modulation[ss+'_stimulus_modulation_raw'] = (stim_frs_by_trial.mean(dim='trials',skipna=True)-stim_baseline_frs_by_trial.mean(dim='trials',skipna=True))
         stim_frs_by_trial_zscore = (stim_frs_by_trial.mean(dim='trials',skipna=True)-stim_baseline_frs_by_trial.mean(dim='trials',skipna=True)
                                     )/(stim_baseline_frs_by_trial.std(dim='trials',skipna=True))
         stim_context_modulation[ss+'_stimulus_modulation_zscore']=stim_frs_by_trial_zscore
@@ -601,6 +602,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
 
         #stimulus late modulation
         stim_late_frs_by_trial = trial_da.sel(time=slice(0.1,0.2),trials=stim_trials['trial_index'].values).mean(dim='time',skipna=True)
+        stim_context_modulation[ss+'_stimulus_late_modulation_raw'] = (stim_late_frs_by_trial.mean(dim='trials',skipna=True)-stim_baseline_frs_by_trial.mean(dim='trials',skipna=True))
         stim_late_frs_by_trial_zscore = (stim_late_frs_by_trial.mean(dim='trials',skipna=True)-stim_baseline_frs_by_trial.mean(dim='trials',skipna=True)
                                         )/(stim_baseline_frs_by_trial.std(dim='trials',skipna=True))
         stim_context_modulation[ss+'_stimulus_late_modulation_zscore'] = stim_late_frs_by_trial_zscore
@@ -713,7 +715,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         stim_late_context_modulation_evoked_metric=(same_context_late_evoked_frs-other_context_late_evoked_frs)/(same_context_late_evoked_frs+other_context_late_evoked_frs)
         stim_context_modulation[ss+'_evoked_stimulus_late_context_modulation_index'] = stim_late_context_modulation_evoked_metric
 
-        # block-specific stimulus modulation (relative to baseline or raw)
+        # block-specific stimulus modulation (raw)
         same_context_baseline_frs = baseline_frs.sel(trials=same_context_trials['trial_index'].values)
         same_context_stim_frs_by_trial = trial_da.sel(time=slice(0,0.1),trials=same_context_trials['trial_index'].values).mean(dim='time',skipna=True)
         
@@ -746,7 +748,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         stim_mod_sign=np.sign(other_context_stim_frs_by_trial.mean(dim='trials',skipna=True)-other_context_baseline_frs.mean(dim='trials',skipna=True))
         stim_context_modulation[ss+'_stimulus_modulation_other_context_sign']=stim_mod_sign
 
-        #find evoked frs during stim (first 100ms)
+        # block-specific stimulus modulation (relative to baseline, i.e. evoked)
         same_context_evoked_frs_by_trial = (trial_da.sel(time=slice(0,0.1),trials=same_context_trials['trial_index'].values).mean(dim=['time'],skipna=True)-same_context_baseline_frs)
 
         stim_context_modulation[ss+'_evoked_stimulus_modulation_same_context_raw'] = (same_context_evoked_frs_by_trial.mean(dim='trials',skipna=True))
