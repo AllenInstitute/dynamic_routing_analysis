@@ -715,13 +715,13 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         stim_late_context_modulation_evoked_metric=(same_context_late_evoked_frs-other_context_late_evoked_frs)/(same_context_late_evoked_frs+other_context_late_evoked_frs)
         stim_context_modulation[ss+'_evoked_stimulus_late_context_modulation_index'] = stim_late_context_modulation_evoked_metric
 
-        # block-specific stimulus modulation (raw)
+        # block-specific stimulus modulation (raw) - zscore normalized to stdev of all stim trial baseline frs
         same_context_baseline_frs = baseline_frs.sel(trials=same_context_trials['trial_index'].values)
         same_context_stim_frs_by_trial = trial_da.sel(time=slice(0,0.1),trials=same_context_trials['trial_index'].values).mean(dim='time',skipna=True)
         
         stim_context_modulation[ss+'_stimulus_modulation_same_context_raw'] = (same_context_stim_frs_by_trial.mean(dim='trials',skipna=True))
         same_context_stim_frs_by_trial_zscore = (same_context_stim_frs_by_trial.mean(dim='trials',skipna=True)-same_context_baseline_frs.mean(dim='trials',skipna=True)
-                                    )/(same_context_baseline_frs.std(dim='trials',skipna=True))
+                                    )/(stim_baseline_frs_by_trial.std(dim='trials',skipna=True))
         stim_context_modulation[ss+'_stimulus_modulation_same_context_zscore']=same_context_stim_frs_by_trial_zscore
         stimulus_modulation_index=(same_context_stim_frs_by_trial.mean(dim='trials',skipna=True)-same_context_baseline_frs.mean(dim='trials',skipna=True)
                                    )/(same_context_stim_frs_by_trial.mean(dim='trials',skipna=True)+same_context_baseline_frs.mean(dim='trials',skipna=True))
@@ -737,7 +737,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
 
         stim_context_modulation[ss+'_stimulus_modulation_other_context_raw'] = (other_context_stim_frs_by_trial.mean(dim='trials',skipna=True))
         other_context_stim_frs_by_trial_zscore = (other_context_stim_frs_by_trial.mean(dim='trials',skipna=True)-other_context_baseline_frs.mean(dim='trials',skipna=True)
-                                    )/(other_context_baseline_frs.std(dim='trials',skipna=True))
+                                    )/(stim_baseline_frs_by_trial.std(dim='trials',skipna=True))
         stim_context_modulation[ss+'_stimulus_modulation_other_context_zscore']=other_context_stim_frs_by_trial_zscore
         stimulus_modulation_index=(other_context_stim_frs_by_trial.mean(dim='trials',skipna=True)-other_context_baseline_frs.mean(dim='trials',skipna=True)
                                    )/(other_context_stim_frs_by_trial.mean(dim='trials',skipna=True)+other_context_baseline_frs.mean(dim='trials',skipna=True))
@@ -753,7 +753,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
 
         stim_context_modulation[ss+'_evoked_stimulus_modulation_same_context_raw'] = (same_context_evoked_frs_by_trial.mean(dim='trials',skipna=True))
         same_context_evoked_frs_by_trial_zscore = (same_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)-same_context_baseline_frs.mean(dim='trials',skipna=True)
-                                    )/(same_context_baseline_frs.std(dim='trials',skipna=True))
+                                    )/(stim_baseline_frs_by_trial.std(dim='trials',skipna=True))
         stim_context_modulation[ss+'_evoked_stimulus_modulation_same_context_zscore'] = same_context_evoked_frs_by_trial_zscore
         stimulus_modulation_index=(same_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)-same_context_baseline_frs.mean(dim='trials',skipna=True)
                                    )/(same_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)+same_context_baseline_frs.mean(dim='trials',skipna=True))
@@ -766,7 +766,7 @@ def compute_stim_context_modulation(trials, units, session_info, save_path=None,
         other_context_evoked_frs_by_trial = (trial_da.sel(time=slice(0,0.1),trials=other_context_trials['trial_index'].values).mean(dim=['time'],skipna=True)-other_context_baseline_frs)
         stim_context_modulation[ss+'_evoked_stimulus_modulation_other_context_raw'] = (other_context_evoked_frs_by_trial.mean(dim='trials',skipna=True))
         other_context_evoked_frs_by_trial_zscore = (other_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)-other_context_baseline_frs.mean(dim='trials',skipna=True)
-                                    )/(other_context_baseline_frs.std(dim='trials',skipna=True))
+                                    )/(stim_baseline_frs_by_trial.std(dim='trials',skipna=True))
         stim_context_modulation[ss+'_evoked_stimulus_modulation_other_context_zscore'] = other_context_evoked_frs_by_trial_zscore
         stimulus_modulation_index=(other_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)-other_context_baseline_frs.mean(dim='trials',skipna=True)
                                    )/(other_context_evoked_frs_by_trial.mean(dim='trials',skipna=True)+other_context_baseline_frs.mean(dim='trials',skipna=True))
