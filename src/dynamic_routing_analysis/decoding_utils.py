@@ -707,7 +707,7 @@ def exclude_structures_from_df(df, exclude_redundant_structures=True, exclude_ge
 
     return df
 
-def load_single_session_decoder_accuracy(results_path, sel_session, combine_multi_probe_rec=True):
+def load_single_session_decoder_accuracy(results_path, sel_session, combine_multi_probe_rec=True, use_linear_shift=True):
     """Load decoder accuracy results for a single session.
     
     Loads and processes decoder accuracy results from parquet files for one session,
@@ -766,32 +766,60 @@ def load_single_session_decoder_accuracy(results_path, sel_session, combine_mult
     
     combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
 
-    example_session_df = (
-        pl.scan_parquet(results_path)
-        .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
+    if use_linear_shift:
+
+        example_session_df = (
+            pl.scan_parquet(results_path)
+            .with_columns(
+                pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
+            )
+            .filter(
+                pl.col('session_id').eq(sel_session),
+                combine_multi_probe_expr,
+                pl.col('is_all_trials').not_(),
+            )
+            .sort('shift_idx')
+            .group_by(
+                grouping_cols - {'electrode_group_names'}| {'repeat_idx'}, 
+                maintain_order=True,
+            )
+            .agg(
+                pl.col('balanced_accuracy_test', 'shift_idx'),
+            ).sort('unit_subsample_size','repeat_idx')
+            .collect()
         )
-        .filter(
-            pl.col('session_id').eq(sel_session),
-            combine_multi_probe_expr,
-            pl.col('is_all_trials').not_(),
+
+    else:
+
+        example_session_df = (
+            pl.scan_parquet(results_path)
+            .with_columns(
+                pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
+            )
+            .filter(
+                pl.col('session_id').eq(sel_session),
+                combine_multi_probe_expr,
+                pl.col('is_all_trials'),
+            )
+            .sort('shift_idx')
+            .group_by(
+                grouping_cols - {'electrode_group_names'}| {'repeat_idx'}, 
+                maintain_order=True,
+            )
+            .agg(
+                pl.col('balanced_accuracy_test', 'shift_idx'),
+            ).sort('unit_subsample_size','repeat_idx')
+            .collect()
         )
-        .sort('shift_idx')
-        .group_by(
-            grouping_cols - {'electrode_group_names'}| {'repeat_idx'}, 
-            maintain_order=True,
-        )
-        .agg(
-            pl.col('balanced_accuracy_test', 'shift_idx'),
-        ).sort('unit_subsample_size','repeat_idx')
-        .collect()
-    )
+
 
     return example_session_df
 
 
 
-def load_structure_average_decoder_accuracy(results_path, session_list, combine_multi_probe_rec=True, exclude_redundant_structures=True, exclude_general_structures=True):
+def load_structure_average_decoder_accuracy(results_path, session_list, combine_multi_probe_rec=True, 
+                                            exclude_redundant_structures=True, exclude_general_structures=True,
+                                            use_linear_shift=True):
     """Load and average decoder accuracy across sessions for each brain structure.
     
     Computes structure-wise mean decoding accuracies by aggregating results across
@@ -863,54 +891,97 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
     }
 
     combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
-
     # structure-wise average decoding accuracy
-    results_df = (
-        pl.scan_parquet(results_path)
-        .filter(
-            pl.col('session_id').is_in(session_list),
+
+    if use_linear_shift:
+        #use linear shift results
+        results_df = (
+            pl.scan_parquet(results_path)
+            .filter(
+                pl.col('session_id').is_in(session_list),
+            )
+            .with_columns(
+                pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
+            )
+            .filter(
+                combine_multi_probe_expr,
+                pl.col('is_all_trials').not_(),
+                pl.col('session_id').n_unique().ge(1).over('structure', 'unit_subsample_size')#, 'unit_criteria'),
+            )
+            
+            # get the means for each recording over repeats:
+            .group_by(grouping_cols | {'shift_idx'}, maintain_order=True)
+            .agg(
+                pl.col('balanced_accuracy_test').mean(), # over repeats
+            )
+            # get the aligned result and median over shifts:
+            .group_by(grouping_cols)
+            .agg(
+                pl.col('balanced_accuracy_test').filter(pl.col('shift_idx') == 0).first().alias('mean_true'),
+                pl.col('balanced_accuracy_test').filter(pl.col('shift_idx') != 0).median().alias('median_null'),
+            )
+            # get the difference between true and null:
+            .with_columns(
+                pl.col('mean_true').sub(pl.col('median_null')).alias('mean_diff'),
+            )
+            # get the means over sessions:
+            .group_by('structure', 'unit_subsample_size','bin_size','bin_center')#, 'unit_criteria')
+            .agg(
+                pl.col('mean_true').mean(),
+                pl.col('mean_true').std().truediv(pl.col('mean_true').count().pow(0.5)).alias('sem_true'),
+                pl.col('median_null').mean(),
+                pl.col('median_null').std().truediv(pl.col('mean_true').count().pow(0.5)).alias('sem_null'),
+                pl.col('mean_diff').mean(),
+                pl.col('mean_diff').std().truediv(pl.col('mean_true').count().pow(0.5)).alias('sem_diff'),
+                pl.col('session_id').n_unique().alias('num_sessions')
+            )
+            .with_columns(
+                pl.col('num_sessions').cast(pl.Int64),
+            )
+            .sort(pl.col('mean_diff').mean().over('structure'), descending=True)
+            .collect()
         )
-        .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
+
+    else:
+        # no linear shift, use decoder results from all trials
+        results_df = (
+            pl.scan_parquet(results_path)
+            .filter(
+                pl.col('session_id').is_in(session_list),
+            )
+            .with_columns(
+                pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
+            )
+            .filter(
+                combine_multi_probe_expr,
+                pl.col('is_all_trials'),
+                pl.col('session_id').n_unique().ge(1).over('structure', 'unit_subsample_size')#, 'unit_criteria'),
+            )
+            
+            # get the means for each recording over repeats:
+            .group_by(grouping_cols | {'shift_idx'}, maintain_order=True)
+            .agg(
+                pl.col('balanced_accuracy_test').mean(), # over repeats
+            )
+            # get the aligned result and median over shifts:
+            .group_by(grouping_cols)
+            .agg(
+                pl.col('balanced_accuracy_test').first().alias('mean_true'),
+
+            )
+            # get the means over sessions:
+            .group_by('structure', 'unit_subsample_size','bin_size','bin_center')#, 'unit_criteria')
+            .agg(
+                pl.col('mean_true').mean(),
+                pl.col('mean_true').std().truediv(pl.col('mean_true').count().pow(0.5)).alias('sem_true'),
+                pl.col('session_id').n_unique().alias('num_sessions')
+            )
+            .with_columns(
+                pl.col('num_sessions').cast(pl.Int64),
+            )
+            .sort(pl.col('mean_true').mean().over('structure'), descending=True)
+            .collect()
         )
-        .filter(
-            combine_multi_probe_expr,
-            pl.col('is_all_trials').not_(),
-            pl.col('session_id').n_unique().ge(1).over('structure', 'unit_subsample_size')#, 'unit_criteria'),
-        )
-        
-        # get the means for each recording over repeats:
-        .group_by(grouping_cols | {'shift_idx'}, maintain_order=True)
-        .agg(
-            pl.col('balanced_accuracy_test').mean(), # over repeats
-        )
-        # get the aligned result and median over shifts:
-        .group_by(grouping_cols)
-        .agg(
-            pl.col('balanced_accuracy_test').filter(pl.col('shift_idx') == 0).first().alias('mean_true'),
-            pl.col('balanced_accuracy_test').filter(pl.col('shift_idx') != 0).median().alias('median_null'),
-        )
-        # get the difference between true and null:
-        .with_columns(
-            pl.col('mean_true').sub(pl.col('median_null')).alias('mean_diff'),
-        )
-        # get the means over sessions:
-        .group_by('structure', 'unit_subsample_size','bin_size','bin_center')#, 'unit_criteria')
-        .agg(
-            pl.col('mean_true').mean(),
-            pl.col('mean_true').std().truediv(pl.col('mean_true').count().pow(0.5)).alias('sem_true'),
-            pl.col('median_null').mean(),
-            pl.col('median_null').std().truediv(pl.col('mean_true').count().pow(0.5)).alias('sem_null'),
-            pl.col('mean_diff').mean(),
-            pl.col('mean_diff').std().truediv(pl.col('mean_true').count().pow(0.5)).alias('sem_diff'),
-            pl.col('session_id').n_unique().alias('num_sessions')
-        )
-        .with_columns(
-            pl.col('num_sessions').cast(pl.Int64),
-        )
-        .sort(pl.col('mean_diff').mean().over('structure'), descending=True)
-        .collect()
-    )
 
     results_df = exclude_structures_from_df(
         results_df, 
@@ -925,7 +996,7 @@ def load_session_wise_decoder_accuracy(
         results_path, session_list, session_table, 
         combine_multi_probe_rec=True, keep_original_structure=False, 
         exclude_redundant_structures=True, exclude_general_structures=True,
-        is_all_trials=False):
+        is_all_trials=False, use_linear_shift=True):
     """Load decoder accuracy with session-level metadata.
     
     Loads decoder results for multiple sessions and enriches them with behavioral
@@ -1013,80 +1084,153 @@ def load_session_wise_decoder_accuracy(
     combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
     structure_grouping, n_repeats = get_structure_grouping(keep_original_structure)
 
-    #add total n units, cross-modal dprime, n good blocks?
-    results_session_df = (
-        pl.scan_parquet(results_path)
-        .filter(
-            pl.col('session_id').is_in(session_list),
+    if use_linear_shift==True:
+
+        #add total n units, cross-modal dprime, n good blocks?
+        results_session_df = (
+            pl.scan_parquet(results_path)
+            .filter(
+                pl.col('session_id').is_in(session_list),
+            )
+            .with_columns(
+                pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
+            )
+            .filter(
+                combine_multi_probe_expr,
+                pl.col('is_all_trials').eq(is_all_trials),
+            )
+            #get total n units
+            .join(
+                other=(
+                    pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet')
+                    .with_columns(
+                        pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
+                    )
+                    #make new rows according to structure_grouping
+                    .with_columns(
+                        pl.when(pl.col('structure').is_in(structure_grouping.keys()))
+                        .then(pl.col('structure').repeat_by(n_repeats))
+                        .otherwise(pl.col('structure').repeat_by(1))
+                    )
+                    .explode('structure')
+                    .with_columns(
+                        pl.when(pl.col('structure').is_in(structure_grouping.keys()).is_first_distinct().over('unit_id'))
+                        .then(pl.col('structure').replace(structure_grouping))
+                        .otherwise(pl.col('structure'))
+                    )
+                    .group_by('session_id','structure')
+                    .agg(
+                        pl.col('unit_id').len().alias('total_n_units')
+                    )
+                ),
+                on=['session_id','structure'],
+                how='left',
+            )
+            #join on session table to get cross-modal dprime, etc.
+            .join(
+                other=session_table.filter(
+                    pl.col('session_id').is_in(session_list)
+                ).select(
+                    'session_id',
+                    'n_passing_blocks',
+                    'cross_modality_dprime_vis_blocks',
+                    'cross_modality_dprime_aud_blocks',
+                ).lazy(),
+                on='session_id',
+                how='left',
+            )
+            # get the means for each recording over repeats:
+            .group_by(grouping_cols | {'shift_idx', 'n_passing_blocks', 'cross_modality_dprime_vis_blocks', 
+                                    'cross_modality_dprime_aud_blocks', 'total_n_units'}, maintain_order=True)
+            .agg(
+                pl.col('balanced_accuracy_test').mean(), # over repeats
+            )
+            # get the aligned result and median over shifts:
+            .group_by(grouping_cols - {'electrode_group_names'} | {'n_passing_blocks', 'cross_modality_dprime_vis_blocks', 
+                                                                'cross_modality_dprime_aud_blocks', 'total_n_units'})
+            .agg(
+                pl.col('balanced_accuracy_test').filter(pl.col('shift_idx') == 0).first().alias('mean_true'),
+                pl.col('balanced_accuracy_test').filter(pl.col('shift_idx') != 0).median().alias('median_null'),
+                pl.col('balanced_accuracy_test', 'shift_idx').sort_by('shift_idx'),
+            )
+            # get the difference between true and null:
+            .with_columns(
+                pl.col('mean_true').sub(pl.col('median_null')).alias('mean_diff'),
+            )
+            .sort('session_id', 'structure', 'unit_subsample_size', 'bin_center', descending=False)
+            .collect()
         )
-        .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
+
+    else:
+        
+        #add total n units, cross-modal dprime, n good blocks?
+        results_session_df = (
+            pl.scan_parquet(results_path)
+            .filter(
+                pl.col('session_id').is_in(session_list),
+            )
+            .with_columns(
+                pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
+            )
+            .filter(
+                combine_multi_probe_expr,
+                pl.col('is_all_trials').eq(True),
+            )
+            #get total n units
+            .join(
+                other=(
+                    pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet')
+                    .with_columns(
+                        pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
+                    )
+                    #make new rows according to structure_grouping
+                    .with_columns(
+                        pl.when(pl.col('structure').is_in(structure_grouping.keys()))
+                        .then(pl.col('structure').repeat_by(n_repeats))
+                        .otherwise(pl.col('structure').repeat_by(1))
+                    )
+                    .explode('structure')
+                    .with_columns(
+                        pl.when(pl.col('structure').is_in(structure_grouping.keys()).is_first_distinct().over('unit_id'))
+                        .then(pl.col('structure').replace(structure_grouping))
+                        .otherwise(pl.col('structure'))
+                    )
+                    .group_by('session_id','structure')
+                    .agg(
+                        pl.col('unit_id').len().alias('total_n_units')
+                    )
+                ),
+                on=['session_id','structure'],
+                how='left',
+            )
+            #join on session table to get cross-modal dprime, etc.
+            .join(
+                other=session_table.filter(
+                    pl.col('session_id').is_in(session_list)
+                ).select(
+                    'session_id',
+                    'n_passing_blocks',
+                    'cross_modality_dprime_vis_blocks',
+                    'cross_modality_dprime_aud_blocks',
+                ).lazy(),
+                on='session_id',
+                how='left',
+            )
+            # get the means for each recording over repeats:
+            .group_by(grouping_cols | {'shift_idx', 'n_passing_blocks', 'cross_modality_dprime_vis_blocks', 
+                                    'cross_modality_dprime_aud_blocks', 'total_n_units'}, maintain_order=True)
+            .agg(
+                pl.col('balanced_accuracy_test').mean(), # over repeats
+            )
+            # get the aligned result and median over shifts:
+            .group_by(grouping_cols - {'electrode_group_names'} | {'n_passing_blocks', 'cross_modality_dprime_vis_blocks', 
+                                                                'cross_modality_dprime_aud_blocks', 'total_n_units'})
+            .agg(
+                pl.col('balanced_accuracy_test').first().alias('mean_true'),
+            )
+            .sort('session_id', 'structure', 'unit_subsample_size', 'bin_center', descending=False)
+            .collect()
         )
-        .filter(
-            combine_multi_probe_expr,
-            pl.col('is_all_trials').eq(is_all_trials),
-        )
-        #get total n units
-        .join(
-            other=(
-                pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet')
-                .with_columns(
-                    pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
-                )
-                #make new rows according to structure_grouping
-                .with_columns(
-                    pl.when(pl.col('structure').is_in(structure_grouping.keys()))
-                    .then(pl.col('structure').repeat_by(n_repeats))
-                    .otherwise(pl.col('structure').repeat_by(1))
-                )
-                .explode('structure')
-                .with_columns(
-                    pl.when(pl.col('structure').is_in(structure_grouping.keys()).is_first_distinct().over('unit_id'))
-                    .then(pl.col('structure').replace(structure_grouping))
-                    .otherwise(pl.col('structure'))
-                )
-                .group_by('session_id','structure')
-                .agg(
-                    pl.col('unit_id').len().alias('total_n_units')
-                )
-            ),
-            on=['session_id','structure'],
-            how='left',
-        )
-        #join on session table to get cross-modal dprime, etc.
-        .join(
-            other=session_table.filter(
-                pl.col('session_id').is_in(session_list)
-            ).select(
-                'session_id',
-                'n_passing_blocks',
-                'cross_modality_dprime_vis_blocks',
-                'cross_modality_dprime_aud_blocks',
-            ).lazy(),
-            on='session_id',
-            how='left',
-        )
-        # get the means for each recording over repeats:
-        .group_by(grouping_cols | {'shift_idx', 'n_passing_blocks', 'cross_modality_dprime_vis_blocks', 
-                                'cross_modality_dprime_aud_blocks', 'total_n_units'}, maintain_order=True)
-        .agg(
-            pl.col('balanced_accuracy_test').mean(), # over repeats
-        )
-        # get the aligned result and median over shifts:
-        .group_by(grouping_cols - {'electrode_group_names'} | {'n_passing_blocks', 'cross_modality_dprime_vis_blocks', 
-                                                            'cross_modality_dprime_aud_blocks', 'total_n_units'})
-        .agg(
-            pl.col('balanced_accuracy_test').filter(pl.col('shift_idx') == 0).first().alias('mean_true'),
-            pl.col('balanced_accuracy_test').filter(pl.col('shift_idx') != 0).median().alias('median_null'),
-            pl.col('balanced_accuracy_test', 'shift_idx').sort_by('shift_idx'),
-        )
-        # get the difference between true and null:
-        .with_columns(
-            pl.col('mean_true').sub(pl.col('median_null')).alias('mean_diff'),
-        )
-        .sort('session_id', 'structure', 'unit_subsample_size', 'bin_center', descending=False)
-        .collect()
-    )
 
     results_session_df = exclude_structures_from_df(
         results_session_df, 
