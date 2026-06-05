@@ -306,6 +306,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         train_test_split=zip(train,test)
 
         ypred_proba_all=[]
+        decision_function_all=[]
 
     elif 'forecast' in crossval:
         if crossval_index is None:
