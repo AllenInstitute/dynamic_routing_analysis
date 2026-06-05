@@ -285,6 +285,28 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             test.append(block_inds)
         train_test_split=zip(train,test)
 
+    elif crossval=='leave_2_blocks_out':
+        if crossval_index is None:
+            raise ValueError('Must provide crossval_index')
+        train=[]
+        test=[]
+        block_number=crossval_index
+        block_numbers=np.unique(block_number)
+        #leave each pair of adjacent blocks out for testing, including the first and last as a pair
+        for bb in block_numbers[:-1]:
+            not_block_inds=np.where((block_number!=bb) & (block_number!=bb+1))[0]
+            train.append(not_block_inds)
+            block_inds=np.where((block_number==bb) | (block_number==bb+1))[0]
+            test.append(block_inds)
+        #last and first block as a pair
+        not_block_inds=np.where((block_number!=block_numbers[-1]) & (block_number!=block_numbers[0]))[0]
+        train.append(not_block_inds)
+        block_inds=np.where((block_number==block_numbers[-1]) | (block_number==block_numbers[0]))[0]
+        test.append(block_inds)
+        train_test_split=zip(train,test)
+
+        ypred_proba_all=[]
+
     elif 'forecast' in crossval:
         if crossval_index is None:
             raise ValueError('Must provide crossval_index')
@@ -360,21 +382,45 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         train_trials.append(train)
         test_trials.append(test)
 
+          
         if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
-            ypred_proba[test,:] = clf.predict_proba(X[test])
+            if crossval=='leave_2_blocks_out':
+                temp_ypred_proba = np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
+                temp_ypred_proba[test,:] = clf.predict_proba(X[test])
+                ypred_proba_all.append(temp_ypred_proba)
+            else:
+                ypred_proba[test,:] = clf.predict_proba(X[test])
         else:
-            ypred_proba[test,:] = np.full((len(test),len(np.unique(labels))), fill_value=False)
+            if crossval=='leave_2_blocks_out':
+                ypred_proba_all.append(np.full((len(y),len(np.unique(labels))), fill_value=False))
+            else:
+                ypred_proba[test,:] = np.full((len(test),len(np.unique(labels))), fill_value=False)
 
         if decoder_type=='LDA' or decoder_type=='linearSVC' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
-            if len(np.unique(labels))>2:
-                decision_function[test,:]=clf.decision_function(X[test])
+            if crossval=='leave_2_blocks_out':
+                if len(np.unique(labels))>2:
+                    temp_decision_function = np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
+                    temp_decision_function[test,:] = clf.decision_function(X[test])
+                else:
+                    temp_decision_function = np.full(len(y), fill_value=np.nan)
+                    temp_decision_function[test] = clf.decision_function(X[test])
+                decision_function_all.append(temp_decision_function)
             else:
-                decision_function[test]=clf.decision_function(X[test])
+                if len(np.unique(labels))>2:
+                    decision_function[test,:]=clf.decision_function(X[test])
+                else:
+                    decision_function[test]=clf.decision_function(X[test])
         else:
-            if len(np.unique(labels))>2:
-                decision_function[test,:]=np.full((len(test),len(np.unique(labels))), fill_value=False)
+            if crossval=='leave_2_blocks_out':
+                if len(np.unique(labels))>2:
+                    decision_function_all.append(np.full((len(y),len(np.unique(labels))), fill_value=False))
+                else:
+                    decision_function_all.append(np.full((len(y)), fill_value=False))
             else:
-                decision_function[test]=np.full((len(test)), fill_value=False)
+                if len(np.unique(labels))>2:
+                    decision_function[test,:]=np.full((len(test),len(np.unique(labels))), fill_value=False)
+                else:
+                    decision_function[test]=np.full((len(test)), fill_value=False)
 
         if decoder_type == 'LDA' or decoder_type == 'linearSVC' or decoder_type == 'LogisticRegression':
             coefs_all.append(clf.coef_)
@@ -382,6 +428,14 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             coefs_all.append(np.full((X.shape[1]), fill_value=False))
 
         models.append(clf)
+    
+    #takes mean over all repeated crossvals for each trial
+    if crossval=='leave_2_blocks_out':
+        ypred_proba=np.nanmean(np.stack(ypred_proba_all, axis=2),axis=2)
+        if len(np.unique(labels))>2:
+            decision_function=np.nanmean(np.stack(decision_function_all, axis=2),axis=2)
+        else:
+            decision_function=np.nanmean(np.stack(decision_function_all, axis=1),axis=1)
 
     #fit on all trials
     clf.fit(X, y)
