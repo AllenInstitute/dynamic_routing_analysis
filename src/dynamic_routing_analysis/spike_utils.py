@@ -315,6 +315,8 @@ def compute_lick_modulation(trials, units, session_info, save_path=None, test=Fa
     lick_frs_by_trial_zscore[np.isinf(lick_frs_by_trial_zscore)]=np.nan
     lick_modulation['lick_modulation_zscore'] = lick_frs_by_trial_zscore.values.tolist()
 
+    lick_modulation['lick_modulation_raw'] = lick_frs_by_trial.mean(dim='trials',skipna=True).values.tolist()
+
     lick_modulation_index=(lick_frs_by_trial.mean(dim='trials',skipna=True)-non_lick_frs_by_trial.mean(dim='trials',skipna=True)
                            )/(lick_frs_by_trial.mean(dim='trials',skipna=True)+non_lick_frs_by_trial.mean(dim='trials',skipna=True))
     lick_modulation['lick_modulation_index'] = lick_modulation_index
