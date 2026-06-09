@@ -321,6 +321,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             train.append(not_block_inds)
             block_inds=np.where((block_number==bb) | (block_number==bb+1))[0]
             test.append(block_inds)
+        train_test_split=zip(train,test)
 
         ypred_proba_all=[]
         decision_function_all=[]
@@ -521,6 +522,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     output['params']=params
     #mean balanced accuracy across folds
     output['balanced_accuracy_test']=np.nanmean(balanced_accuracy_test)
+    output['balanced_accuracy_test_all']=balanced_accuracy_test
 
     output['pred_label_train']=ypred_train
     output['true_label_train']=ytrue_train
