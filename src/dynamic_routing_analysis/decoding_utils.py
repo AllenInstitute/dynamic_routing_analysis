@@ -522,7 +522,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     output['params']=params
     #mean balanced accuracy across folds
     output['balanced_accuracy_test']=np.nanmean(balanced_accuracy_test)
-    output['balanced_accuracy_test_all']=balanced_accuracy_test
+    output['balanced_accuracy_test_all']=np.asarray(balanced_accuracy_test)
 
     output['pred_label_train']=ypred_train
     output['true_label_train']=ytrue_train
