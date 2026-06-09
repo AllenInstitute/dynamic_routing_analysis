@@ -308,6 +308,24 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         ypred_proba_all=[]
         decision_function_all=[]
 
+    elif crossval=='leave_2_blocks_out_adjacent':
+        if crossval_index is None:
+            raise ValueError('Must provide crossval_index')
+        train=[]
+        test=[]
+        block_number=crossval_index
+        block_numbers=np.unique(block_number)
+        #leave each pair of adjacent blocks out for testing, but do not include the first and last blocks as a pair
+        for bb in block_numbers[:-1]:
+            not_block_inds=np.where((block_number!=bb) & (block_number!=bb+1))[0]
+            train.append(not_block_inds)
+            block_inds=np.where((block_number==bb) | (block_number==bb+1))[0]
+            test.append(block_inds)
+
+        ypred_proba_all=[]
+        decision_function_all=[]
+
+
     elif 'forecast' in crossval:
         if crossval_index is None:
             raise ValueError('Must provide crossval_index')
