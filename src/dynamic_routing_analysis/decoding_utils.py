@@ -331,7 +331,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             raise ValueError('Must provide crossval_index')
         train=[]
         test=[]
-        block_number=trials['block_index'].values
+        block_number=crossval_index
         #find indices for block numbers, label second half of block as +0.5
         new_block_number=np.copy(block_number).astype(float)
         block_numbers=np.unique(block_number)
