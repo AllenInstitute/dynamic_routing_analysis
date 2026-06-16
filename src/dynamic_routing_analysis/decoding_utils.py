@@ -340,7 +340,6 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             if len(block_inds)>0:
                 half_point=block_inds[len(block_inds)//2]
                 new_block_number[half_point:block_inds[-1]+1]=bb+0.5
-                print(f'block {bb}, half point index: {half_point}, block inds: {block_inds}')
         new_block_numbers=np.unique(new_block_number)
 
         for bb in new_block_numbers:
