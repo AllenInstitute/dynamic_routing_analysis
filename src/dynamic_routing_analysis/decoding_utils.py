@@ -331,7 +331,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             raise ValueError('Must provide crossval_index')
         train=[]
         test=[]
-        block_number=crossval_index
+        block_number=trials['block_index'].values
         #find indices for block numbers, label second half of block as +0.5
         new_block_number=np.copy(block_number).astype(float)
         block_numbers=np.unique(block_number)
@@ -339,14 +339,16 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             block_inds=np.where(block_number==bb)[0]
             if len(block_inds)>0:
                 half_point=block_inds[len(block_inds)//2]
-                new_block_number[block_inds[half_point:]]=bb+0.5
-
+                new_block_number[half_point:block_inds[-1]+1]=bb+0.5
+                print(f'block {bb}, half point index: {half_point}, block inds: {block_inds}')
         new_block_numbers=np.unique(new_block_number)
 
         for bb in new_block_numbers:
-            not_block_inds=np.where((new_block_number!=bb) & (new_block_number!=bb+1))[0]
+            if bb+1.5 not in new_block_numbers:
+                continue
+            not_block_inds=np.where((new_block_number!=bb) & (new_block_number!=bb+0.5) & (new_block_number!=bb+1.0) & (new_block_number!=bb+1.5))[0]
             train.append(not_block_inds)
-            block_inds=np.where((new_block_number==bb) | (new_block_number==bb+1))[0]
+            block_inds=np.where((new_block_number==bb) | (new_block_number==bb+0.5) | (new_block_number==bb+1.0) | (new_block_number==bb+1.5))[0]
             test.append(block_inds)
         train_test_split=zip(train,test)
 
