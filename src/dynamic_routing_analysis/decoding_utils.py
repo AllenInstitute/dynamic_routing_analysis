@@ -326,7 +326,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         ypred_proba_all=[]
         decision_function_all=[]
 
-    elif crossval=='leave_2_blocks_out_half_block_shifts':
+    elif crossval=='leave_2_blocks_out_half_block_shifts' or crossval=='leave_2_blocks_out_half_block_shifts_wraparound':
         if crossval_index is None:
             raise ValueError('Must provide crossval_index')
         train=[]
@@ -349,6 +349,19 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             train.append(not_block_inds)
             block_inds=np.where((new_block_number==bb) | (new_block_number==bb+0.5) | (new_block_number==bb+1.0) | (new_block_number==bb+1.5))[0]
             test.append(block_inds)
+
+        if 'wraparound' in crossval:
+            # get wraparound train and test sets
+            for bb in [0,1,2]:
+                not_block_inds=np.where(
+                    (new_block_number!=new_block_numbers[-3+bb]) & (new_block_number!=new_block_numbers[-2+bb]) &
+                    (new_block_number!=new_block_numbers[-1+bb]) & (new_block_number!=new_block_numbers[0+bb]))[0]
+                train.append(not_block_inds)
+                block_inds=np.where(
+                    (new_block_number==new_block_numbers[-3+bb]) |(new_block_number==new_block_numbers[-2+bb]) | 
+                    (new_block_number==new_block_numbers[-1+bb]) | (new_block_number==new_block_numbers[0+bb]))[0]
+                test.append(block_inds)
+        
         train_test_split=zip(train,test)
 
         ypred_proba_all=[]
