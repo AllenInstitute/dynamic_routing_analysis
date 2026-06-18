@@ -354,6 +354,62 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         ypred_proba_all=[]
         decision_function_all=[]
 
+    elif crossval=='leave_1_half_block_out':
+        if crossval_index is None:
+            raise ValueError('Must provide crossval_index')
+        train=[]
+        test=[]
+        block_number=crossval_index
+        #find indices for block numbers, label second half of block as +0.5
+        new_block_number=np.copy(block_number).astype(float)
+        block_numbers=np.unique(block_number)
+        for bb in block_numbers:
+            block_inds=np.where(block_number==bb)[0]
+            if len(block_inds)>0:
+                half_point=block_inds[len(block_inds)//2]
+                new_block_number[half_point:block_inds[-1]+1]=bb+0.5
+        new_block_numbers=np.unique(new_block_number)
+
+        for bb in new_block_numbers:
+            not_block_inds=np.where((new_block_number!=bb))[0]
+            train.append(not_block_inds)
+            block_inds=np.where((new_block_number==bb))[0]
+            test.append(block_inds)
+        train_test_split=zip(train,test)
+
+    elif crossval=='leave_2_half_blocks_out_full_block_shifts':
+        if crossval_index is None:
+            raise ValueError('Must provide crossval_index')
+        train=[]
+        test=[]
+        block_number=crossval_index
+        #find indices for block numbers, label second half of block as +0.5
+        new_block_number=np.copy(block_number).astype(float)
+        block_numbers=np.unique(block_number)
+        for bb in block_numbers:
+            block_inds=np.where(block_number==bb)[0]
+            if len(block_inds)>0:
+                half_point=block_inds[len(block_inds)//2]
+                new_block_number[half_point:block_inds[-1]+1]=bb+0.5
+        new_block_numbers=np.unique(new_block_number)
+
+        loop_block_numbers=block_numbers+0.5
+
+        for bb in loop_block_numbers[:-1]:
+            not_block_inds=np.where((new_block_number!=bb) & (new_block_number!=bb+0.5))[0]
+            train.append(not_block_inds)
+            block_inds=np.where((new_block_number==bb) | (new_block_number==bb+0.5))[0]
+            test.append(block_inds)
+        #add first and last half-block
+        not_block_inds=np.where(
+            (new_block_number!=loop_block_numbers[-1]) & (new_block_number!=block_numbers[0]))[0]
+        train.append(not_block_inds)
+        block_inds=np.where(
+            (new_block_number==loop_block_numbers[-1]) |(new_block_number==block_numbers[0]))[0]
+        test.append(block_inds)
+
+        train_test_split=zip(train,test)
+
     elif 'forecast' in crossval:
         if crossval_index is None:
             raise ValueError('Must provide crossval_index')
