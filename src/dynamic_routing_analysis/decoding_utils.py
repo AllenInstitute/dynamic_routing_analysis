@@ -469,9 +469,10 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         n_repeats=5
         for rr in range(n_repeats):
             skf = StratifiedKFold(n_splits=5,shuffle=True)
-            temp_train,temp_test = skf.split(input_data, labels)
-            train.extend(temp_train)
-            test.extend(temp_test)
+            train_test_split_temp = skf.split(input_data, labels)
+            for temp_train, temp_test in train_test_split_temp:
+                train.extend(temp_train)
+                test.extend(temp_test)
 
         train_test_split=zip(train,test)
 
