@@ -470,7 +470,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         for rr in range(n_repeats):
             skf = StratifiedKFold(n_splits=5,shuffle=True)
             train_test_split_temp = skf.split(input_data, labels)
-            for temp_train, temp_test in train_test_split_temp:
+        for temp_train, temp_test in train_test_split_temp:
                 train.extend(temp_train)
                 test.extend(temp_test)
 
@@ -490,6 +490,11 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             set_random_state=0
         skf = StratifiedKFold(n_splits=5,shuffle=True,random_state=set_random_state)
         train_test_split = skf.split(input_data, labels)
+
+    #list of crossval strategies where I want to take a mean over all arbitrary folds
+    mean_over_folds_list = ['leave_2_blocks_out', 'leave_2_blocks_out_adjacent', 'leave_2_blocks_out_half_block_shifts',
+                            'leave_2_blocks_out_half_block_shifts_wraparound', 'leave_2_half_blocks_out_full_block_shifts',
+                            '5x_5_fold']
 
     for train,test in train_test_split:
 
@@ -513,20 +518,20 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
           
         if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
-            if crossval=='leave_2_blocks_out':
+            if crossval in mean_over_folds_list:
                 temp_ypred_proba = np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
                 temp_ypred_proba[test,:] = clf.predict_proba(X[test])
                 ypred_proba_all.append(temp_ypred_proba)
             else:
                 ypred_proba[test,:] = clf.predict_proba(X[test])
         else:
-            if crossval=='leave_2_blocks_out':
+            if crossval in mean_over_folds_list:
                 ypred_proba_all.append(np.full((len(y),len(np.unique(labels))), fill_value=False))
             else:
                 ypred_proba[test,:] = np.full((len(test),len(np.unique(labels))), fill_value=False)
 
         if decoder_type=='LDA' or decoder_type=='linearSVC' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
-            if crossval=='leave_2_blocks_out':
+            if crossval in mean_over_folds_list:
                 if len(np.unique(labels))>2:
                     temp_decision_function = np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
                     temp_decision_function[test,:] = clf.decision_function(X[test])
@@ -540,7 +545,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                 else:
                     decision_function[test]=clf.decision_function(X[test])
         else:
-            if crossval=='leave_2_blocks_out':
+            if crossval in mean_over_folds_list:
                 if len(np.unique(labels))>2:
                     decision_function_all.append(np.full((len(y),len(np.unique(labels))), fill_value=False))
                 else:
@@ -559,7 +564,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         models.append(clf)
     
     #takes mean over all repeated crossvals for each trial
-    if crossval=='leave_2_blocks_out':
+    if crossval in mean_over_folds_list:
         ypred_proba=np.nanmean(np.stack(ypred_proba_all, axis=2),axis=2)
         if len(np.unique(labels))>2:
             decision_function=np.nanmean(np.stack(decision_function_all, axis=2),axis=2)
