@@ -1173,3 +1173,7 @@ def standardize_inputs(timeseries, mean_center=True, unit_variance=True, max_val
         timeseries = timeseries / max_value
 
     return timeseries
+
+# add pupil position - subtract corneal reflection
+# pupil vs context update vs false alarm?
+# false alarm vs face expressions
