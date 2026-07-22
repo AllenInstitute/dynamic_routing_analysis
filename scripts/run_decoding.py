@@ -17,14 +17,12 @@ from typing import Annotated, Literal
 
 # 3rd-party imports necessary for processing ----------------------- #
 import matplotlib
-import pandas as pd
 import polars as pl
 import upath
 
 # local modules ---------------------------------------------------- #
-import utils
-import decoding_utils
-from decoding_utils import Params, BinnedRelativeIntervalConfig
+from dynamic_routing_analysis import utils, decoding_utils, codeocean_utils
+from dynamic_routing_analysis.decoding_utils import Params
 
 
 # logging configuration -------------------------------------------- #
@@ -41,10 +39,13 @@ logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR) # suppress 
         
 # processing function ---------------------------------------------- #
 
+ON_CODE_OCEAN = codeocean_utils.is_capsule()
+
 def main():
     t0 = time.time()
     
-    utils.setup_logging()
+    if ON_CODE_OCEAN:
+        utils.setup_logging()
     params = Params() # reads from CLI args
     logger.setLevel(params.logging_level)
   
@@ -64,8 +65,7 @@ def main():
     
     # if session_id is passed as a command line argument, we will only process that session,
     # otherwise we process all session IDs that match filtering criteria:    
-    session_table = pd.read_parquet(utils.get_datacube_dir() / 'session_table.parquet')
-    session_table['issues']=session_table['issues'].astype(str)
+    session_table = utils.get_session_table().to_pandas()
     session_ids: list[str] = session_table.query(params.session_table_query)['session_id'].values.tolist()
     logger.debug(f"Found {len(session_ids)} session_ids available for use after filtering")
     
@@ -81,7 +81,8 @@ def main():
     else:
         logger.info(f"Using list of {len(session_ids)} session_ids after filtering")
     
-    upath.UPath('/results/params.json').write_text(params.model_dump_json(indent=4))
+    if ON_CODE_OCEAN:
+        upath.UPath('/results/params.json').write_text(params.model_dump_json(indent=4))
     if params.json_path.exists():
         existing_params = json.loads(params.json_path.read_text())
         if existing_params != params.model_dump():
@@ -91,7 +92,7 @@ def main():
         params.json_path.write_text(params.model_dump_json(indent=4))
     
     logger.info(f'starting decode_context_with_linear_shift with {params!r}')
-    decoding_utils.decode_context_with_linear_shift(session_ids=session_ids, params=params)
+    # decoding_utils.decode_context_with_linear_shift(session_ids=session_ids, params=params)
     
     utils.ensure_nonempty_results_dir()
     logger.info(f"Time elapsed: {time.time() - t0:.2f} s")

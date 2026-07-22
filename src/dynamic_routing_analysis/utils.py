@@ -1,12 +1,9 @@
 # stdlib imports --------------------------------------------------- #
 from __future__ import annotations
 
-import argparse
 import concurrent.futures
-import contextlib
 import dataclasses
 import datetime
-import json
 import functools
 import logging
 import logging.handlers
@@ -15,28 +12,22 @@ import os
 import pathlib
 import sys
 import time
-import types
 import typing
 import uuid
 import zoneinfo
-from typing import Any, Generator, Iterable, Literal, Sequence
+from collections.abc import Generator, Iterable
+from typing import Any, Literal
 
 # 3rd-party imports necessary for processing ----------------------- #
 import h5py
 import numpy as np
 import numpy.typing as npt
-import pandas as pd
-import matplotlib
-import matplotlib.pyplot as plt
 import polars as pl
-import sklearn
-import pynwb
+import polars._typing
 import tqdm
 import upath
-import zarr
-import polars._typing
 
-import numba_psth
+from dynamic_routing_analysis import codeocean_utils
 
 logger = logging.getLogger(__name__)
 
@@ -108,22 +99,22 @@ def setup_logging(
         co_prefix = ""
 
     fmt = f"%(asctime)s | %(levelname)s | {co_prefix}%(name)s.%(funcName)s | %(message)s"
-    
+
     formatter = PSTFormatter( # use Seattle time
         fmt=fmt,
         datefmt="%Y-%m-%d %H:%M:%S %Z",
     )
-    
+
     handlers: list[logging.Handler] = []
-    
+
     # Create a console handler
     console_handler = logging.StreamHandler(stream=sys.stdout)
     handlers.append(console_handler)
-    
+
     if is_pipeline() and not filepath:
         filepath = f"/results/logs/{AWS_BATCH_JOB_ID}.log"
         # note: filename must be unique if we want to collect logs at end of pipeline
-        
+
     if filepath:
         pathlib.Path(filepath).parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.handlers.RotatingFileHandler(
@@ -139,19 +130,21 @@ def setup_logging(
     logging.basicConfig(level=level, handlers=handlers)
 
 
-# data access ------------------------------------------------------- #    
+# data access ------------------------------------------------------- #
 def get_session_table() -> pl.DataFrame:
-    return pl.read_parquet(get_datacube_dir() / 'session_table.parquet')
-    
-    
+    if codeocean_utils.is_capsule() or codeocean_utils.is_pipeline():
+        return pl.read_parquet(get_datacube_dir() / 'session_table.parquet')
+    else:
+        return pl.read_parquet('s3://aind-scratch-data/dynamic-routing/session_metadata/session_table.parquet', storage_options={'skip_signature': 'true'})
+
 @typing.overload
 def get_df(component: str, lazy: Literal[False] = False) ->  pl.DataFrame:
     ...
-    
+
 @typing.overload
 def get_df(component: str, lazy: Literal[True] = True) ->  pl.LazyFrame:
     ...
-    
+
 def get_df(component: str, lazy: bool = False) -> pl.DataFrame | pl.LazyFrame:
     path = get_datacube_dir() / 'consolidated' / f'{component}.parquet'
     frame: pl.DataFrame | pl.LazyFrame
@@ -192,6 +185,7 @@ def get_nwb(session_id_or_path: str | pathlib.Path, raise_on_missing: bool = Tru
                     raise FileNotFoundError(f"{msg}. Available files: {[p.name for p in get_nwb_paths()]}") from None
     logger.info(f"Reading {nwb_path}")
     try:
+        import pynwb
         nwb = pynwb.NWBHDF5IO(nwb_path).read()
     except RecursionError:
         msg = f"{nwb_path.name} cannot be read due to RecursionError (hdf5 may still be accessible)"
@@ -202,8 +196,8 @@ def get_nwb(session_id_or_path: str | pathlib.Path, raise_on_missing: bool = Tru
             raise RecursionError(msg)
     else:
         return nwb
-        
-def _get_spike_times_single_nwb(nwb_path: str | pathlib.Path, unit_ids: str | Iterable[str], use_pynwb: bool = True) -> dict[str, npt.NDArray[np.float64]]:    
+
+def _get_spike_times_single_nwb(nwb_path: str | pathlib.Path, unit_ids: str | Iterable[str], use_pynwb: bool = True) -> dict[str, npt.NDArray[np.float64]]:
     if isinstance(unit_ids, str):
         unit_ids = (unit_ids,)
     unit_ids = tuple(unit_ids)
@@ -214,6 +208,7 @@ def _get_spike_times_single_nwb(nwb_path: str | pathlib.Path, unit_ids: str | It
     logging.debug(f"Fetching spike times for {len(unit_ids)} units from {nwb_path}")
     if use_pynwb:
         t0 = time.time()
+        import pynwb
         nwb = pynwb.NWBHDF5IO(nwb_path, 'r').read()
         logger.debug(f"Opened NWB in {time.time() - t0:.2f}s")
         t0 = time.time()
@@ -255,7 +250,7 @@ def get_spike_times(unit_ids: str | Iterable[str]) -> dict[str, npt.NDArray[np.f
         session_id = '_'.join(unit_id.split('_')[:2])
         session_to_unit_ids.setdefault(session_id, []).append(unit_id)
     logging.debug(f"Fetching spike times ({len(unit_ids)} units) from {len(session_to_unit_ids)} session(s)")
-    
+
     future_to_nwb_session_id = {}
     with concurrent.futures.ThreadPoolExecutor() as executor:
         for session_id in session_to_unit_ids:
@@ -355,7 +350,7 @@ def get_per_trial_spike_times(
     intervals: dict[str, tuple[pl.Expr, pl.Expr]],
     session_id: str | None = None,
     unit_ids: Iterable[str] | None = None,
-    trials_frame: str | polars._typing.FrameType = 'trials', 
+    trials_frame: str | polars._typing.FrameType = 'trials',
     apply_obs_intervals: bool = True,
     as_counts: bool = False,
     keep_only_necessary_cols: bool = True,
@@ -373,9 +368,9 @@ def get_per_trial_spike_times(
         elif isinstance(unit_ids, Generator):
             unit_ids = tuple(unit_ids)
         if not tuple(unit_ids):
-            raise ValueError(f'unit_ids must be None or a non-empty iterable')
+            raise ValueError('unit_ids must be None or a non-empty iterable')
         units_df = get_df('units').select(units_df_cols).filter(pl.col('unit_id').is_in(unit_ids))
-    
+
     if isinstance(trials_frame, str):
         trials_df = get_df(trials_frame)
     else:
@@ -403,17 +398,17 @@ def get_per_trial_spike_times(
         )
     if isinstance(trials_frame, pl.LazyFrame):
         trials_df = trials_frame.collect()
-    
+
     spike_times_all_units: dict[str, npt.NDArray] = get_spike_times(unit_ids)
-    
+
     results = {
-        'unit_id': [], 
+        'unit_id': [],
         # session_id can be derived from unit_id
         'trial_index': [],
     }
     for col_name in intervals.keys():
         results[col_name] = []
-    
+
     for (session_id, *_), session_trials in trials_df.group_by(pl.col('session_id')):
         session_units = units_df.filter(pl.col('session_id') == session_id).unique('unit_id')
         # unit_ids should already be unique, but make sure so we don't do unnecessary work
@@ -422,7 +417,7 @@ def get_per_trial_spike_times(
             if row['unit_id'] is None:
                 raise ValueError(f"Missing unit_id in {row=}")
             results['unit_id'].extend([row['unit_id']] * len(session_trials))
-            
+
             for col_name, (start, end) in intervals.items():
                 # get spike times with start:end interval for each row of the trials table
                 spike_times = spike_times_all_units[row['unit_id']]
@@ -435,7 +430,7 @@ def get_per_trial_spike_times(
                     else:
                         spikes_in_intervals.append(spike_times_in_interval.tolist())
                 results[col_name].extend(spikes_in_intervals)
-                
+
     if apply_obs_intervals or not keep_only_necessary_cols:
         results_df = (
             trials_df
@@ -453,7 +448,7 @@ def get_per_trial_spike_times(
         )
     else:
         results_df = pl.DataFrame(results)
-    
+
     if apply_obs_intervals:
         results_df = (
             insert_is_observed(
@@ -485,6 +480,7 @@ def make_psth(
     spike_times = np.array(spike_times, dtype=np.float64)
     if spike_times.ndim != 1:
         raise ValueError(f"Expected spike_times to be a 1-d array: got ({spike_times.shape})")
+    import numba_psth
     return numba_psth.makePSTH(spike_times, np.array(start_times, dtype=np.float64), float(baseline_dur), float(response_dur), float(bin_size), float(conv_kernel_size))
 
 def unit_id_to_session_id(unit_id: str) -> str:
@@ -516,20 +512,20 @@ class Condition:
     unit_responses: tuple[UnitResponse, ...] = None
     bins: npt.NDArray[np.float64] = None
     result: Any = None
-    
+
     def __hash__(self) -> int:
         return (
             hash(combine_exprs(self.units_filter).meta.serialize(format='json'))
             ^ hash(combine_exprs(self.trials_filter).meta.serialize(format='json'))
             ^ hash(combine_exprs(self.session_table_filter).meta.serialize(format='json'))
         )
-    
+
     def __lt__(self, other: Condition) -> bool:
         return hash(self) < hash(other)
-    
+
     def __eq__(self, other: Condition) -> bool:
         return hash(self) == hash(other)
-    
+
     @property
     def psths(self) -> npt.NDArray[np.float64]:
         """units x bins"""
@@ -551,7 +547,7 @@ def get_scaled_concatenated_psths(
 ) -> dict[str, tuple[tuple[Condition, ...], npt.NDArray[np.float64]]]:
     areas = sorted({c.area for c in conditions})
     area_to_conditions: dict[str, list[Condition]] = {
-        area: sorted(c for c in conditions if c.area == area) 
+        area: sorted(c for c in conditions if c.area == area)
         for area in areas
     }
     def scale(a):
@@ -562,7 +558,7 @@ def get_scaled_concatenated_psths(
         elif z_score_axis == 1:
             return ((a.T - np.mean(a, axis=1)) / np.std(a, axis=1)).T
         else:
-            raise ValueError(f"z_score_axis must be 0 (z-score calculated at each bin of PSTH, across units) or 1 (z-score calculated for each unit's PSTH in isolation)")
+            raise ValueError("z_score_axis must be 0 (z-score calculated at each bin of PSTH, across units) or 1 (z-score calculated for each unit's PSTH in isolation)")
 
     info = {area: len(conditions) for area, conditions in area_to_conditions.items()}
     logger.info(f"Getting scaled psths for {{area: n_conditions}}: {info}")
@@ -573,17 +569,17 @@ def get_scaled_concatenated_psths(
     assert len(area_to_conditions) == len(area_to_psths)
     assert all(area_to_psths[area].shape[0] == len(condition.unit_responses) for area in areas for condition in area_to_conditions[area])
     return {area: (tuple(area_to_conditions[area]), area_to_psths[area]) for area in areas}
-        
+
 def process_conditions_by_area(
     conditions: Iterable[Condition],
     **psth_kwargs,
 ) -> list[Condition]:
     """For each Condition, add unit responses (with `makePSTH`) for matching trials and return the mutated instance"""
-    
+
     conditions = tuple(conditions)
     if len(areas := {c.area for c in conditions}) > 1:
         raise ValueError(f"This function is for processing groups of Conditions with the same area: got {areas=} in {len(conditions)} Conditions")
-    
+
     # get spike times for all units in area that pass filters for unit and session metrics
     select_units = (
         get_df('units', lazy=True)
@@ -594,20 +590,20 @@ def process_conditions_by_area(
             how='semi', # keeps rows in left table that have a match in right table
         )
     ).collect()
-    logger.debug(f"Getting spike times for {conditions[0].area}") 
+    logger.debug(f"Getting spike times for {conditions[0].area}")
     unit_id_to_spike_times: dict[str, npt.NDArray[np.float64]] = get_spike_times(select_units['unit_id'])
     if not unit_id_to_spike_times:
         raise ValueError(f"No unit spike times returned for {conditions[0].area}: check units and session table filter expressions")
     trials = get_df('trials')
     for condition in conditions:
-        # get psth for each unit in area, for trials that match the parameters of this condition 
-        unit_responses = []  
+        # get psth for each unit in area, for trials that match the parameters of this condition
+        unit_responses = []
         for unit_id, spike_times in tqdm.tqdm(
             unit_id_to_spike_times.items(),
             total=len(unit_id_to_spike_times),
             unit='units',
             desc=f"Getting PSTHs ({condition.area} | {condition.stim} | {condition.context})",
-        ): 
+        ):
             start_times = (
                 trials
                 .filter(
@@ -615,7 +611,7 @@ def process_conditions_by_area(
                     pl.col('session_id').str.starts_with(unit_id_to_session_id(unit_id))
                 )
             )['stim_start_time']
-            psth, bins = make_psth(spike_times=spike_times, start_times=start_times, **psth_kwargs) 
+            psth, bins = make_psth(spike_times=spike_times, start_times=start_times, **psth_kwargs)
             unit_responses.append(
                 UnitResponse(
                     psth=psth,
@@ -679,7 +675,7 @@ def get_nwb_paths() -> tuple[pathlib.Path, ...]:
     return tuple(get_data_root().rglob('*.nwb'))
 
 def ensure_nonempty_results_dir() -> None:
-    """A pipeline run can crash if a results folder is expected and not found or is empty 
+    """A pipeline run can crash if a results folder is expected and not found or is empty
     - ensure that a non-empty folder exists by creating a unique file"""
     if not is_pipeline():
         return

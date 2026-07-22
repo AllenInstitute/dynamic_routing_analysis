@@ -5,55 +5,38 @@ machine learning models to decode behavioral or task variables from neural
 activity patterns.
 """
 
-import gc
+import concurrent.futures as cf
+import contextlib
+import datetime
 import logging
-import pickle
-import time
+import math
+import multiprocessing
+import os
+import random
+import uuid
+from collections.abc import Iterable, Sequence
+from typing import Annotated, Literal
 
-import npc_lims
+os.environ['RUST_BACKTRACE'] = '1'
+#os.environ['POLARS_MAX_THREADS'] = '1'
+os.environ['TOKIO_WORKER_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['RAYON_NUM_THREADS'] = '1'
+
 import numpy as np
 import pandas as pd
 import polars as pl
+import polars._typing
+import pydantic.functional_serializers
+import pydantic_settings
+import pydantic_settings.sources
+import tqdm
 import upath
-import zarr
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import RobustScaler, StandardScaler
 
-from dynamic_routing_analysis import data_utils, spike_utils
-
-import datetime
-import os
-import random
-os.environ['RUST_BACKTRACE'] = '1'
-#os.environ['POLARS_MAX_THREADS'] = '1'
-os.environ['TOKIO_WORKER_THREADS'] = '1' 
-os.environ['OPENBLAS_NUM_THREADS'] = '1' 
-os.environ['RAYON_NUM_THREADS'] = '1'
-
-import concurrent.futures as cf
-import contextlib
-import itertools
-import logging
-import math
-import multiprocessing
-import random
-import uuid
-from typing import Annotated, Iterable, Literal, Sequence
-
-import numpy as np
-import polars as pl
-import polars._typing
-import pydantic_settings
-import pydantic_settings.sources
-import pydantic.functional_serializers
-import tqdm
-import upath
-from sklearn.model_selection import StratifiedKFold
-from dynamic_routing_analysis.decoding_utils import decoder_helper, NotEnoughBlocksError
-from dynamic_routing_analysis import data_utils
-
-import utils
+from dynamic_routing_analysis import data_utils, utils
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +51,7 @@ Expr = Annotated[
 ]
 class BinnedRelativeIntervalConfig(pydantic.BaseModel):
     event_column_name: str
-    start_time: float 
+    start_time: float
     stop_time: float
     bin_size: float
 
@@ -77,7 +60,7 @@ class BinnedRelativeIntervalConfig(pydantic.BaseModel):
         start_times = np.arange(self.start_time, self.stop_time, self.bin_size)
         stop_times = start_times + self.bin_size
         return list(zip(start_times, stop_times))
-    
+
 def to_polars_expr(value: str | pl.Expr) -> Expr:
     if isinstance(value, pl.Expr):
         return value
@@ -92,11 +75,11 @@ class Params(pydantic_settings.BaseSettings):
     result_prefix: str
     "An identifier for the decoding run, used to name the output files (can have duplicates with different run_id)"
     # ----------------------------------------------------------------------------------
-    
+
     # Capsule-specific parameters -------------------------------------- #
     session_id: str | None = pydantic.Field(None, exclude=True, repr=True)
     """If provided, only process this session_id. Otherwise, process all sessions that match the filtering criteria"""
-    run_id: str = pydantic.Field(datetime.datetime.now().strftime("%Y%m%d_%H%M%S")) # created at runtime: same for all Params instances 
+    run_id: str = pydantic.Field(datetime.datetime.now().strftime("%Y%m%d_%H%M%S")) # created at runtime: same for all Params instances
     """A unique string that should be attached to all decoding runs in the same batch"""
     skip_existing: bool = pydantic.Field(True, exclude=True, repr=True)
     test: bool = pydantic.Field(False, exclude=True)
@@ -161,10 +144,12 @@ class Params(pydantic_settings.BaseSettings):
     save_all_coefs: bool = False
     """ toggle saving decoder coefficients across all train/test folds """
 
+    results_path: upath.UPath = upath.UPath("s3://aind-scratch-data/dynamic-routing/decoding/results")
+
     @property
     def data_path(self) -> upath.UPath:
         """Path to delta lake on S3"""
-        return upath.UPath("s3://aind-scratch-data/dynamic-routing/decoding/results") /f"{'_'.join([self.result_prefix, self.run_id])}"
+        return self.results_path / f"{'_'.join([self.result_prefix, self.run_id])}"
 
     @property
     def json_path(self) -> upath.UPath:
@@ -186,22 +171,22 @@ class Params(pydantic_settings.BaseSettings):
         drift_base = (pl.col('decoder_label') != "noise") & (pl.col('isi_violations_ratio') <= 0.5) & (pl.col('amplitude_cutoff') <= 0.1) & (pl.col('presence_ratio') >= 0.7)
         return {
             'medium': (pl.col('isi_violations_ratio') <= 0.5) & (pl.col('presence_ratio') >= 0.9) & (pl.col('amplitude_cutoff') <= 0.1),
-            
+
             'strict': (pl.col('isi_violations_ratio') <= 0.1) & (pl.col('presence_ratio') >= 0.99) & (pl.col('amplitude_cutoff') <= 0.1),
-            
+
             'use_sliding_rp': (pl.col('sliding_rp_violation') <= 0.1) & (pl.col('presence_ratio') >= 0.99) & (pl.col('amplitude_cutoff') <= 0.1),
-            
+
             'recalc_presence_ratio': (pl.col('sliding_rp_violation') <= 0.1) & (pl.col('presence_ratio_task') >= 0.99) & (pl.col('amplitude_cutoff') <= 0.1),
-            
+
             'no_drift': drift_base,
-            
+
             'loose_drift': drift_base & (pl.col('activity_drift') <= 0.2),
-            
+
             'medium_drift': drift_base & (pl.col('activity_drift') <= 0.15),
-            
+
             'strict_drift': drift_base & (pl.col('activity_drift') <= 0.1),
         }[self.unit_criteria]
-    
+
     @pydantic.computed_field(repr=False)
     @property
     def spike_count_interval_configs(self) -> list[BinnedRelativeIntervalConfig]:
@@ -373,7 +358,7 @@ class Params(pydantic_settings.BaseSettings):
     @pydantic.computed_field(repr=False)
     def datacube_version(self) -> str:
         return utils.get_datacube_dir().name.split('_')[-1]
-        
+
     # set the priority of the sources:
     @classmethod
     def settings_customise_sources(
@@ -391,7 +376,7 @@ class Params(pydantic_settings.BaseSettings):
             pydantic_settings.sources.JsonConfigSettingsSource(settings_cls, json_file='parameters.json'),
             pydantic_settings.CliSettingsSource(settings_cls, cli_parse_args=True),
         )
-        
+
 # end of run params ------------------------------------------------ #
 
 
@@ -400,11 +385,11 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                    regularization=None,penalty=None,solver=None,n_jobs=None,set_random_state=None,
                    other_data=None,scaler='robust'):
     """Train and evaluate a decoder to predict labels from input data.
-    
+
     This function provides a flexible interface for training various classification
     models using different cross-validation strategies. It supports multiple decoder
     types, scaling methods, and cross-validation approaches.
-    
+
     Parameters
     ----------
     input_data : array-like, shape (n_samples, n_features)
@@ -456,12 +441,12 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         - 'robust': RobustScaler (resistant to outliers)
         - 'standard': StandardScaler (z-score normalization)
         - 'none': No scaling
-    
+
     Returns
     -------
     output : dict
         Dictionary containing:
-        
+
         - 'cr': Classification reports for test data (list)
         - 'pred_label': Predicted labels from training on all data
         - 'true_label': Original labels
@@ -490,30 +475,30 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         - 'pred_label_other': Predictions for other_data (if provided)
         - 'decision_function_other': Decision values for other_data (if provided)
         - 'predict_proba_other': Predicted probabilities for other_data (if provided)
-    
+
     Raises
     ------
     ValueError
         If required parameters for specific cross-validation methods are not provided.
-    
+
     Notes
     -----
     - All models use balanced class weights to handle imbalanced datasets.
     - For blockwise and forecast cross-validation, crossval_index must be provided.
     - Not all decoders support all features (e.g., RandomForest doesn't have coef_).
     - The function trains a final model on all data in addition to cross-validation.
-    
+
     Examples
     --------
     >>> # Basic usage with linear SVC
     >>> output = decoder_helper(neural_data, task_labels)
     >>> print(f"Accuracy: {output['balanced_accuracy_test']:.3f}")
-    
+
     >>> # Blockwise cross-validation
-    >>> output = decoder_helper(neural_data, task_labels, 
+    >>> output = decoder_helper(neural_data, task_labels,
     ...                        crossval='blockwise',
     ...                        crossval_index=block_numbers)
-    
+
     >>> # Using a different decoder with custom regularization
     >>> output = decoder_helper(neural_data, task_labels,
     ...                        decoder_type='LogisticRegression',
@@ -521,7 +506,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     ...                        penalty='l1',
     ...                        solver='saga')
     """
-    
+
     #helper function to decode labels from input data using different decoder models
 
     if decoder_type=='linearSVC':
@@ -588,7 +573,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         X = scaler.transform(input_data)
 
     unique_labels=np.unique(labels)
-    if labels_as_index==True:
+    if labels_as_index is True:
         labels=np.array([np.where(unique_labels==x)[0][0] for x in labels])
     y = labels
 
@@ -609,7 +594,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         ypred=np.full(len(y), fill_value='       ')
     else:
         ypred=np.full(len(y), fill_value=np.nan)
-    
+
     ypred_proba=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
     if len(np.unique(labels))>2:
         decision_function=np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
@@ -723,10 +708,10 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                     (new_block_number!=new_block_numbers[-1+bb]) & (new_block_number!=new_block_numbers[0+bb]))[0]
                 train.append(not_block_inds)
                 block_inds=np.where(
-                    (new_block_number==new_block_numbers[-3+bb]) |(new_block_number==new_block_numbers[-2+bb]) | 
+                    (new_block_number==new_block_numbers[-3+bb]) |(new_block_number==new_block_numbers[-2+bb]) |
                     (new_block_number==new_block_numbers[-1+bb]) | (new_block_number==new_block_numbers[0+bb]))[0]
                 test.append(block_inds)
-        
+
         train_test_split=zip(train,test)
 
         ypred_proba_all=[]
@@ -749,9 +734,9 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         new_block_numbers=np.unique(new_block_number)
 
         for bb in new_block_numbers:
-            not_block_inds=np.where((new_block_number!=bb))[0]
+            not_block_inds=np.where(new_block_number!=bb)[0]
             train.append(not_block_inds)
-            block_inds=np.where((new_block_number==bb))[0]
+            block_inds=np.where(new_block_number==bb)[0]
             test.append(block_inds)
         train_test_split=zip(train,test)
 
@@ -832,7 +817,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         train=[]
         test=[]
         n_repeats=5
-        for rr in range(n_repeats):
+        for _rr in range(n_repeats):
             skf = StratifiedKFold(n_splits=5,shuffle=True)
             train_test_split_temp = skf.split(input_data, labels)
         for temp_train, temp_test in train_test_split_temp:
@@ -851,7 +836,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         train_test_split = train_test_split_input
 
     elif crossval=='5_fold_set_random_state':
-        if set_random_state==None:
+        if set_random_state is None:
             set_random_state=0
         skf = StratifiedKFold(n_splits=5,shuffle=True,random_state=set_random_state)
         train_test_split = skf.split(input_data, labels)
@@ -881,7 +866,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         train_trials.append(train)
         test_trials.append(test)
 
-          
+
         if decoder_type == 'LDA' or decoder_type == 'RandomForest' or decoder_type=='LogisticRegression' or decoder_type=='nonlinearSVC':
             if crossval in mean_over_folds_list:
                 temp_ypred_proba = np.full((len(y),len(np.unique(labels))), fill_value=np.nan)
@@ -927,7 +912,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             coefs_all.append(np.full((X.shape[1]), fill_value=False))
 
         models.append(clf)
-    
+
     #takes mean over all repeated crossvals for each trial
     if crossval in mean_over_folds_list:
         ypred_proba=np.nanmean(np.stack(ypred_proba_all, axis=2),axis=2)
@@ -1039,24 +1024,24 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
 def get_multi_probe_expr(combine_multi_probe_rec):
     """Create a polars expression to filter multi-probe recordings.
-    
+
     Generates a boolean expression that determines whether to combine results from
     multiple probe insertions targeting the same brain structure, or to keep them
     separate. This is useful when analyzing recordings where multiple probes recorded
     from the same structure simultaneously.
-    
+
     Parameters
     ----------
     combine_multi_probe_rec : bool
         If True, combine results across probe insertions for the same structure.
         If False, keep individual probe insertion results separate.
-    
+
     Returns
     -------
     polars.Expr
         A boolean polars expression that can be used to filter a DataFrame.
         Returns True for rows that should be included based on the combination setting.
-    
+
     Notes
     -----
     - When combine_multi_probe_rec is True, includes recordings with multiple
@@ -1074,18 +1059,18 @@ def get_multi_probe_expr(combine_multi_probe_rec):
 
 def get_structure_grouping(keep_original_structure=False):
     """Get structure grouping dictionary for consolidating brain regions.
-    
+
     Returns a mapping that consolidates over-split brain structures into their
     parent regions. This is needed because some structures were split into
     sub-layers during processing, but should be analyzed as unified regions.
-    
+
     Parameters
     ----------
     keep_original_structure : bool, default=False
         If True, keep both original and grouped structure labels (n_repeats=2).
         If False, only use grouped structure labels (n_repeats=1).
         Note: Currently this parameter is overridden to False within the function.
-    
+
     Returns
     -------
     structure_grouping : dict
@@ -1094,13 +1079,13 @@ def get_structure_grouping(keep_original_structure=False):
         - Superior colliculus intermediate/deep layers (SCig, SCiw, SCdg, SCdw) -> 'SCm'
         - Entorhinal cortex layers (ECT1-6) -> 'ECT'
     n_repeats : int
-        Number of times to repeat rows when merging. 
-    
+        Number of times to repeat rows when merging.
+
     Notes
     -----
     This grouping is necessary when merging columns from the units table to
     decoder results, ensuring consistent structure labels across datasets.
-    
+
     Examples
     --------
     >>> grouping, n_repeats = get_structure_grouping()
@@ -1118,10 +1103,10 @@ def get_structure_grouping(keep_original_structure=False):
         'SCdg': 'SCm',
         'SCdw': 'SCm',
         "ECT1": 'ECT',
-        "ECT2/3": 'ECT',    
+        "ECT2/3": 'ECT',
         "ECT6b": 'ECT',
         "ECT5": 'ECT',
-        "ECT6a": 'ECT', 
+        "ECT6a": 'ECT',
         "ECT4": 'ECT',
     }
 
@@ -1135,11 +1120,11 @@ def get_structure_grouping(keep_original_structure=False):
 
 def exclude_structures_from_df(df, exclude_redundant_structures=True, exclude_general_structures=True):
     """Filter out redundant and general structures from decoder results.
-    
+
     Removes structures that should not be included in analysis, either because
     they are redundant sub-divisions of parent structures or because they represent
     non-specific anatomical regions (e.g., fiber tracts, ventricles).
-    
+
     Parameters
     ----------
     df : polars.DataFrame
@@ -1154,32 +1139,32 @@ def exclude_structures_from_df(df, exclude_redundant_structures=True, exclude_ge
         - Fiber tracts and white matter
         - Ventricles and regions outside the brain
         - Structures with lowercase names (indicating fiber tracts)
-    
+
     Returns
     -------
     polars.DataFrame
         Filtered DataFrame with specified structures removed.
-    
+
     Notes
     -----
     Redundant structures are those oversplit by the processing pipeline:
-    - Superior colliculus layers: SCop, SCsg, SCzo (superficial) and 
+    - Superior colliculus layers: SCop, SCsg, SCzo (superficial) and
       SCig, SCiw, SCdg, SCdw (intermediate/deep)
     - Entorhinal cortex layers: ECT1, ECT2/3, ECT4, ECT5, ECT6a, ECT6b
-    
+
     General structures include broad anatomical divisions and ventricles or fiber tracts:
     - Parent structures: CTXsp, STR, PAL, TH, HY, MB, P, MY, CB
     - Ventricles: VL, V3, V4, SEZ
     - Fiber tracts/not in brain: fiber tracts, scwm, root, lot, out of brain, undefined
     - Any structure name beginning with lowercase letter
-    
+
     Examples
     --------
     >>> df_filtered = exclude_structures_from_df(df, exclude_redundant_structures=True)
     >>> # SCop, SCsg, etc. will be removed, keeping only grouped 'SCs' and 'SCm'
     """
     redundant_structures =['SCop', 'SCsg', 'SCzo', 'SCig', 'SCiw', 'SCdg', 'SCdw', 'ECT1', 'ECT2/3', 'ECT4', 'ECT5', 'ECT6a', 'ECT6b']
-    general_structures =['CTXsp', 'STR', 'PAL', 'TH', 'HY', 'MB', 'P', 'MY', 'CB', 'VL', 'V3', 'V4', 'SEZ', 
+    general_structures =['CTXsp', 'STR', 'PAL', 'TH', 'HY', 'MB', 'P', 'MY', 'CB', 'VL', 'V3', 'V4', 'SEZ',
                          'fiber tracts', 'scwm', 'root', 'lot', 'out of brain', 'undefined']
 
     if exclude_redundant_structures:
@@ -1208,10 +1193,10 @@ def exclude_structures_from_df(df, exclude_redundant_structures=True, exclude_ge
 
 def load_single_session_decoder_accuracy(results_path, sel_session, combine_multi_probe_rec=True, use_linear_shift=True):
     """Load decoder accuracy results for a single session.
-    
+
     Loads and processes decoder accuracy results from parquet files for one session,
     including handling of multi-probe recordings and temporal shift analysis.
-    
+
     Parameters
     ----------
     results_path : str
@@ -1221,7 +1206,7 @@ def load_single_session_decoder_accuracy(results_path, sel_session, combine_mult
     combine_multi_probe_rec : bool, default=True
         If True, combine results from multiple probe insertions recording the same
         structure. If False, keep results from each probe separate.
-    
+
     Returns
     -------
     polars.DataFrame
@@ -1234,9 +1219,9 @@ def load_single_session_decoder_accuracy(results_path, sel_session, combine_mult
         - repeat_idx : Index of repeated decoder runs
         - balanced_accuracy_test : List of test accuracies for each temporal shift
         - shift_idx : List of shift indices corresponding to accuracies
-        
+
         Sorted by unit_subsample_size and repeat_idx.
-    
+
     Notes
     -----
     - Filters out results where is_all_trials is True (using held-out test sets only)
@@ -1244,15 +1229,15 @@ def load_single_session_decoder_accuracy(results_path, sel_session, combine_mult
     - Results are aggregated over repeat runs for each shift index
     - shift_idx==0 corresponds to the true (aligned) temporal relationship
     - Other shift indices represent null distributions from shuffled data
-    
+
     Examples
     --------
     >>> df = load_single_session_decoder_accuracy(
-    ...     's3://bucket/results/', 
+    ...     's3://bucket/results/',
     ...     '742903_2024-10-22'
     ... )
     """
-    
+
     #define grouping columns
     grouping_cols = {
         'session_id',
@@ -1262,7 +1247,7 @@ def load_single_session_decoder_accuracy(results_path, sel_session, combine_mult
         'bin_size',
         'bin_center',
     }
-    
+
     combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
 
     if use_linear_shift:
@@ -1279,7 +1264,7 @@ def load_single_session_decoder_accuracy(results_path, sel_session, combine_mult
             )
             .sort('shift_idx')
             .group_by(
-                grouping_cols - {'electrode_group_names'}| {'repeat_idx'}, 
+                grouping_cols - {'electrode_group_names'}| {'repeat_idx'},
                 maintain_order=True,
             )
             .agg(
@@ -1302,7 +1287,7 @@ def load_single_session_decoder_accuracy(results_path, sel_session, combine_mult
             )
             .sort('shift_idx')
             .group_by(
-                grouping_cols - {'electrode_group_names'}| {'repeat_idx'}, 
+                grouping_cols - {'electrode_group_names'}| {'repeat_idx'},
                 maintain_order=True,
             )
             .agg(
@@ -1316,15 +1301,15 @@ def load_single_session_decoder_accuracy(results_path, sel_session, combine_mult
 
 
 
-def load_structure_average_decoder_accuracy(results_path, session_list, combine_multi_probe_rec=True, 
+def load_structure_average_decoder_accuracy(results_path, session_list, combine_multi_probe_rec=True,
                                             exclude_redundant_structures=True, exclude_general_structures=True,
                                             use_linear_shift=True):
     """Load and average decoder accuracy across sessions for each brain structure.
-    
+
     Computes structure-wise mean decoding accuracies by aggregating results across
     sessions. Separates aligned (true) accuracies from null distributions obtained
     via linear shifting trials.
-    
+
     Parameters
     ----------
     results_path : str
@@ -1338,7 +1323,7 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
         If True, exclude over-split structures (e.g., superior colliculus sub-layers).
     exclude_general_structures : bool, default=True
         If True, exclude general anatomical regions and non-neural tissue.
-    
+
     Returns
     -------
     polars.DataFrame
@@ -1354,9 +1339,9 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
         - mean_diff : Mean difference (true - null) across sessions
         - sem_diff : Standard error for the difference
         - num_sessions : Number of sessions contributing to each average
-        
+
         Sorted by mean_diff in descending order.
-    
+
     Notes
     -----
     Processing pipeline:
@@ -1366,10 +1351,10 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
     4. Computes median null accuracy for each recording
     5. Calculates true - null difference
     6. Averages across sessions and computes SEM
-    
+
     Structures are retained only if at least one session has data for that
     structure and unit subsample size combination.
-    
+
     Examples
     --------
     >>> df = load_structure_average_decoder_accuracy(
@@ -1407,7 +1392,7 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
                 pl.col('is_all_trials').not_(),
                 pl.col('session_id').n_unique().ge(1).over('structure', 'unit_subsample_size')#, 'unit_criteria'),
             )
-            
+
             # get the means for each recording over repeats:
             .group_by(grouping_cols | {'shift_idx'}, maintain_order=True)
             .agg(
@@ -1456,7 +1441,7 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
                 pl.col('is_all_trials'),
                 pl.col('session_id').n_unique().ge(1).over('structure', 'unit_subsample_size')#, 'unit_criteria'),
             )
-            
+
             # get the means for each recording over repeats:
             .group_by(grouping_cols | {'shift_idx'}, maintain_order=True)
             .agg(
@@ -1483,8 +1468,8 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
         )
 
     results_df = exclude_structures_from_df(
-        results_df, 
-        exclude_redundant_structures=exclude_redundant_structures, 
+        results_df,
+        exclude_redundant_structures=exclude_redundant_structures,
         exclude_general_structures=exclude_general_structures
     )
 
@@ -1492,16 +1477,16 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
 
 
 def load_session_wise_decoder_accuracy(
-        results_path, session_list, session_table, 
-        combine_multi_probe_rec=True, keep_original_structure=False, 
+        results_path, session_list, session_table,
+        combine_multi_probe_rec=True, keep_original_structure=False,
         exclude_redundant_structures=True, exclude_general_structures=True,
         is_all_trials=False, use_linear_shift=True):
     """Load decoder accuracy with session-level metadata.
-    
+
     Loads decoder results for multiple sessions and enriches them with behavioral
     and recording metadata from the session table, including unit counts,
     cross-modal d-prime, and block level behavior metrics.
-    
+
     Parameters
     ----------
     results_path : str
@@ -1523,7 +1508,7 @@ def load_session_wise_decoder_accuracy(
         If True, exclude over-split structures (e.g., superior colliculus sub-layers).
     exclude_general_structures : bool, default=True
         If True, exclude general anatomical regions and non-neural tissue.
-    
+
     Returns
     -------
     polars.DataFrame
@@ -1542,9 +1527,9 @@ def load_session_wise_decoder_accuracy(
         - n_passing_blocks : Number of behavioral blocks meeting quality criteria (cross modal dprime>=1)
         - cross_modality_dprime_vis_blocks : Visual context discrimination (list)
         - cross_modality_dprime_aud_blocks : Auditory context discrimination (list)
-        
+
         Sorted by session_id, structure, and unit_subsample_size.
-    
+
     Notes
     -----
     Processing pipeline:
@@ -1555,10 +1540,10 @@ def load_session_wise_decoder_accuracy(
     5. Averages over repeated decoder runs
     6. Separates aligned (shift_idx==0) from null results
     7. Computes true - null difference for each session
-    
+
     The total_n_units reflects the full population recorded from each structure,
     not just the subsampled units used for decoding.
-    
+
     Examples
     --------
     >>> session_table = pl.read_parquet('session_metadata.parquet')
@@ -1579,11 +1564,11 @@ def load_session_wise_decoder_accuracy(
         'bin_center',
         'time_aligned_to',
     }
-    
+
     combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
     structure_grouping, n_repeats = get_structure_grouping(keep_original_structure)
 
-    if use_linear_shift==True:
+    if use_linear_shift is True:
 
         #add total n units, cross-modal dprime, n good blocks?
         results_session_df = (
@@ -1639,13 +1624,13 @@ def load_session_wise_decoder_accuracy(
                 how='left',
             )
             # get the means for each recording over repeats:
-            .group_by(grouping_cols | {'shift_idx', 'n_passing_blocks', 'cross_modality_dprime_vis_blocks', 
+            .group_by(grouping_cols | {'shift_idx', 'n_passing_blocks', 'cross_modality_dprime_vis_blocks',
                                     'cross_modality_dprime_aud_blocks', 'total_n_units'}, maintain_order=True)
             .agg(
                 pl.col('balanced_accuracy_test').mean(), # over repeats
             )
             # get the aligned result and median over shifts:
-            .group_by(grouping_cols - {'electrode_group_names'} | {'n_passing_blocks', 'cross_modality_dprime_vis_blocks', 
+            .group_by(grouping_cols - {'electrode_group_names'} | {'n_passing_blocks', 'cross_modality_dprime_vis_blocks',
                                                                 'cross_modality_dprime_aud_blocks', 'total_n_units'})
             .agg(
                 pl.col('balanced_accuracy_test').filter(pl.col('shift_idx') == 0).first().alias('mean_true'),
@@ -1661,7 +1646,7 @@ def load_session_wise_decoder_accuracy(
         )
 
     else:
-        
+
         #add total n units, cross-modal dprime, n good blocks?
         results_session_df = (
             pl.scan_parquet(results_path)
@@ -1716,13 +1701,13 @@ def load_session_wise_decoder_accuracy(
                 how='left',
             )
             # get the means for each recording over repeats:
-            .group_by(grouping_cols | {'shift_idx', 'n_passing_blocks', 'cross_modality_dprime_vis_blocks', 
+            .group_by(grouping_cols | {'shift_idx', 'n_passing_blocks', 'cross_modality_dprime_vis_blocks',
                                     'cross_modality_dprime_aud_blocks', 'total_n_units'}, maintain_order=True)
             .agg(
                 pl.col('balanced_accuracy_test').mean(), # over repeats
             )
             # get the aligned result and median over shifts:
-            .group_by(grouping_cols - {'electrode_group_names'} | {'n_passing_blocks', 'cross_modality_dprime_vis_blocks', 
+            .group_by(grouping_cols - {'electrode_group_names'} | {'n_passing_blocks', 'cross_modality_dprime_vis_blocks',
                                                                 'cross_modality_dprime_aud_blocks', 'total_n_units'})
             .agg(
                 pl.col('balanced_accuracy_test').first().alias('mean_true'),
@@ -1732,8 +1717,8 @@ def load_session_wise_decoder_accuracy(
         )
 
     results_session_df = exclude_structures_from_df(
-        results_session_df, 
-        exclude_redundant_structures=exclude_redundant_structures, 
+        results_session_df,
+        exclude_redundant_structures=exclude_redundant_structures,
         exclude_general_structures=exclude_general_structures
     )
 
@@ -1742,11 +1727,11 @@ def load_session_wise_decoder_accuracy(
 
 def load_single_session_decoder_confidence(results_path, sel_session, combine_multi_probe_rec=True, predict_proba_alias='predict_proba'):
     """Load decoder confidence (predicted probabilities) for a single session.
-    
+
     Loads trial-by-trial decoder predictions and enriches them with trial metadata
     including stimulus type, block structure, and behavioral responses. This provides
     detailed insight into decoder performance across different task conditions.
-    
+
     Parameters
     ----------
     results_path : str
@@ -1759,7 +1744,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
     predict_proba_alias : str, default='predict_proba'
         Column name in results that contains predicted probabilities. Default is 'predict_proba',
         but can be overridden if a different column name is used in the results i.e. in multiclass decoding
-    
+
     Returns
     -------
     polars.DataFrame
@@ -1768,7 +1753,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
         - structure : Brain structure name
         - bin_center : Center time of temporal bin relative to event
         - unit_subsample_size : Number of units used for decoding
-        - repeat_idx : Index of repeated unit resample and decoder run 
+        - repeat_idx : Index of repeated unit resample and decoder run
         - unit_ids : List of unit IDs used in this decoder
         - balanced_accuracy_test : Overall decoder accuracy on held out test data
         - total_n_units : Total units recorded in this structure
@@ -1781,9 +1766,9 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
         - block_index : Block number (list)
         - stim_start_time : Stimulus onset time in seconds (list)
         - decision_function : Decision function values (if available)
-        
+
         Sorted by session_id, structure, unit_subsample_size, repeat_idx, and bin_center.
-    
+
     Notes
     -----
     - Only includes results where is_all_trials is True (using full dataset)
@@ -1792,7 +1777,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
     - Joins with trials table to add task information for each trial
     - predict_proba contains probabilities for the positive class
     - If decision_function is present in results, it will be included in output
-    
+
     Examples
     --------
     >>> df = load_single_session_decoder_confidence(
@@ -1811,7 +1796,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
         'electrode_group_names',
         'unit_subsample_size',
         'unit_criteria',
-        'repeat_idx', 
+        'repeat_idx',
         'unit_ids'
     }
 
@@ -1819,13 +1804,13 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
         grouping_cols.add('labels')
 
     final_agg_cols = {
-        predict_proba_alias,  
-        'trial_index', 
-        'is_vis_rewarded', 
-        'stim_name', 
-        'is_response', 
-        'trial_index_in_block', 
-        'block_index', 
+        predict_proba_alias,
+        'trial_index',
+        'is_vis_rewarded',
+        'stim_name',
+        'is_response',
+        'trial_index_in_block',
+        'block_index',
         'stim_start_time'
     }
 
@@ -1843,7 +1828,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
     decoder_confidence_with_repeats_single_session = (
         pl.scan_parquet(results_path)
         .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),     
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
         )
         .filter(
             combine_multi_probe_expr,
@@ -1879,7 +1864,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
             ),
             on=['session_id','trial_index'],
             how='inner',
-        ) 
+        )
         .group_by(grouping_cols - {'electrode_group_names', 'unit_criteria'})
         .agg(
             pl.col('balanced_accuracy_test', 'total_n_units').first(),
@@ -1893,10 +1878,10 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
 
 def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session, combine_multi_probe_rec=True, predict_proba_alias='predict_proba_spont'):
     """Load decoder predictions for spontaneous (non-task) epochs in a single session.
-    
-    Applies trained decoders to spontaneous activity epochs to assess whether context 
+
+    Applies trained decoders to spontaneous activity epochs to assess whether context
     representations persist outside of active task engagement.
-    
+
     Parameters
     ----------
     results_path : str
@@ -1909,7 +1894,7 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
         structure. If False, keep results from each probe separate.
     predict_proba_alias : str, default='predict_proba_spont'
         Column name in results that contains predicted probabilities for spontaneous epochs.
-    
+
     Returns
     -------
     polars.DataFrame
@@ -1929,22 +1914,22 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
         - spont_epoch_name : Epoch type (i.e., 'Spontaneous') (list)
         - spont_trial_is_rewarded : Whether a free reward was delivered on this trial (list)
         - decision_function_spont : Decision values (if available)
-        
+
         Sorted by session_id, structure, unit_subsample_size, repeat_idx, and bin_center.
-    
+
     Raises
     ------
     ValueError
         If neither 'predict_proba_spont' nor 'decision_function_spont' columns are
         found in the results file.
-    
+
     Notes
     -----
     - Spontaneous epochs are occur outside of the task epoch
     - trial_index is generated as a sequential index, not linked to actual trials
     - spont_trial_is_rewarded indicates whether a free reward was delivered during this spontaneous epoch
     - Decoders are trained on task trials, then applied to spontaneous periods
-    
+
     Examples
     --------
     >>> df = load_single_session_decoder_confidence_spont_epoch(
@@ -1966,7 +1951,7 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
         'electrode_group_names',
         'unit_subsample_size',
         'unit_criteria',
-        'repeat_idx', 
+        'repeat_idx',
         'unit_ids'
     }
 
@@ -1974,7 +1959,7 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
         grouping_cols.add('labels')
 
     final_agg_cols = {
-        predict_proba_alias,  
+        predict_proba_alias,
         'trial_index',
         'pred_label_spont',
         'spont_trial_times',
@@ -2006,7 +1991,7 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
             combine_multi_probe_expr,
             pl.col('is_all_trials'),
             pl.col('session_id').eq(sel_session),
-        )#.drop('unit_ids') 
+        )#.drop('unit_ids')
         # .sort('session_id', descending=True)
         .join(
             other=(
@@ -2041,15 +2026,15 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
 
 
 def load_session_wise_decoder_confidence(
-        results_path, session_list, combine_multi_probe_rec=True, 
-        exclude_redundant_structures=True, exclude_general_structures=True, 
+        results_path, session_list, combine_multi_probe_rec=True,
+        exclude_redundant_structures=True, exclude_general_structures=True,
         predict_proba_alias='predict_proba'):
     """Load decoder confidence across multiple sessions with trial-level predictions.
-    
+
     Aggregates trial-by-trial decoder predictions across sessions, averaging over
     repeated decoder runs while maintaining trial-level resolution. Useful for
     population-level analyses of decoder confidence patterns.
-    
+
     Parameters
     ----------
     results_path : str
@@ -2065,7 +2050,7 @@ def load_session_wise_decoder_confidence(
         If True, exclude general anatomical regions and non-neural tissue.
     predict_proba_alias : str, default='predict_proba'
         Column name for predicted probabilities.
-    
+
     Returns
     -------
     polars.DataFrame
@@ -2086,9 +2071,9 @@ def load_session_wise_decoder_confidence(
         - block_index : Block number (list)
         - stim_start_time : Stimulus onset time in seconds (list)
         - decision_function : Mean decision values across repeats (if available)
-        
+
         Sorted by session_id, structure, unit_subsample_size, and bin_center.
-    
+
     Notes
     -----
     Processing pipeline:
@@ -2099,10 +2084,10 @@ def load_session_wise_decoder_confidence(
     5. Joins with trials table to add behavioral metadata
     6. Re-aggregates to maintain trial lists within session-structure-subsample groups
     7. Filters out redundant and general structures
-    
+
     The averaging step (step 4) reduces variability from unit subsampling while
     preserving trial-by-trial prediction patterns.
-    
+
     Examples
     --------
     >>> df = load_session_wise_decoder_confidence(
@@ -2111,7 +2096,7 @@ def load_session_wise_decoder_confidence(
     ...     combine_multi_probe_rec=True
     ... )
     """
-    
+
     col_names=pl.scan_parquet(results_path)
 
     grouping_cols = {
@@ -2130,11 +2115,11 @@ def load_session_wise_decoder_confidence(
         grouping_cols.add('labels')
 
     final_agg_cols = {
-        predict_proba_alias,  
-        'trial_index', 
-        'is_vis_rewarded', 
-        'stim_name', 
-        'is_response', 
+        predict_proba_alias,
+        'trial_index',
+        'is_vis_rewarded',
+        'stim_name',
+        'is_response',
         'trial_index_in_block',
         'block_index',
         'stim_start_time',
@@ -2187,12 +2172,12 @@ def load_session_wise_decoder_confidence(
                     #iti column?
                 )
                 .select(
-                    'session_id', 'trial_index', 'is_vis_rewarded', 'stim_name', 'is_response', 
+                    'session_id', 'trial_index', 'is_vis_rewarded', 'stim_name', 'is_response',
                     'trial_index_in_block', 'block_index', 'stim_start_time')
             ),
             on=['session_id','trial_index'],
             how='inner',
-        ) 
+        )
         .group_by(grouping_cols - {'electrode_group_names', 'unit_criteria', 'trial_index'})
         .agg(
             pl.col('balanced_accuracy_test').first(),
@@ -2204,8 +2189,8 @@ def load_session_wise_decoder_confidence(
     )
 
     decoder_confidence_df = exclude_structures_from_df(
-        decoder_confidence_df, 
-        exclude_redundant_structures=exclude_redundant_structures, 
+        decoder_confidence_df,
+        exclude_redundant_structures=exclude_redundant_structures,
         exclude_general_structures=exclude_general_structures
     )
 
@@ -2213,15 +2198,15 @@ def load_session_wise_decoder_confidence(
 
 
 def load_session_wise_decoder_confidence_spont_epoch(
-        results_path, session_list, combine_multi_probe_rec=True, 
+        results_path, session_list, combine_multi_probe_rec=True,
         exclude_redundant_structures=True, exclude_general_structures=True,
         predict_proba_alias='predict_proba_spont'):
     """Load decoder predictions for spontaneous epochs across multiple sessions.
-    
+
     Aggregates decoder predictions during spontaneous (non-task) periods across
     sessions, averaging over repeated decoder runs. Enables population-level analyses
     of context representations during spontaneous activity.
-    
+
     Parameters
     ----------
     results_path : str
@@ -2238,7 +2223,7 @@ def load_session_wise_decoder_confidence_spont_epoch(
         If True, exclude general anatomical regions and non-neural tissue.
     predict_proba_alias : str, default='predict_proba_spont'
         Column name for predicted probabilities during spontaneous epochs.
-    
+
     Returns
     -------
     polars.DataFrame
@@ -2255,16 +2240,16 @@ def load_session_wise_decoder_confidence_spont_epoch(
         - predict_proba_spont : Mean predicted probabilities across repeats (list)
         - trial_index : Pseudo-trial indices (list)
         - decision_function_spont : Mean decision values across repeats (if available)
-        
+
         Sorted by session_id, structure, unit_subsample_size, bin_center, bin_size,
         and time_aligned_to.
-    
+
     Raises
     ------
     ValueError
         If neither 'predict_proba_spont' nor 'decision_function_spont' columns are
         found in the results file.
-    
+
     Notes
     -----
     Processing pipeline:
@@ -2275,13 +2260,13 @@ def load_session_wise_decoder_confidence_spont_epoch(
     5. Averages predict_proba_spont and decision_function_spont across repeats
     6. Re-aggregates to lists within session-structure-subsample groups
     7. Filters out redundant and general structures
-    
+
     Drops several columns not relevant to spontaneous analysis including:
     - Regular task predictions (predict_proba, decision_function)
     - Training metrics (balanced_accuracy_train)
     - Unit identifiers (unit_ids)
     - Model coefficients (coefs)
-    
+
     Examples
     --------
     >>> df = load_session_wise_decoder_confidence_spont_epoch(
@@ -2308,7 +2293,7 @@ def load_session_wise_decoder_confidence_spont_epoch(
     }
 
     final_agg_cols = {
-        predict_proba_alias,  
+        predict_proba_alias,
         'trial_index',
     }
 
@@ -2338,7 +2323,7 @@ def load_session_wise_decoder_confidence_spont_epoch(
             pl.col('session_id').is_in(session_list),
         )
         .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),     
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
         )
         #Grab only rows according to combine_multi_probe_rec toggle
         #Grab only rows that have is_all_trials == True, only these have predict_proba
@@ -2346,14 +2331,14 @@ def load_session_wise_decoder_confidence_spont_epoch(
             combine_multi_probe_expr,
             pl.col('is_all_trials'),
         )
-        
+
         .with_columns(
             pl.int_ranges(0, pl.col(predict_proba_alias).list.len()).alias('trial_index')
         )
         .drop(
-            'shift_idx', 'is_all_trials', 'electrode_group_names', 'unit_criteria', 'is_sole_recording', 
+            'shift_idx', 'is_all_trials', 'electrode_group_names', 'unit_criteria', 'is_sole_recording',
             'predict_proba', 'predict_proba_all_trials', 'decision_function', 'decision_function_all',
-            'balanced_accuracy_test','balanced_accuracy_train','unit_ids','coefs', 'trial_indices'  
+            'balanced_accuracy_test','balanced_accuracy_train','unit_ids','coefs', 'trial_indices'
         )
         .explode(explode_cols)
         .group_by('session_id', 'structure', 'unit_subsample_size', 'bin_center', 'bin_size', 'time_aligned_to', 'trial_index', )
@@ -2370,8 +2355,8 @@ def load_session_wise_decoder_confidence_spont_epoch(
     )
 
     decoder_confidence_spont_df = exclude_structures_from_df(
-        decoder_confidence_spont_df, 
-        exclude_redundant_structures=exclude_redundant_structures, 
+        decoder_confidence_spont_df,
+        exclude_redundant_structures=exclude_redundant_structures,
         exclude_general_structures=exclude_general_structures
     )
 
@@ -2379,11 +2364,11 @@ def load_session_wise_decoder_confidence_spont_epoch(
 
 def load_decoder_coefs(results_path, session_list, combine_multi_probe_rec=True, exclude_redundant_structures=True, exclude_general_structures=True):
     """Load decoder coefficients for each session and structure.
-    
+
     Retrieves the feature importance weights (coefficients) from trained decoders
     for each session-structure combination. This allows analysis of which units
     contribute most to decoding performance.
-    
+
     Parameters
     ----------
     results_path : str
@@ -2393,7 +2378,7 @@ def load_decoder_coefs(results_path, session_list, combine_multi_probe_rec=True,
     combine_multi_probe_rec : bool, default=True
         If True, combine results from multiple probe insertions recording the same
         structure. If False, keep results from each probe separate.
-    
+
     Returns
     -------
     pandas.DataFrame
@@ -2403,14 +2388,14 @@ def load_decoder_coefs(results_path, session_list, combine_multi_probe_rec=True,
         - unit_subsample_size : Number of units used for decoding
         - bin_center : Center time of temporal bin relative to event
         - coefs : List of decoder coefficients for each unit
-        
+
         Sorted by session_id, structure, unit_subsample_size, and bin_center.
-    
+
     Notes
     -----
     - Coefficients are averaged across repeated decoder runs if combine_multi_probe_rec is True
     - Joins with consolidated units table to get total_n_units for each structure
-    
+
     Examples
     --------
     >>> decoder_coefs_df = load_decoder_coefs(
@@ -2428,7 +2413,7 @@ def load_decoder_coefs(results_path, session_list, combine_multi_probe_rec=True,
             pl.col('session_id').is_in(session_list),
         )
         .with_columns(
-            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),     
+            pl.col('electrode_group_names').flatten().n_unique().eq(1).over({'session_id','structure'}).alias('is_sole_recording'),
         )
         .filter(
             combine_multi_probe_expr,
@@ -2445,16 +2430,16 @@ def load_decoder_coefs(results_path, session_list, combine_multi_probe_rec=True,
             .alias("probe")
         ])
         .drop(
-            'shift_idx', 'is_all_trials', 'electrode_group_names', 'unit_criteria', 'is_sole_recording', 
+            'shift_idx', 'is_all_trials', 'electrode_group_names', 'unit_criteria', 'is_sole_recording',
             'predict_proba', 'predict_proba_all_trials', 'decision_function', 'decision_function_all',
-            'balanced_accuracy_test', 'balanced_accuracy_train', 'trial_indices', 'labels', 
-            'train_test_split_label', 
+            'balanced_accuracy_test', 'balanced_accuracy_train', 'trial_indices', 'labels',
+            'train_test_split_label',
         )
     )
 
     decoder_coefs_df = exclude_structures_from_df(
-        decoder_coefs_df, 
-        exclude_redundant_structures=exclude_redundant_structures, 
+        decoder_coefs_df,
+        exclude_redundant_structures=exclude_redundant_structures,
         exclude_general_structures=exclude_general_structures
     )
 
@@ -2462,11 +2447,11 @@ def load_decoder_coefs(results_path, session_list, combine_multi_probe_rec=True,
 
 def get_average_session_structure_ccf_coords(results_session_df,all_units_table_path=None):
     """Calculate average CCF coordinates for each session-structure combination.
-    
+
     Computes the mean Allen Institute Common Coordinate Framework (CCF) coordinates
     for recorded units in each brain structure for each session. This provides
     spatial localization information for decoder results.
-    
+
     Parameters
     ----------
     results_session_df : pandas.DataFrame or polars.DataFrame
@@ -2477,17 +2462,17 @@ def get_average_session_structure_ccf_coords(results_session_df,all_units_table_
         Path to consolidated units table parquet file containing CCF coordinates.
         If None, uses default path:
         's3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet'
-    
+
     Returns
     -------
     pandas.DataFrame
         DataFrame with average CCF coordinates:
         - session_id : Session identifier
-        - structure : Brain structure name  
+        - structure : Brain structure name
         - ccf_dv : Mean dorsal-ventral coordinate (µm from dorsal surface)
         - ccf_ml : Mean medial-lateral coordinate (µm from midline)
         - ccf_ap : Mean anterior-posterior coordinate (µm from bregma)
-    
+
     Notes
     -----
     - Coordinates are averaged across all units recorded in each structure
@@ -2496,12 +2481,12 @@ def get_average_session_structure_ccf_coords(results_session_df,all_units_table_
       * 'SCm' queries for 'SCig|SCiw|SCdg|SCdw' (intermediate/deep layers)
     - NaN values in unit coordinates are handled with np.nanmean
     - Input DataFrame will be converted to pandas if provided as polars
-    
+
     Raises
     ------
     ValueError
         If results_session_df is not a pandas or polars DataFrame.
-    
+
     Examples
     --------
     >>> coords_df = get_average_session_structure_ccf_coords(results_df)
@@ -2515,7 +2500,7 @@ def get_average_session_structure_ccf_coords(results_session_df,all_units_table_
             results_session_df = results_session_df.to_pandas()
     else:
         raise ValueError('results_session_df must be a pandas or polars DataFrame')
-            
+
     if all_units_table_path is None:
         all_units_table_path='s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet'
     all_units_table=pd.read_parquet(all_units_table_path)
@@ -2572,7 +2557,7 @@ def get_session_structure_results(predict_proba_pd, sel_session, sel_structure, 
     #get context switches
     is_context_switch=np.concatenate([[0],np.diff(example_area_results['is_vis_rewarded'].iloc[0])]).astype(bool)
     context_switch_list=[]
-    for rr in range(len(example_area_results)):
+    for _rr in range(len(example_area_results)):
         context_switch_list.append(is_context_switch)
     example_area_results['is_context_switch']=context_switch_list
 
@@ -2655,13 +2640,13 @@ def get_context_switch_table(predict_proba_pd, session_list, sel_unit_subsample_
                     if tt+t_diff!=trial_index[adj_tt]:
                         print('ERROR: trial index not matching!!')
                         break
-                    
+
                     if adj_tt >= predict_proba_stack.shape[0]:
                         print(f"session {sel_session} structure {sel_structure} ERROR:")
                         print("trial index out of bounds of predict_proba stack;")
                         print("skipping trial")
                         continue
-                        
+
                     #get trial from predict_proba_stack
                     predict_proba_values=predict_proba_stack[adj_tt,:]
 
@@ -2698,7 +2683,7 @@ def get_context_switch_table(predict_proba_pd, session_list, sel_unit_subsample_
     delta_predict_proba_3_bins=[]
 
     for ii, rr in context_switch_table.iterrows():
-        
+
         # get the predict proba for the trial
         predict_proba_trial = np.array(rr['predict_proba'])
 
@@ -2759,10 +2744,10 @@ def group_structures(frame: polars._typing.FrameType, keep_originals=True) -> po
         'SCdg': 'SCm',
         'SCdw': 'SCm',
         "ECT1": 'ECT',
-        "ECT2/3": 'ECT',    
+        "ECT2/3": 'ECT',
         "ECT6b": 'ECT',
         "ECT5": 'ECT',
-        "ECT6a": 'ECT', 
+        "ECT6a": 'ECT',
         "ECT4": 'ECT',
     }
     n_repeats = 2 if keep_originals else 1
@@ -2779,9 +2764,9 @@ def group_structures(frame: polars._typing.FrameType, keep_originals=True) -> po
             .then(pl.col('structure').replace(grouping))
             .otherwise(pl.col('structure'))
         )
-    
+
     )
-    return frame 
+    return frame
 
 def repeat_multi_probe_areas(frame: polars._typing.FrameType) -> polars._typing.FrameType:
     """"If an area is recorded on multiple probes, transform the dataframe so it has rows for each
@@ -2813,7 +2798,7 @@ def decode_context_with_linear_shift(
     if isinstance(session_ids, str):
         session_ids = [session_ids]
 
-    if params.filter_units_by_metrics==False:
+    if params.filter_units_by_metrics is False:
         combinations_df = (
             utils.get_df('units', lazy=True)
             .drop_nulls('structure')
@@ -2830,7 +2815,7 @@ def decode_context_with_linear_shift(
         )
 
     #option to apply filter by unit metrics
-    elif params.filter_units_by_metrics==True:
+    elif params.filter_units_by_metrics is True:
         metrics_table_path=None
         for p in sorted(utils.get_data_root().iterdir(), reverse=True): # in case we have multiple assets attached, the latest will be used
             if p.is_dir() and p.name.startswith('dynamicrouting_single_unit'):
@@ -2886,11 +2871,11 @@ def decode_context_with_linear_shift(
     def is_row_in_existing(row):
         """Regular dict comparison doesn't work with list field?"""
         return any(
-            x for x in existing 
+            x for x in existing
             if all(x[k] == row[k] for k in ['session_id', 'structure'])
             and set(x['electrode_group_names']) == set(row['electrode_group_names'])
         )
-        
+
     logger.info(f"Processing {len(combinations_df)} unique session/area/probe combinations")
     if params.use_process_pool:
         session_results: dict[str, list[cf.Future]] = {}
@@ -2913,7 +2898,7 @@ def decode_context_with_linear_shift(
                 if params.test:
                     logger.info("Test mode: exiting after first session")
                     break
-            for future in tqdm.tqdm(cf.as_completed(future_to_session), total=len(future_to_session), unit='structure', desc=f'Decoding'):
+            for future in tqdm.tqdm(cf.as_completed(future_to_session), total=len(future_to_session), unit='structure', desc='Decoding'):
                 session_id = future_to_session[future]
                 if all(future.done() for future in session_results[session_id]):
                     logger.debug(f"Decoding completed for session {session_id}")
@@ -2925,7 +2910,7 @@ def decode_context_with_linear_shift(
                     logger.info(f'{session_id} | Completed')
 
     else: # single-process mode
-        for row in tqdm.tqdm(combinations_df.iter_rows(named=True), total=len(combinations_df), unit='row', desc=f'decoding'):
+        for row in tqdm.tqdm(combinations_df.iter_rows(named=True), total=len(combinations_df), unit='row', desc='decoding'):
             if params.skip_existing and is_row_in_existing(row):
                 logger.info(f"Skipping {row} - results already exist")
                 continue
@@ -2978,7 +2963,7 @@ def wrap_decoder_helper(
                 utils.get_per_trial_spike_times(
                     intervals={
                         'n_spikes_window': (
-                            pl.col('start_time') + 0, 
+                            pl.col('start_time') + 0,
                             pl.col('start_time') + interval_bin_size,
                         ),
                     },
@@ -3003,14 +2988,14 @@ def wrap_decoder_helper(
                     pl.col('n_spikes_window').is_not_null(),
                     # only keep observed trials
                 )
-                .sort('trial_index', 'unit_id') 
+                .sort('trial_index', 'unit_id')
             )
         except:
             logger.info(f"No spontaneous epoch for {session_id}; skipping session")
             spont_flag=False
             spont_data=None
             return
-        
+
     else:
         spont_flag=False
         spont_data = None
@@ -3031,11 +3016,11 @@ def wrap_decoder_helper(
                 pl.col('is_target'),
                 pl.col('is_hit').eq(False)
             ).with_columns(
-                (((pl.col("is_vis_target")==True) & (pl.col("is_response")==True)) |
-                ((pl.col("is_aud_target")==True) & (pl.col("is_response")==False))
+                (((pl.col('is_vis_target') is True) & (pl.col('is_response') is True)) |
+                ((pl.col('is_aud_target') is True) & (pl.col('is_response') is False))
                 ).alias("is_vis_appropriate_response"),
             ).with_columns(
-                (pl.when(pl.col("is_vis_appropriate_response")==True)
+                (pl.when(pl.col('is_vis_appropriate_response') is True)
                     .then(pl.lit("vis"))
                     .otherwise(pl.lit("aud"))
                 ).alias("context_appropriate_for_response")
@@ -3048,8 +3033,8 @@ def wrap_decoder_helper(
 
     # select unit ids for resampling here - keep consistent across time bins
     resample_unit_ids=[]
-    
-    if params.filter_units_by_metrics==False:
+
+    if params.filter_units_by_metrics is False:
         unique_unit_ids=(
             utils.get_df('units', lazy=True)
             .pipe(group_structures)
@@ -3068,7 +3053,7 @@ def wrap_decoder_helper(
 
     # option to filter by separate unit metrics table (unit IDs must match!)
     # unit metrics data asset folder must contain a single .parquet file!
-    elif params.filter_units_by_metrics==True:
+    elif params.filter_units_by_metrics is True:
         metrics_table_path=None
         for p in sorted(utils.get_data_root().iterdir(), reverse=True): # in case we have multiple assets attached, the latest will be used
             if p.is_dir() and p.name.startswith('dynamicrouting_single_unit'):
@@ -3107,34 +3092,34 @@ def wrap_decoder_helper(
             )
 
 
-    n_units_to_use = params.unit_subsample_size or len(unique_unit_ids) # if unit_subsample_size is None, use all available        
+    n_units_to_use = params.unit_subsample_size or len(unique_unit_ids) # if unit_subsample_size is None, use all available
     unit_idx = list(range(0, len(unique_unit_ids)))
 
-    for repeat_idx in range(params.n_repeats):
+    for _repeat_idx in range(params.n_repeats):
         sel_unit_idx = random.sample(unit_idx, n_units_to_use)
         resample_unit_ids.append(unique_unit_ids[sel_unit_idx])
     resample_unit_ids=np.array(resample_unit_ids)
-        
+
 
     for interval_config in params.spike_count_interval_configs:
         for start, stop in interval_config.intervals:
-            
+
             #option to use cumulative spike counts
             #change start to equal the start of the first interval
             if params.use_cumulative_spike_counts and params.sliding_window_size is not None:
-                 logger.exception(f'cumulative_spike_counts and sliding_window_size are incompatible, select only one to use')
+                 logger.exception('cumulative_spike_counts and sliding_window_size are incompatible, select only one to use')
 
             if params.use_cumulative_spike_counts:
                 start_original=np.copy(start)
                 start=interval_config.intervals[0][0]
-            
+
             elif params.sliding_window_size is not None:
                 start_original=np.copy(start)
                 stop_original=np.copy(stop)
                 start=(start_original+stop_original)/2-(params.sliding_window_size/2)
                 stop=(start_original+stop_original)/2+(params.sliding_window_size/2)
                 #start=stop-params.sliding_window_size
-                
+
 
             #option to subtract trialwise baseline, defined as 500ms before event (stimulus)
             if params.baseline_subtraction:
@@ -3142,11 +3127,11 @@ def wrap_decoder_helper(
                     utils.get_per_trial_spike_times(
                         intervals={
                             'n_spikes_baseline': (
-                                pl.col(interval_config.event_column_name) + -0.5, 
+                                pl.col(interval_config.event_column_name) + -0.5,
                                 pl.col(interval_config.event_column_name) + 0
                             ),
                             'n_spikes_window': (
-                                pl.col(interval_config.event_column_name) + start, 
+                                pl.col(interval_config.event_column_name) + start,
                                 pl.col(interval_config.event_column_name) + stop,
                             ),
                         },
@@ -3178,7 +3163,7 @@ def wrap_decoder_helper(
                         pl.col('n_spikes_window').is_not_null(),
                         # only keep observed trials
                     )
-                    .sort('trial_index', 'unit_id') 
+                    .sort('trial_index', 'unit_id')
                 )
 
             else:
@@ -3187,7 +3172,7 @@ def wrap_decoder_helper(
                     utils.get_per_trial_spike_times(
                         intervals={
                             'n_spikes_window': (
-                                pl.col(interval_config.event_column_name) + start, 
+                                pl.col(interval_config.event_column_name) + start,
                                 pl.col(interval_config.event_column_name) + stop,
                             ),
                         },
@@ -3212,12 +3197,12 @@ def wrap_decoder_helper(
                         pl.col('n_spikes_window').is_not_null(),
                         # only keep observed trials
                     )
-                    .sort('trial_index', 'unit_id') 
+                    .sort('trial_index', 'unit_id')
                 )
                 # len == n_units x n_trials, with spike counts in a column
                 # sequence of unit_ids is used later: don't re-sort!
 
-            
+
             logger.debug(f"Got spike counts: {spike_counts_df.shape} rows")
 
             if params.label_to_decode=='rewarded_modality':
@@ -3284,7 +3269,7 @@ def wrap_decoder_helper(
             logger.debug(f"Using shifts from {shifts[0]} to {shifts[-1]}")
 
             for repeat_idx in tqdm.tqdm(range(params.n_repeats), total=params.n_repeats, unit='repeat', desc=f'repeating {structure} | {session_id}'):
-                
+
                 for train_test_split_label in train_test_split_labels: #loop through custom train-test labels
 
                     if train_test_split_label is None:
@@ -3300,7 +3285,7 @@ def wrap_decoder_helper(
                         .reshape(filtered_unit_df.n_unique('trial_index'), filtered_unit_df.n_unique('unit_id'))
                     )
                     logger.debug(f"Reshaped spike counts array: {spike_counts_array.shape}")
-                    
+
                     unit_ids = filtered_unit_df['unit_id'].unique(maintain_order=True).to_list()
 
                     logger.debug(f"Repeat {repeat_idx}: selected {len(sel_unit_idx)} units")
@@ -3314,9 +3299,9 @@ def wrap_decoder_helper(
                             .squeeze()
                             .reshape(filtered_spont_unit_df.n_unique('trial_index'), filtered_spont_unit_df.n_unique('unit_id'))
                         )
-                    
+
                     for shift in (*shifts, None): # None will be a special case using all trials, with no shift
-                        
+
                         is_all_trials = shift is None
                         if not is_all_trials:
 
@@ -3434,7 +3419,7 @@ def wrap_decoder_helper(
                             train_set_indices.append(np.ones(len(trial_list))*idx)
                         result['train_set_indices'] = np.hstack(train_set_indices).astype('int').tolist()
                         result['train_trials'] = np.hstack(_result['train_trials']).tolist()
-                        
+
                         test_set_indices=[]
                         for idx, trial_list in enumerate(_result['test_trials']):
                             test_set_indices.append(np.ones(len(trial_list))*idx)
@@ -3442,16 +3427,16 @@ def wrap_decoder_helper(
                         result['test_trials'] = np.hstack(_result['test_trials']).tolist()
 
                         result['balanced_accuracy_test_all'] = _result['balanced_accuracy_test_all'].tolist()
-                        
+
                         if shift in (0, None):
                             if params.label_to_decode in ["is_response", "is_target", "is_rewarded"]:
                                 result['decision_function'] = _result['decision_function'].tolist()
                                 result['decision_function_all'] = _result['decision_function_all'].tolist()
-                                result['predict_proba'] = _result['predict_proba'][:, np.where(_result['label_names'] == True)[0][0]].tolist()
-                                result['predict_proba_all_trials'] = _result['predict_proba_all_trials'][:, np.where(_result['label_names'] == True)[0][0]].tolist()
+                                result['predict_proba'] = _result['predict_proba'][:, np.where(_result['label_names'] is True)[0][0]].tolist()
+                                result['predict_proba_all_trials'] = _result['predict_proba_all_trials'][:, np.where(_result['label_names'] is True)[0][0]].tolist()
                             elif params.label_to_decode=="stim_name":
                                 #if decoding only 2 stimuli
-                                if len(_result['label_names'])==2: 
+                                if len(_result['label_names'])==2:
                                     result['decision_function'] = _result['decision_function'].tolist()
                                     result['decision_function_all'] = _result['decision_function_all'].tolist()
                                     if 'vis1' in _result['label_names']:
@@ -3462,10 +3447,10 @@ def wrap_decoder_helper(
                                     result['predict_proba_all_trials'] = _result['predict_proba_all_trials'][:, np.where(_result['label_names'] == temp_target_label)[0][0]].tolist()
                                 #if decoding all 4 stimuli
                                 elif len(_result['label_names'])==4:
-                                    predict_proba_multiclass=np.full((len(labels),4),np.nan)
-                                    predict_proba_all_trials_multiclass=np.full((len(labels),4),np.nan)
+                                    np.full((len(labels),4),np.nan)
+                                    np.full((len(labels),4),np.nan)
                                     stim_order=['sound1','sound2','vis1','vis2']
-                                    for ss,stim_label in enumerate(stim_order):
+                                    for _ss,stim_label in enumerate(stim_order):
                                         result['decision_function_'+stim_label] = _result['decision_function'][:, np.where(_result['label_names'] == stim_label)[0][0]].tolist()
                                         result['decision_function_all_'+stim_label] = _result['decision_function_all'][:, np.where(_result['label_names'] == stim_label)[0][0]].tolist()
                                         result['predict_proba_'+stim_label] = _result['predict_proba'][:, np.where(_result['label_names'] == stim_label)[0][0]].tolist()
@@ -3487,7 +3472,7 @@ def wrap_decoder_helper(
                                     result['spont_trial_times'] = spont_trials['start_time'].to_list()
                                     result['spont_epoch_name'] = spont_trials['epoch_name'].to_list()
                                     result['spont_trial_is_rewarded'] = spont_trials['is_rewarded'].to_list()
-                                else: 
+                                else:
                                     result['predict_proba_spont'] = []
                                     result['decision_function_spont'] = []
                                     result['pred_label_spont'] = []
@@ -3495,20 +3480,20 @@ def wrap_decoder_helper(
                                     result['spont_epoch_name'] = []
                                     result['spont_trial_is_rewarded'] = []
                         else:
-                            # don't save probabilities from shifts which we won't use 
-                            result['predict_proba'] = None 
+                            # don't save probabilities from shifts which we won't use
+                            result['predict_proba'] = None
                             result['predict_proba_all_trials'] = None
                             result['decision_function'] = None
-                            result['decision_function_all'] = None 
-                            
+                            result['decision_function_all'] = None
+
                         if is_all_trials:
                             result['trial_indices'] = trials['trial_index'].to_list()
                         elif shift in (0, None):
                             result['trial_indices'] = trials['trial_index'].to_list()[first_trial_index: last_trial_index]
                         else:
                             # don't save trial indices for all shifts
-                            result['trial_indices'] = None 
-                            
+                            result['trial_indices'] = None
+
                         result['unit_ids'] = unit_ids
                         # result['coefs'] = _result['coefs'][0].tolist()
                         result['coefs'] = np.nanmean(np.vstack(_result['coefs_all']),axis=0).tolist()
@@ -3534,7 +3519,7 @@ def wrap_decoder_helper(
         if params.test:
             logger.info("Test mode: exiting after first event intervals config")
             break
-        
+
     with lock or contextlib.nullcontext():
         logger.info('Writing data')
         (
@@ -3559,7 +3544,7 @@ def wrap_decoder_helper(
             .write_parquet(
                 (params.data_path / f"{uuid.uuid4()}.parquet").as_posix(),
                 compression_level=18,
-                statistics='full',    
+                statistics='full',
             )
             # .write_delta(params.data_path.as_posix(), mode='append')
         )
