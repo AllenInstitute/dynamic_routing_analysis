@@ -87,7 +87,7 @@ class Params(pydantic_settings.BaseSettings):
     update_packages_from_source: bool = pydantic.Field(False, exclude=True)
     override_params_json: str | None = pydantic.Field('{}', exclude=True)
     use_process_pool: bool = pydantic.Field(True, exclude=True, repr=True)
-    max_workers: int | None = pydantic.Field(int(os.environ['CO_CPUS']), exclude=True, repr=True)
+    max_workers: int | None = pydantic.Field(int(os.getenv('CO_CPUS', '0')) or None, exclude=True, repr=True)
     """For process pool"""
 
     # Decoding parameters ----------------------------------------------- #
@@ -356,8 +356,11 @@ class Params(pydantic_settings.BaseSettings):
         }[self.spike_count_intervals]
 
     @pydantic.computed_field(repr=False)
-    def datacube_version(self) -> str:
-        return utils.get_datacube_dir().name.split('_')[-1]
+    def datacube_version(self) -> str | None:
+        try:
+            return utils.get_datacube_dir().name.split('_')[-1]
+        except FileNotFoundError:
+            return None
 
     # set the priority of the sources:
     @classmethod
@@ -373,7 +376,7 @@ class Params(pydantic_settings.BaseSettings):
         # - for each field in the class, the first source that contains a value will be used
         return (
             init_settings,
-            pydantic_settings.sources.JsonConfigSettingsSource(settings_cls, json_file='parameters.json'),
+            pydantic_settings.sources.JsonConfigSettingsSource(settings_cls, json_file='decoding_parameters.json'),
             pydantic_settings.CliSettingsSource(settings_cls, cli_parse_args=True),
         )
 

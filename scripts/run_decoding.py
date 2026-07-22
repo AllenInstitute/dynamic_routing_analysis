@@ -46,6 +46,8 @@ def main():
     
     if ON_CODE_OCEAN:
         utils.setup_logging()
+    else:
+        logging.basicConfig(level=logging.INFO)
     params = Params() # reads from CLI args
     logger.setLevel(params.logging_level)
   
@@ -66,8 +68,9 @@ def main():
     # if session_id is passed as a command line argument, we will only process that session,
     # otherwise we process all session IDs that match filtering criteria:    
     session_table = utils.get_session_table().to_pandas()
+    session_table['issues']=session_table['issues'].astype(str)
     session_ids: list[str] = session_table.query(params.session_table_query)['session_id'].values.tolist()
-    logger.debug(f"Found {len(session_ids)} session_ids available for use after filtering")
+    logger.info(f"Found {len(session_ids)} session_ids after filtering session table")
     
     if params.session_id is not None:
         if params.session_id not in session_ids:
@@ -79,7 +82,7 @@ def main():
         # only one nwb will be available 
         session_ids = set(session_ids) & set(p.stem for p in utils.get_nwb_paths())
     else:
-        logger.info(f"Using list of {len(session_ids)} session_ids after filtering")
+        logger.info(f"Using list of {len(session_ids)} session_ids (matching filter and available for use)")
     
     if ON_CODE_OCEAN:
         upath.UPath('/results/params.json').write_text(params.model_dump_json(indent=4))
@@ -92,7 +95,7 @@ def main():
         params.json_path.write_text(params.model_dump_json(indent=4))
     
     logger.info(f'starting decode_context_with_linear_shift with {params!r}')
-    # decoding_utils.decode_context_with_linear_shift(session_ids=session_ids, params=params)
+    decoding_utils.decode_context_with_linear_shift(session_ids=session_ids, params=params)
     
     utils.ensure_nonempty_results_dir()
     logger.info(f"Time elapsed: {time.time() - t0:.2f} s")
