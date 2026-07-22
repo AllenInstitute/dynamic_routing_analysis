@@ -103,7 +103,7 @@ class RunParams:
                 self.run_params["use_fixed_penalty"] = True
 
 
-def nested_train_and_test(design_mat, spike_counts, param_grid, param2_grid = None, folds_outer=10, folds_inner=6, method = 'ridge_regression', ts_good_behavior = None):
+def nested_train_and_test(design_mat, spike_counts, param_grid, param2_grid = None, folds_outer=10, folds_inner=6, method = 'ridge_regression', ts_good_behavior = None, train_test_split = None):
 
     """
     Performs nested cross-validation for model selection and evaluation.
@@ -145,14 +145,18 @@ def nested_train_and_test(design_mat, spike_counts, param_grid, param2_grid = No
         ts_good_behavior = np.ones(y.shape[0], dtype=bool)
 
     kf = KFold(n_splits=folds_outer, shuffle=True, random_state=0)
-
     train_r2 = np.zeros((y.shape[-1], folds_outer))
     test_r2 = np.zeros((y.shape[-1], folds_outer))
     param_dict = get_param_grid(method, param_grid, param2_grid = param2_grid)
     optimal_params = {key: np.zeros(folds_outer) + np.nan for key in param_dict.keys()}
 
+    if train_test_split:
+        splits = train_test_split
+    else:
+        splits = kf.split(X)
+
     # outer CV
-    for k, (train_index, test_index) in enumerate(kf.split(X)):
+    for k, (train_index, test_index) in enumerate(splits):
         X_train, y_train = X[train_index], y[train_index]
         X_test, y_test = X[test_index[ts_good_behavior[test_index]]], y[test_index[ts_good_behavior[test_index]]]
 
@@ -194,7 +198,7 @@ def nested_train_and_test(design_mat, spike_counts, param_grid, param2_grid = No
     return clean_r2_vals(train_r2), clean_r2_vals(test_r2), weights, y_pred, optimal_params
 
 
-def simple_train_and_test(design_mat, spike_counts, param, param2 = None, folds_outer=10, method = 'ridge_regression', ts_good_behavior = None):
+def simple_train_and_test(design_mat, spike_counts, param, param2 = None, folds_outer=10, method = 'ridge_regression', ts_good_behavior = None, train_test_split = None):
     """
     Train and test a Ridge regression model using cross-validation with specified lambda values.
 
@@ -233,7 +237,12 @@ def simple_train_and_test(design_mat, spike_counts, param, param2 = None, folds_
     param = ensure_param(param, folds_outer)
     param2 = ensure_param(param2, folds_outer)
 
-    for k, (train_index, test_index) in enumerate(kf.split(X)):
+    if train_test_split:
+        splits = train_test_split
+    else:
+        splits = kf.split(X)
+
+    for k, (train_index, test_index) in enumerate(splits):
         X_train, y_train = X[train_index[ts_good_behavior[train_index]]], y[train_index[ts_good_behavior[train_index]]]
         X_test, y_test = X[test_index[ts_good_behavior[test_index]]], y[test_index[ts_good_behavior[test_index]]]
 
@@ -272,6 +281,9 @@ def simple_train_and_test(design_mat, spike_counts, param, param2 = None, folds_
     y_pred = model.predict(X)
 
     return clean_r2_vals(train_r2), clean_r2_vals(test_r2), weights, y_pred
+
+
+
 
 def get_parameter_grid(fit,method):
     param_grid = fit['L2_grid'] if method in ['ridge_regression',  'elastic_net_regression'] else None
@@ -477,6 +489,8 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
     param_keys = ['cell_regularization', 'cell_L1_ratio', 'cell_rank']
     param_keys += [key + '_nested' for key in param_keys]
 
+    train_test_split = fit['train_test_split']  if run_params['leave_blocks_out'] else None
+
     # fullmodel is completely fitted (simple or nested), and reduced model is to be fit
     if run_params["fullmodel_fitted"]:
         for key in param_keys:
@@ -491,7 +505,8 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
             param2=param2,
             folds_outer=num_outer_folds,
             method = run_params['method'],
-            ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None
+            ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None,
+            train_test_split=train_test_split
         )
     # fullmodel is completely fitted (simple or nested) or fullmodel is not fit but model parameters have beeen optimized
     elif run_params["fullmodel_fitted"] or run_params['no_nested_CV']:
@@ -526,7 +541,8 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
                                                                                param2=param2_area,
                                                                                folds_outer=run_params['n_outer_folds'],
                                                                                method = run_params['method'],
-                                                                               ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None)
+                                                                               ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None,
+                                                                               train_test_split=train_test_split)
                 cv_var_train[unit_ids] = cv_train
                 cv_var_test[unit_ids] = cv_test
                 all_weights[:, unit_ids] = weights
@@ -550,7 +566,8 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
                                                                                param2=param2_cluster,
                                                                                folds_outer=run_params['n_outer_folds'],
                                                                                method = run_params['method'],
-                                                                               ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None)
+                                                                               ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None,
+                                                                               train_test_split=train_test_split)
                 cv_var_train[unit_ids] = cv_train
                 cv_var_test[unit_ids] = cv_test
                 all_weights[:, unit_ids] = weights
@@ -571,7 +588,8 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
                                                                                            folds_outer=run_params[
                                                                                                'n_outer_folds'],
                                                                                                method = run_params['method'],
-                                                                                            ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None)
+                                                                                            ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None,
+                                                                                            train_test_split=train_test_split)
     else: # fitting fullmodel using nested CV
         for key in param_keys:
             fit[key] = np.full((num_units, num_outer_folds), np.nan)
@@ -605,7 +623,8 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
                                           param_grid=param_grid,
                                           param2_grid=param2_grid,
                                           method = run_params['method'],
-                                          ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None)
+                                          ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None,
+                                          train_test_split=train_test_split)
 
                 cv_var_train[unit_ids] = cv_train
                 cv_var_test[unit_ids] = cv_test
@@ -627,7 +646,8 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
                                           param_grid=param_grid,
                                           param2_grid=param2_grid,
                                           method = run_params['method'],
-                                          ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None)
+                                          ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None,
+                                          train_test_split=train_test_split)
 
                 cv_var_train[unit_ids] = cv_train
                 cv_var_test[unit_ids] = cv_test
@@ -644,7 +664,8 @@ def evaluate_model(fit, design_mat, run_params, test_on_good_behavior = False):
                                       param_grid=param_grid,
                                       param2_grid=param2_grid,
                                       method = run_params['method'],
-                                      ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None)
+                                      ts_good_behavior=fit['timestamps_good_behavior'] if test_on_good_behavior else None,
+                                      train_test_split=train_test_split)
             fit = set_parameters_nested_CV(fit, np.arange(num_units), method, optimal_parameters)
 
     model_label = run_params['model_label']
@@ -762,6 +783,20 @@ def dropout(fit, design_mat, run_params):
     fit_drop = copy.deepcopy(fit)
     fit_drop = evaluate_model(fit_drop, design_matrix_reduced, run_params)
     return fit_drop
+
+
+# def make_test_train_splits(block_ids):
+#     # 1. use two adjacent blocks for testing, and the rest for training.
+#     # 2. select the test blocks using a moving window of size two blocks, moving by one block at a time.
+#     unique_blocks = np.unique(block_ids)
+#     test_train_splits = []
+#     for i in range(len(unique_blocks) - 1):
+#         test_blocks = unique_blocks[i:i+2]
+#         test_trials = block_ids[block_ids.isin(test_blocks)].index.values
+#         train_blocks = np.setdiff1d(unique_blocks, test_blocks)
+#         train_trials = block_ids[block_ids.isin(train_blocks)].index.values
+#         test_train_splits.append((train_trials, test_trials))
+#     return test_train_splits
 
 
 def clean_r2_vals(x):

@@ -465,6 +465,7 @@ def establish_timebins(run_params, fit, behavior_info):
         if 'trial' in run_params['time_of_interest'] or run_params['time_of_interest'] == 'full':
             start = behavior_info['trials'].start_time.values
             stop = np.append(start[1:], behavior_info['trials'].stop_time.values[-1])
+
             for n in range(len(behavior_info['trials'])):
                 bin_edges = np.arange(start[n], stop[n], run_params['spike_bin_width'])
                 bin_starts.append(bin_edges[:-1])
@@ -501,7 +502,6 @@ def establish_timebins(run_params, fit, behavior_info):
     fit['bin_centers'] = bin_starts + run_params['spike_bin_width'] / 2
     fit['epoch_trace'] = epoch_trace
 
-
     # Extend time bins to include trace around existing time bins for time-embedding, to create a fuller trace.
     scale_factor = int(1 / run_params['spike_bin_width'])
     result = next((x for x in range(2 * scale_factor, 6 * scale_factor) if x % 1 == 0), None)
@@ -509,6 +509,7 @@ def establish_timebins(run_params, fit, behavior_info):
 
     bin_starts_all = []
     epoch_trace_all = []
+
     for epoch in np.unique(epoch_trace):
         # Extend start by `r`
         bins = np.arange(bin_starts[epoch_trace == epoch][0] - r,
@@ -548,8 +549,26 @@ def establish_timebins(run_params, fit, behavior_info):
         f"length of timebins ({timebins.shape[0]})."
     )
     # potentially a precision problem
-
     fit['timestamps_good_behavior'] = timestamps_good_behavior(behavior_info, fit)
+
+    if run_params['leave_blocks_out']:
+        train_test_splits_trials = make_test_train_splits(behavior_info['trials'].block_index)
+        train_test_splits = []
+
+        for (train_index, test_index) in train_test_splits_trials:
+            train_samples = np.sort(np.concatenate([
+                np.where(epoch_trace == f'trial{train_trial}')[0]
+                for train_trial in train_index
+            ]))
+
+            test_samples = np.sort(np.concatenate([
+                np.where(epoch_trace == f'trial{test_trial}')[0]
+                for test_trial in test_index
+            ]))
+
+            train_test_splits.append((train_samples, test_samples))
+
+        fit['train_test_splits'] = train_test_splits
 
     return fit
 
@@ -1061,38 +1080,6 @@ def timestamps_good_behavior(behavior_info, fit):
     block_wise_performance = behavior_info['dprime']
     trials = behavior_info["trials"]
     session_id = behavior_info["session_id"]
-    if not np.isnan(block_wise_performance).all(): # Check if there are any valid d-prime values
-
-        epoch_trace = fit['epoch_trace']
-        good_trial_indexes = set(
-            datacube_utils.get_prod_trials(
-                by_session=False, include_templeton=True
-            )
-            .filter(pl.col('session_id') == session_id)
-            ['trial_index']
-        )
-        pattern = re.compile(r'trial(\d+)')
-        for n, epoch in enumerate(epoch_trace):
-            match = pattern.search(epoch)
-            if match:
-                trial_no = int(match.group(1))
-                ts_good_behavior[n] = trial_no in good_trial_indexes
-            else:
-                ts_good_behavior[n] = True
-    else:
-        ts_good_behavior = np.ones(len(fit['bin_centers']), dtype=bool)
-
-    return ts_good_behavior
-
-
-def timestamps_good_behavior(behavior_info, fit):
-    '''
-    Returns a boolean array indicating which timestamps in fit['bin_centers_all'] are within the good behavior periods.
-    '''
-    ts_good_behavior = np.zeros(len(fit['bin_centers']), dtype=bool)
-    block_wise_performance = behavior_info['dprime']
-    trials = behavior_info["trials"]
-    session_id = behavior_info["session_id"]
     good_trial_indexes = set(trials[trials['is_correct']].index.values)
     if not np.isnan(block_wise_performance).all(): # Check if there are any valid d-prime values
 
@@ -1119,6 +1106,7 @@ def timestamps_good_behavior(behavior_info, fit):
 
     return ts_good_behavior
 
+
 def bin_timeseries(x, x_timestamps, timebins_all):
     # Remove NaN values from x_timestamps and corresponding x values
     valid_indices = ~np.isnan(x_timestamps)
@@ -1143,6 +1131,19 @@ def bin_timeseries(x, x_timestamps, timebins_all):
         binned = pd.Series(binned).ffill().bfill().to_numpy()
     return binned
 
+
+def make_test_train_splits(block_ids):
+    # 1. use two adjacent blocks for testing, and the rest for training.
+    # 2. select the test blocks using a moving window of size two blocks, moving by one block at a time.
+    unique_blocks = np.unique(block_ids)
+    test_train_splits = []
+    for i in range(len(unique_blocks) - 1):
+        test_blocks = unique_blocks[i:i+2]
+        test_trials = block_ids[block_ids.isin(test_blocks)].index.values
+        train_blocks = np.setdiff1d(unique_blocks, test_blocks)
+        train_trials = block_ids[block_ids.isin(train_blocks)].index.values
+        test_train_splits.append((train_trials, test_trials))
+    return test_train_splits
 
 def orthogonalize_this_kernel(this_kernel, y):
     mat_to_ortho = np.concatenate((y.reshape(-1, 1), this_kernel.reshape(-1, 1)), axis=1)
