@@ -17,6 +17,7 @@ dependencies = [
     "statsmodels>=0.14.2",
     "scikit-learn>=1.5.1",
     "lazynwb>=0.2.2",
+    "numcodecs<0.16",
 ]
 requires-python = ">=3.9"
 readme = "README.md"
