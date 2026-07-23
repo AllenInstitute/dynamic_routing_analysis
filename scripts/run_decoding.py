@@ -103,6 +103,7 @@ def main():
             raise ValueError(f"Params file already exists and does not match current params:\n{existing_params=}\n{params.model_dump()=}")
     else:            
         logger.info(f'Writing params file: {params.json_path}')
+        params.json_path.parent.mkdir(parents=True, exist_ok=True)
         params.json_path.write_text(params.model_dump_json(indent=4))
     
     logger.info(f'starting decode_context_with_linear_shift with {params!r}')
