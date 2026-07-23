@@ -69,6 +69,10 @@ def to_polars_expr(value: str | pl.Expr) -> Expr:
         raise ValueError(f"Polars expression must access Polars objects under the `pl.` namespace {value=}")
     return eval(value)
 
+def to_upath(value: str | os.PathLike[str]) -> upath.UPath:
+    return upath.UPath(value)
+
+
 class Params(pydantic_settings.BaseSettings):
     # ----------------------------------------------------------------------------------
     # Required parameters
@@ -144,7 +148,9 @@ class Params(pydantic_settings.BaseSettings):
     save_all_coefs: bool = False
     """ toggle saving decoder coefficients across all train/test folds """
 
-    results_path: upath.UPath = upath.UPath("s3://aind-scratch-data/dynamic-routing/decoding/results")
+    results_path: Annotated[upath.UPath, pydantic.BeforeValidator(to_upath)] = upath.UPath(
+        "s3://aind-scratch-data/dynamic-routing/decoding/results"
+    )
 
     @property
     def data_path(self) -> upath.UPath:
