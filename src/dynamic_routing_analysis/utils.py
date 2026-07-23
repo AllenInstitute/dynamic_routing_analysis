@@ -9,7 +9,6 @@ import logging
 import logging.handlers
 import multiprocessing
 import os
-import pathlib
 import sys
 import time
 import typing
@@ -19,7 +18,7 @@ from collections.abc import Generator, Iterable
 from typing import Any, Literal
 
 # 3rd-party imports necessary for processing ----------------------- #
-import h5py
+import lazynwb
 import numpy as np
 import numpy.typing as npt
 import polars as pl
@@ -27,7 +26,7 @@ import polars._typing
 import tqdm
 import upath
 
-from dynamic_routing_analysis import codeocean_utils
+from dynamic_routing_analysis import codeocean_utils, datacube_utils
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +115,7 @@ def setup_logging(
         # note: filename must be unique if we want to collect logs at end of pipeline
 
     if filepath:
-        pathlib.Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+        upath.UPath(filepath).parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.handlers.RotatingFileHandler(
             filename=filepath,
             maxBytes=1024 * 1024 * 10,
@@ -146,12 +145,16 @@ def get_df(component: str, lazy: Literal[True] = True) ->  pl.LazyFrame:
     ...
 
 def get_df(component: str, lazy: bool = False) -> pl.DataFrame | pl.LazyFrame:
-    path = get_datacube_dir() / 'consolidated' / f'{component}.parquet'
+    storage_options = {"skip_signature": "true"} if not codeocean_utils.on_code_ocean() else {}
+    if codeocean_utils.on_code_ocean():
+        path = get_datacube_dir() / 'consolidated' / f'{component}.parquet'
+    else:
+        path = f's3://aind-scratch-data/dynamic-routing/cache/nwb_components/{datacube_utils.datacube_config.datacube_version}/consolidated/{component}.parquet'
     frame: pl.DataFrame | pl.LazyFrame
     if lazy:
-        frame = pl.scan_parquet(path)
+        frame = pl.scan_parquet(path, storage_options=storage_options)
     else:
-        frame = pl.read_parquet(path) # type: ignore
+        frame = pl.read_parquet(path, storage_options=storage_options) # type: ignore
     return (
         frame
         .with_columns(
@@ -160,16 +163,16 @@ def get_df(component: str, lazy: bool = False) -> pl.DataFrame | pl.LazyFrame:
     )
 
 @functools.cache
-def get_nwb_paths() -> tuple[pathlib.Path, ...]:
+def get_nwb_paths() -> tuple[upath.UPath, ...]:
     return tuple(get_data_root().rglob('*.nwb'))
 
-def get_nwb(session_id_or_path: str | pathlib.Path, raise_on_missing: bool = True, raise_on_bad_file: bool = True) -> pynwb.NWBFile:
-    if isinstance(session_id_or_path, (pathlib.Path, upath.UPath)):
+def get_nwb(session_id_or_path: str | upath.UPath, raise_on_missing: bool = True, raise_on_bad_file: bool = True) -> pynwb.NWBFile:
+    if isinstance(session_id_or_path, (upath.UPath, upath.UPath)):
         nwb_path = session_id_or_path
     else:
         if not isinstance(session_id_or_path, str):
             raise TypeError(f"Input should be a session ID (str) or path to an NWB file (str/Path), got: {session_id_or_path!r}")
-        if pathlib.Path(session_id_or_path).exists():
+        if upath.UPath(session_id_or_path).exists():
             nwb_path = session_id_or_path
         elif session_id_or_path.endswith(".nwb") and any(p.name == session_id_or_path for p in get_nwb_paths()):
             nwb_path = next(p for p in get_nwb_paths() if p.name == session_id_or_path)
@@ -197,12 +200,12 @@ def get_nwb(session_id_or_path: str | pathlib.Path, raise_on_missing: bool = Tru
     else:
         return nwb
 
-def _get_spike_times_single_nwb(nwb_path: str | pathlib.Path, unit_ids: str | Iterable[str], use_pynwb: bool = True) -> dict[str, npt.NDArray[np.float64]]:
+def _get_spike_times_single_nwb(nwb_path: str | upath.UPath, unit_ids: str | Iterable[str], use_pynwb: bool = True) -> dict[str, npt.NDArray[np.float64]]:
     if isinstance(unit_ids, str):
         unit_ids = (unit_ids,)
     unit_ids = tuple(unit_ids)
     if isinstance(nwb_path, str):
-        nwb_path = pathlib.Path(nwb_path)
+        nwb_path = upath.UPath(nwb_path)
     if not nwb_path.exists():
         raise FileNotFoundError(nwb_path)
     logging.debug(f"Fetching spike times for {len(unit_ids)} units from {nwb_path}")
@@ -222,22 +225,8 @@ def _get_spike_times_single_nwb(nwb_path: str | pathlib.Path, unit_ids: str | It
         logger.debug(f"Got spike times from NWB in {time.time() - t0:.2f}s")
         return dict(zip(unit_ids, spike_times))
     else:
-        t0 = time.time()
-        units = h5py.File(nwb_path.as_posix(), 'r')['units']
-        nwb_unit_ids = units['unit_id'].asstr()[()]
-        nwb_unit_idx = [np.where(nwb_unit_ids == unit_id)[0][0] for unit_id in unit_ids]
-        unit_id_to_spike_times = {}
-        spike_times_index = units["spike_times_index"]
-        for unit_id, unit_idx in zip(unit_ids, nwb_unit_idx):
-            if unit_idx == 0:
-                start_idx = 0
-            else:
-                start_idx = spike_times_index[unit_idx - 1].item()
-            end_idx = spike_times_index[unit_idx].item()
-            assert start_idx < end_idx, f"{start_idx=} >= {end_idx=}"
-            spike_times = units["spike_times"][start_idx:end_idx]
-            unit_id_to_spike_times[unit_id] = spike_times
-        logger.debug(f"Got spike times from hdf5 directly in {time.time() - t0:.2f}s")
+        units = lazynwb.scan_nwb(nwb_path, 'units').filter(pl.col('unit_id').is_in(unit_ids)).select('unit_id', 'spike_times').collect()
+        unit_id_to_spike_times = dict(zip(units['unit_id'], units['spike_times']))
         return unit_id_to_spike_times
 
 def get_spike_times(unit_ids: str | Iterable[str]) -> dict[str, npt.NDArray[np.float64]]:
@@ -254,7 +243,10 @@ def get_spike_times(unit_ids: str | Iterable[str]) -> dict[str, npt.NDArray[np.f
     future_to_nwb_session_id = {}
     with concurrent.futures.ThreadPoolExecutor() as executor:
         for session_id in session_to_unit_ids:
-            nwb_path = get_datacube_dir() / 'nwb' / f"{session_id}.nwb"
+            nwb_paths = get_nwb_paths()
+            nwb_path = next((p for p in nwb_paths if session_id in [p.stem]), None)
+            if nwb_path is None:
+                raise FileNotFoundError(f"No NWB file found for session {session_id}")
             future = executor.submit(
                 _get_spike_times_single_nwb,
                 nwb_path=nwb_path,
@@ -645,7 +637,7 @@ def get_unit_responses(
 
 # paths ----------------------------------------------------------- #
 @functools.cache
-def get_datacube_dir() -> pathlib.Path:
+def get_datacube_dir() -> upath.UPath:
     for p in sorted(get_data_root().iterdir(), reverse=True): # in case we have multiple assets attached, the latest will be used
         if p.is_dir() and p.name.startswith('dynamicrouting_datacube'):
             path = p
@@ -661,25 +653,31 @@ def get_datacube_dir() -> pathlib.Path:
     return path
 
 @functools.cache
-def get_data_root(as_str: bool = False) -> pathlib.Path:
-    expected_paths = ('/data', '/tmp/data', )
-    for p in expected_paths:
-        if (data_root := pathlib.Path(p)).exists():
-            logger.info(f"Using {data_root=}")
-        return data_root.as_posix() if as_str else data_root
+def get_data_root(as_str: bool = False) -> upath.UPath:
+    if codeocean_utils.on_code_ocean():
+        expected_paths = ('/data', '/tmp/data', )
+        for p in expected_paths:
+            if (data_root := upath.UPath(p)).exists():
+                logger.info(f"Using {data_root=}")
+            return data_root.as_posix() if as_str else data_root
+        else:
+            raise FileNotFoundError(f"data dir not present at any of {expected_paths=}")
     else:
-        raise FileNotFoundError(f"data dir not present at any of {expected_paths=}")
+        raise NotImplementedError("get_data_root() is only implemented for Code Ocean capsules; implement for local or pipeline environments as needed")
 
 @functools.cache
-def get_nwb_paths() -> tuple[pathlib.Path, ...]:
-    return tuple(get_data_root().rglob('*.nwb'))
+def get_nwb_paths() -> tuple[upath.UPath, ...]:
+    if codeocean_utils.on_code_ocean():
+        return tuple(get_data_root().rglob('*.nwb'))
+    else:
+        return tuple(upath.UPath(f's3://aind-scratch-data/dynamic-routing/cache/nwb/{datacube_utils.datacube_config.datacube_version}').glob('*.nwb*'))
 
 def ensure_nonempty_results_dir() -> None:
     """A pipeline run can crash if a results folder is expected and not found or is empty
     - ensure that a non-empty folder exists by creating a unique file"""
     if not is_pipeline():
         return
-    results = pathlib.Path("/results")
+    results = upath.UPath("/results")
     results.mkdir(exist_ok=True)
     if not list(results.iterdir()):
         path = results / uuid.uuid4().hex

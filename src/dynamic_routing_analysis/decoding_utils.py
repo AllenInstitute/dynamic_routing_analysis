@@ -36,7 +36,7 @@ from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import RobustScaler, StandardScaler
 
-from dynamic_routing_analysis import data_utils, utils
+from dynamic_routing_analysis import data_utils, utils, datacube_utils, codeocean_utils
 
 logger = logging.getLogger(__name__)
 
@@ -357,10 +357,7 @@ class Params(pydantic_settings.BaseSettings):
 
     @pydantic.computed_field(repr=False)
     def datacube_version(self) -> str | None:
-        try:
-            return utils.get_datacube_dir().name.split('_')[-1]
-        except FileNotFoundError:
-            return None
+        return datacube_utils.datacube_config.datacube_version
 
     # set the priority of the sources:
     @classmethod
@@ -2803,7 +2800,7 @@ def decode_context_with_linear_shift(
 
     if params.filter_units_by_metrics is False:
         combinations_df = (
-            utils.get_df('units', lazy=True)
+            datacube_utils.get_df('units', lazy=True)
             .drop_nulls('structure')
             .filter(
                 pl.col('session_id').is_in(session_ids),
@@ -2835,7 +2832,7 @@ def decode_context_with_linear_shift(
             metrics_table=(
                 pl.scan_parquet(metrics_table_path)
                 .join(
-                    utils.get_df('units', lazy=True),
+                    datacube_utils.get_df('units', lazy=True),
                     on='unit_id'
                     )
             )
@@ -2941,7 +2938,7 @@ def wrap_decoder_helper(
     results = []
 
     all_trials = (
-        utils.get_df('trials', lazy=True)
+        datacube_utils.get_df('trials', lazy=True)
         .filter(
             pl.col('session_id') == session_id,
         ).with_columns( #make new columns for is_response_or_reward and response_or_reward_time
@@ -2973,7 +2970,7 @@ def wrap_decoder_helper(
                     trials_frame=spont_trials,
                     as_counts=True,
                     unit_ids=(
-                        utils.get_df('units', lazy=True)
+                        datacube_utils.get_df('units', lazy=True)
                         .pipe(group_structures)
                         .filter(
                             params.units_query,
@@ -3039,7 +3036,7 @@ def wrap_decoder_helper(
 
     if params.filter_units_by_metrics is False:
         unique_unit_ids=(
-            utils.get_df('units', lazy=True)
+            datacube_utils.get_df('units', lazy=True)
             .pipe(group_structures)
             .filter(
                 params.units_query,
@@ -3072,7 +3069,7 @@ def wrap_decoder_helper(
             metrics_table=(
                 pl.scan_parquet(metrics_table_path)
                 .join(
-                    utils.get_df('units', lazy=True),
+                    datacube_utils.get_df('units', lazy=True),
                     on='unit_id'
                     )
             )
@@ -3141,7 +3138,7 @@ def wrap_decoder_helper(
                         trials_frame=all_trials,
                         as_counts=True,
                         unit_ids=(
-                            utils.get_df('units', lazy=True)
+                            datacube_utils.get_df('units', lazy=True)
                             .pipe(group_structures)
                             .filter(
                                 params.units_query,
@@ -3182,7 +3179,7 @@ def wrap_decoder_helper(
                         trials_frame=all_trials,
                         as_counts=True,
                         unit_ids=(
-                            utils.get_df('units', lazy=True)
+                            datacube_utils.get_df('units', lazy=True)
                             .pipe(group_structures)
                             .filter(
                                 params.units_query,
@@ -3234,7 +3231,7 @@ def wrap_decoder_helper(
             if (
                 trials['block_index'].n_unique() == 1
                 and not (
-                    utils.get_df('session')
+                    datacube_utils.get_df('session')
                     .filter(
                         pl.col('session_id') == trials['session_id'][0],
                         pl.col('keywords').list.contains('templeton'),

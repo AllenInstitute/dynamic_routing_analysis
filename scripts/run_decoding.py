@@ -16,12 +16,20 @@ import time
 from typing import Annotated, Literal
 
 # 3rd-party imports necessary for processing ----------------------- #
+import lazynwb
 import matplotlib
 import polars as pl
 import upath
 
+lazynwb.config.anon = True
+
 # local modules ---------------------------------------------------- #
-from dynamic_routing_analysis import utils, decoding_utils, codeocean_utils
+from dynamic_routing_analysis import (
+    codeocean_utils,
+    datacube_utils,
+    decoding_utils,
+    utils,
+)
 from dynamic_routing_analysis.decoding_utils import Params
 
 
@@ -39,12 +47,14 @@ logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR) # suppress 
         
 # processing function ---------------------------------------------- #
 
-ON_CODE_OCEAN = codeocean_utils.is_capsule()
+if not codeocean_utils.on_code_ocean():
+    # datacube_utils.configure(datacube_version='v0.0.272', use_scratch_dir=True)
+    datacube_utils.configure(datacube_version='v0.0.288', use_scratch_dir=True)
 
 def main():
     t0 = time.time()
-    
-    if ON_CODE_OCEAN:
+
+    if codeocean_utils.on_code_ocean():
         utils.setup_logging()
     else:
         logging.basicConfig(level=logging.INFO)
@@ -66,8 +76,9 @@ def main():
         
     
     # if session_id is passed as a command line argument, we will only process that session,
-    # otherwise we process all session IDs that match filtering criteria:    
-    session_table = utils.get_session_table().to_pandas()
+    # otherwise we process all session IDs that match filtering criteria:
+    #TODO session table is not versioned - current content represents naive datacube
+    session_table = datacube_utils.get_session_table().to_pandas()
     session_table['issues']=session_table['issues'].astype(str)
     session_ids: list[str] = session_table.query(params.session_table_query)['session_id'].values.tolist()
     logger.info(f"Found {len(session_ids)} session_ids after filtering session table")
@@ -83,8 +94,8 @@ def main():
         session_ids = set(session_ids) & set(p.stem for p in utils.get_nwb_paths())
     else:
         logger.info(f"Using list of {len(session_ids)} session_ids (matching filter and available for use)")
-    
-    if ON_CODE_OCEAN:
+
+    if codeocean_utils.on_code_ocean():
         upath.UPath('/results/params.json').write_text(params.model_dump_json(indent=4))
     if params.json_path.exists():
         existing_params = json.loads(params.json_path.read_text())

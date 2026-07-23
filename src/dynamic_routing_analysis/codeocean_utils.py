@@ -25,6 +25,9 @@ def is_pipeline() -> bool:
     return bool(AWS_BATCH_JOB_ID)
 
 
+def on_code_ocean():
+    return is_capsule() or is_pipeline()
+
 @functools.cache
 def get_data_root() -> pathlib.Path:
     expected_paths = (

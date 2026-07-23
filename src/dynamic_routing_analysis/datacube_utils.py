@@ -109,7 +109,7 @@ class DatacubeConfig:
 
 
 datacube_config = DatacubeConfig(
-    use_scratch_dir=not (codeocean_utils.is_capsule() or codeocean_utils.is_pipeline())
+    use_scratch_dir=not (codeocean_utils.is_capsule() or codeocean_utils.is_pipeline()),
 )
 
 
@@ -157,22 +157,38 @@ def is_datacube_available() -> bool:
 # data access ------------------------------------------------------- #
 @functools.cache
 def get_session_table() -> pl.DataFrame:
-    if codeocean_utils.is_pipeline() or codeocean_utils.is_capsule():
+    if codeocean_utils.on_code_ocean():
         return pl.read_parquet(
             (codeocean_utils.get_datacube_dir() / "session_table.parquet").as_posix()
         )
     return pl.read_parquet(
-        "https://github.com/AllenInstitute/dynamic_routing_analysis/raw/refs/heads/main/bin/session_table.parquet"
+        's3://aind-scratch-data/dynamic-routing/session_metadata/session_table.parquet',
+        storage_options={"skip_signature": "true"},
     )
 
 
-def get_df(component: str) -> pl.DataFrame:
-    path = datacube_config.consolidated_parquet_dir / f"{component}.parquet"
-    return pl.read_parquet(path.as_posix()).with_columns(
-        # remove optional session_id prefix in case it's present:
-        pl.col("session_id").str.split("_").list.slice(0, 2).list.join("_")
-    )
+@typing.overload
+def get_df(component: str, lazy: Literal[False] = False) ->  pl.DataFrame:
+    ...
 
+@typing.overload
+def get_df(component: str, lazy: Literal[True] = True) ->  pl.LazyFrame:
+    ...
+
+def get_df(component: str, lazy: bool = False) -> pl.DataFrame | pl.LazyFrame:
+    storage_options = {"skip_signature": "true"} if not codeocean_utils.on_code_ocean() else {}
+    path =  datacube_config.consolidated_parquet_dir / f'{component}.parquet'
+    frame: pl.DataFrame | pl.LazyFrame
+    if lazy:
+        frame = pl.scan_parquet(path, storage_options=storage_options)
+    else:
+        frame = pl.read_parquet(path, storage_options=storage_options) # type: ignore
+    return (
+        frame
+        .with_columns(
+            pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_')
+        )
+    )
 
 @typing.overload
 def get_nwb_paths(session_id: str) -> pathlib.Path: ...
