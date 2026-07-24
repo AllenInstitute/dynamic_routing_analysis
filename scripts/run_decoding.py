@@ -85,8 +85,7 @@ def main():
     
     if params.session_id is not None:
         if params.session_id not in session_ids:
-            logger.warning(f"{params.session_id!r} not in filtered session_ids: exiting")
-            exit()
+            logger.warning(f"{params.session_id!r} not in filtered session_ids")
         logger.info(f"Using single session_id {params.session_id} provided via command line argument")
         session_ids = [params.session_id]
     elif utils.is_pipeline(): 
