@@ -36,7 +36,8 @@ from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import RobustScaler, StandardScaler
 
-from dynamic_routing_analysis import data_utils, utils, datacube_utils, codeocean_utils
+from dynamic_routing_analysis import (codeocean_utils, data_utils,
+                                      datacube_utils, utils)
 
 logger = logging.getLogger(__name__)
 
@@ -379,7 +380,7 @@ class Params(pydantic_settings.BaseSettings):
         # - for each field in the class, the first source that contains a value will be used
         return (
             init_settings,
-            pydantic_settings.sources.JsonConfigSettingsSource(settings_cls, json_file='decoding_parameters.json'),
+            pydantic_settings.sources.JsonConfigSettingsSource(settings_cls, json_file='decoding_params.json'),
             pydantic_settings.CliSettingsSource(settings_cls, cli_parse_args=True),
         )
 
