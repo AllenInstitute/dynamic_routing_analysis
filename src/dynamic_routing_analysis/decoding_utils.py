@@ -827,11 +827,13 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         for _rr in range(n_repeats):
             skf = StratifiedKFold(n_splits=5,shuffle=True)
             train_test_split_temp = skf.split(input_data, labels)
-        for temp_train, temp_test in train_test_split_temp:
-                train.extend(temp_train)
-                test.extend(temp_test)
+            for temp_train, temp_test in train_test_split_temp:
+                    train.append(list(temp_train))
+                    test.append(list(temp_test))
 
         train_test_split=zip(train,test)
+        ypred_proba_all=[]
+        decision_function_all=[]
 
     elif crossval=='5_fold':
         skf = StratifiedKFold(n_splits=5,shuffle=True)
