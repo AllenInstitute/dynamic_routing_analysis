@@ -1375,6 +1375,24 @@ def calculate_single_unit_metric_adjusted_pvals(sel_units,sel_project):
         'sound2_context_evoked_roc_auc':sel_units['sound2_evoked_context_modulation_roc_auc'],
         'catch_context_evoked_roc_auc':sel_units['catch_evoked_context_modulation_roc_auc'],
 
+        'vis_discrim_roc_auc':sel_units['vis_discrim_roc_auc'],
+        'aud_discrim_roc_auc':sel_units['aud_discrim_roc_auc'],
+        'target_discrim_roc_auc':sel_units['target_discrim_roc_auc'],
+        'nontarget_discrim_roc_auc':sel_units['nontarget_discrim_roc_auc'],
+        'vis_vs_aud_roc_auc':sel_units['vis_vs_aud'],
+
+        'cr_vs_fa_early_roc_auc':sel_units['cr_vs_fa_early_roc_auc'],
+        'cr_vs_fa_mid_roc_auc':sel_units['cr_vs_fa_mid_roc_auc'],
+        'cr_vs_fa_late_roc_auc':sel_units['cr_vs_fa_late_roc_auc'],
+
+        'hit_vs_cr_early_roc_auc':sel_units['hit_vs_cr_early_roc_auc'],
+        'hit_vs_cr_mid_roc_auc':sel_units['hit_vs_cr_mid_roc_auc'],
+        'hit_vs_cr_late_roc_auc':sel_units['hit_vs_cr_late_roc_auc'],
+
+        'hit_vs_fa_early_roc_auc':sel_units['hit_vs_fa_early_roc_auc'],
+        'hit_vs_fa_mid_roc_auc':sel_units['hit_vs_fa_mid_roc_auc'],
+        'hit_vs_fa_late_roc_auc':sel_units['hit_vs_fa_late_roc_auc'],
+
         'ccf_ap':sel_units['ccf_ap'],
         'ccf_dv':sel_units['ccf_dv'],
         'ccf_ml':sel_units['ccf_ml'],
