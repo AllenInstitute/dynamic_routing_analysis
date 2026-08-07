@@ -18,6 +18,10 @@ def load_trials_or_units(session, table_name, version='any'):
     if session.__class__.__name__ == "NWBFile":
         return getattr(session, table_name)[:]
 
+    if type(session) is str:
+        temp_session = {'id': session}
+        session = pd.DataFrame([temp_session]).iloc[0]
+
     if table_name == 'trials':
         try:
             table=pd.read_parquet(
