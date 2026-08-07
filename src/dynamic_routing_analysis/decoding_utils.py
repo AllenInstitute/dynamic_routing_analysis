@@ -1200,6 +1200,9 @@ def exclude_structures_from_df(df, exclude_redundant_structures=True, exclude_ge
 
     return df
 
+def get_consolidated_s3_path(datacube_version='272'):
+    return f"s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.{datacube_version}/consolidated/"
+
 def load_single_session_decoder_accuracy(results_path, sel_session, combine_multi_probe_rec=True, use_linear_shift=True):
     """Load decoder accuracy results for a single session.
 
@@ -1489,7 +1492,7 @@ def load_session_wise_decoder_accuracy(
         results_path, session_list, session_table,
         combine_multi_probe_rec=True, keep_original_structure=False,
         exclude_redundant_structures=True, exclude_general_structures=True,
-        is_all_trials=False, use_linear_shift=True):
+        is_all_trials=False, use_linear_shift=True, datacube_version='272'):
     """Load decoder accuracy with session-level metadata.
 
     Loads decoder results for multiple sessions and enriches them with behavioral
@@ -1577,6 +1580,8 @@ def load_session_wise_decoder_accuracy(
     combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
     structure_grouping, n_repeats = get_structure_grouping(keep_original_structure)
 
+    consolidated_s3_path=get_consolidated_s3_path(datacube_version=datacube_version)
+
     if use_linear_shift is True:
 
         #add total n units, cross-modal dprime, n good blocks?
@@ -1595,7 +1600,7 @@ def load_session_wise_decoder_accuracy(
             #get total n units
             .join(
                 other=(
-                    pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet')
+                    pl.scan_parquet(consolidated_s3_path + 'units.parquet')
                     .with_columns(
                         pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
                     )
@@ -1672,7 +1677,7 @@ def load_session_wise_decoder_accuracy(
             #get total n units
             .join(
                 other=(
-                    pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet')
+                    pl.scan_parquet(consolidated_s3_path + 'units.parquet')
                     .with_columns(
                         pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
                     )
@@ -1734,7 +1739,8 @@ def load_session_wise_decoder_accuracy(
     return results_session_df
 
 
-def load_single_session_decoder_confidence(results_path, sel_session, combine_multi_probe_rec=True, predict_proba_alias='predict_proba'):
+def load_single_session_decoder_confidence(results_path, sel_session, combine_multi_probe_rec=True, 
+                                           predict_proba_alias='predict_proba', datacube_version='272'):
     """Load decoder confidence (predicted probabilities) for a single session.
 
     Loads trial-by-trial decoder predictions and enriches them with trial metadata
@@ -1796,6 +1802,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
     """
 
     #define grouping columns - maintain compatibility with older results
+    consolidated_s3_path = get_consolidated_s3_path(datacube_version=datacube_version)
     col_names=pl.scan_parquet(results_path)
 
     grouping_cols = {
@@ -1846,7 +1853,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
         )
         .join(
             other=(
-                pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet')
+                pl.scan_parquet(consolidated_s3_path + 'units.parquet')
                 .with_columns(
                     pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
                 )
@@ -1865,7 +1872,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
         .explode(explode_cols)
         .join(
             other=(
-                pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/trials.parquet')
+                pl.scan_parquet(consolidated_s3_path + 'trials.parquet')
                 .with_columns(
                     pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
                 )
@@ -1885,7 +1892,9 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
 
     return decoder_confidence_with_repeats_single_session
 
-def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session, combine_multi_probe_rec=True, predict_proba_alias='predict_proba_spont'):
+def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session, combine_multi_probe_rec=True, 
+                                                       predict_proba_alias='predict_proba_spont',
+                                                       datacube_version='272'):
     """Load decoder predictions for spontaneous (non-task) epochs in a single session.
 
     Applies trained decoders to spontaneous activity epochs to assess whether context
@@ -1949,6 +1958,7 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
 
     #define grouping columns - maintain compatibility with older results
     col_names=pl.scan_parquet(results_path)
+    consolidated_s3_path = get_consolidated_s3_path(datacube_version=datacube_version)
 
     if predict_proba_alias not in col_names and 'decision_function_spont' not in col_names:
         raise ValueError(f"Neither '{predict_proba_alias}' nor 'decision_function_spont' columns found in the results. Please check the results file for the expected columns.")
@@ -2004,7 +2014,7 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
         # .sort('session_id', descending=True)
         .join(
             other=(
-                pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet')
+                pl.scan_parquet(consolidated_s3_path + 'units.parquet')
                 .with_columns(
                     pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
                 )
@@ -2037,7 +2047,7 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
 def load_session_wise_decoder_confidence(
         results_path, session_list, combine_multi_probe_rec=True,
         exclude_redundant_structures=True, exclude_general_structures=True,
-        predict_proba_alias='predict_proba'):
+        predict_proba_alias='predict_proba', datacube_version='272'):
     """Load decoder confidence across multiple sessions with trial-level predictions.
 
     Aggregates trial-by-trial decoder predictions across sessions, averaging over
@@ -2107,6 +2117,7 @@ def load_session_wise_decoder_confidence(
     """
 
     col_names=pl.scan_parquet(results_path)
+    consolidated_s3_path = get_consolidated_s3_path(datacube_version=datacube_version)
 
     grouping_cols = {
         'session_id',
@@ -2175,7 +2186,7 @@ def load_session_wise_decoder_confidence(
         .agg(explode_agg_expr)
         .join(
             other=(
-                pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/trials.parquet')
+                pl.scan_parquet(consolidated_s3_path + 'trials.parquet')
                 .with_columns(
                     pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
                     #iti column?
@@ -2209,7 +2220,7 @@ def load_session_wise_decoder_confidence(
 def load_session_wise_decoder_confidence_spont_epoch(
         results_path, session_list, combine_multi_probe_rec=True,
         exclude_redundant_structures=True, exclude_general_structures=True,
-        predict_proba_alias='predict_proba_spont'):
+        predict_proba_alias='predict_proba_spont', datacube_version='272'):
     """Load decoder predictions for spontaneous epochs across multiple sessions.
 
     Aggregates decoder predictions during spontaneous (non-task) periods across
@@ -2326,7 +2337,7 @@ def load_session_wise_decoder_confidence_spont_epoch(
     combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
 
     decoder_confidence_spont_df = (
-        pl.scan_parquet(results_path)
+        pl.scan_parquet(results_path,extra_columns='ignore')
         #make new column that indicates whether a row is the sole recording from a structure in a session
         .filter(
             pl.col('session_id').is_in(session_list),
@@ -2454,7 +2465,7 @@ def load_decoder_coefs(results_path, session_list, combine_multi_probe_rec=True,
 
     return decoder_coefs_df
 
-def get_average_session_structure_ccf_coords(results_session_df,all_units_table_path=None):
+def get_average_session_structure_ccf_coords(results_session_df,all_units_table_path=None,datacube_version='272'):
     """Calculate average CCF coordinates for each session-structure combination.
 
     Computes the mean Allen Institute Common Coordinate Framework (CCF) coordinates
@@ -2504,6 +2515,8 @@ def get_average_session_structure_ccf_coords(results_session_df,all_units_table_
     >>> plt.scatter(merged['ccf_ap'], merged['mean_diff'])
     """
 
+    consolidated_s3_path=get_consolidated_s3_path(datacube_version='272')
+
     if type(results_session_df) == pd.DataFrame or type(results_session_df) == pl.DataFrame:
         if type(results_session_df) == pl.DataFrame:
             results_session_df = results_session_df.to_pandas()
@@ -2511,7 +2524,7 @@ def get_average_session_structure_ccf_coords(results_session_df,all_units_table_
         raise ValueError('results_session_df must be a pandas or polars DataFrame')
 
     if all_units_table_path is None:
-        all_units_table_path='s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet'
+        all_units_table_path=consolidated_s3_path + 'units.parquet'
     all_units_table=pd.read_parquet(all_units_table_path)
 
     session_structure_ccf_coords={
