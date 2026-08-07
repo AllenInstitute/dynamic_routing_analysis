@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+
 os.environ['RUST_BACKTRACE'] = '1'
 #os.environ['POLARS_MAX_THREADS'] = '1'
 os.environ['TOKIO_WORKER_THREADS'] = '1' 
@@ -24,14 +25,9 @@ import upath
 lazynwb.config.anon = True
 
 # local modules ---------------------------------------------------- #
-from dynamic_routing_analysis import (
-    codeocean_utils,
-    datacube_utils,
-    decoding_utils,
-    utils,
-)
+from dynamic_routing_analysis import (codeocean_utils, datacube_utils,
+                                      decoding_utils, utils)
 from dynamic_routing_analysis.decoding_utils import Params
-
 
 # logging configuration -------------------------------------------- #
 # use `logger.info(msg)` instead of `print(msg)` so we get timestamps and origin of log messages
@@ -48,8 +44,8 @@ logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR) # suppress 
 # processing function ---------------------------------------------- #
 
 if not codeocean_utils.on_code_ocean():
-    # datacube_utils.configure(datacube_version='v0.0.272', use_scratch_dir=True)
-    datacube_utils.configure(datacube_version='v0.0.288', use_scratch_dir=True)
+    datacube_utils.configure(datacube_version='v0.0.272', use_scratch_dir=True)
+    # datacube_utils.configure(datacube_version='v0.0.288', use_scratch_dir=True)
 
 def main():
     t0 = time.time()
