@@ -148,6 +148,10 @@ class Params(pydantic_settings.BaseSettings):
     """ toggle training decoder model on one context and testing on the other. Requires decoding something other than context, i.e. stimulus id """
     save_all_coefs: bool = False
     """ toggle saving decoder coefficients across all train/test folds """
+    load_other_spikes_table: bool = False
+    """ toggle loading spikes table from other source for decoding i.e. glm residuals on s3 or isilon """
+    other_spikes_table_path: str | None = None
+    """ path to other spikes table """
 
     results_path: Annotated[upath.UPath, pydantic.BeforeValidator(to_upath)] = upath.UPath(
         "s3://aind-scratch-data/dynamic-routing/decoding/results"
@@ -3189,38 +3193,67 @@ def wrap_decoder_helper(
                 )
 
             else:
+                if params.load_other_spikes_table:
 
-                spike_counts_df = (
-                    utils.get_per_trial_spike_times(
-                        intervals={
-                            'n_spikes_window': (
-                                pl.col(interval_config.event_column_name) + start,
-                                pl.col(interval_config.event_column_name) + stop,
+                    if params.other_spikes_table_path is None:
+                        raise ValueError('other_spikes_table_path must be provided if load_other_spikes_table is True')
+                    
+                    unit_ids=(
+                        datacube_utils.get_df('units', lazy=True)
+                        .pipe(group_structures)
+                        .filter(
+                            params.units_query,
+                            pl.col('session_id') == session_id,
+                            pl.col('structure') == structure,
+                            pl.col('electrode_group_name').is_in(electrode_group_names),
+                        )
+                        .select('unit_id')
+                        .collect()
+                        ['unit_id']
+                        .unique()
+                    )
+
+                    spike_counts_df = (
+                        pl.scan_parquet(params.other_spikes_table_path)
+                        .filter(
+                            pl.col('unit_id').is_in(unit_ids),
+                            pl.col('n_spikes_window').is_not_null(),
+                        ).sort('trial_index', 'unit_id')
+                    ).collect()
+
+
+                else:
+                    spike_counts_df = (
+                        utils.get_per_trial_spike_times(
+                            intervals={
+                                'n_spikes_window': (
+                                    pl.col(interval_config.event_column_name) + start,
+                                    pl.col(interval_config.event_column_name) + stop,
+                                ),
+                            },
+                            trials_frame=all_trials,
+                            as_counts=True,
+                            unit_ids=(
+                                datacube_utils.get_df('units', lazy=True)
+                                .pipe(group_structures)
+                                .filter(
+                                    params.units_query,
+                                    pl.col('session_id') == session_id,
+                                    pl.col('structure') == structure,
+                                    pl.col('electrode_group_name').is_in(electrode_group_names),
+                                )
+                                .select('unit_id')
+                                .collect()
+                                ['unit_id']
+                                .unique()
                             ),
-                        },
-                        trials_frame=all_trials,
-                        as_counts=True,
-                        unit_ids=(
-                            datacube_utils.get_df('units', lazy=True)
-                            .pipe(group_structures)
-                            .filter(
-                                params.units_query,
-                                pl.col('session_id') == session_id,
-                                pl.col('structure') == structure,
-                                pl.col('electrode_group_name').is_in(electrode_group_names),
-                            )
-                            .select('unit_id')
-                            .collect()
-                            ['unit_id']
-                            .unique()
-                        ),
+                        )
+                        .filter(
+                            pl.col('n_spikes_window').is_not_null(),
+                            # only keep observed trials
+                        )
+                        .sort('trial_index', 'unit_id')
                     )
-                    .filter(
-                        pl.col('n_spikes_window').is_not_null(),
-                        # only keep observed trials
-                    )
-                    .sort('trial_index', 'unit_id')
-                )
                 # len == n_units x n_trials, with spike counts in a column
                 # sequence of unit_ids is used later: don't re-sort!
 
