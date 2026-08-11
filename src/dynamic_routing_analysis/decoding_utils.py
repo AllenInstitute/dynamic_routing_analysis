@@ -3192,6 +3192,8 @@ def wrap_decoder_helper(
                     .sort('trial_index', 'unit_id')
                 )
 
+                logger.debug(f"Got spike counts with baseline subtraction: {spike_counts_df.shape} rows")
+
             else:
                 if params.load_other_spikes_table:
 
@@ -3221,6 +3223,7 @@ def wrap_decoder_helper(
                         ).sort('trial_index', 'unit_id')
                     ).collect()
 
+                    logger.debug(f"Got spike counts from {params.other_spikes_table_path}: {spike_counts_df.shape} rows")
 
                 else:
                     spike_counts_df = (
@@ -3254,11 +3257,13 @@ def wrap_decoder_helper(
                         )
                         .sort('trial_index', 'unit_id')
                     )
+                    logger.debug(f"Got spike counts from datacube: {spike_counts_df.shape} rows")
                 # len == n_units x n_trials, with spike counts in a column
                 # sequence of unit_ids is used later: don't re-sort!
 
-
-            logger.debug(f"Got spike counts: {spike_counts_df.shape} rows")
+            if len(spike_counts_df) == 0:
+                logger.warning(f"No spike counts found for {session_id} {structure} {electrode_group_names} in interval {start}-{stop}; skipping")
+                continue
 
             if params.label_to_decode=='rewarded_modality':
                 trials = (
