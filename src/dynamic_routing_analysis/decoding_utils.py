@@ -2775,6 +2775,23 @@ def group_structures(frame: polars._typing.FrameType, keep_originals=True) -> po
         "ECT5": 'ECT',
         "ECT6a": 'ECT',
         "ECT4": 'ECT',
+        'ACAd': 'context_module',
+        'FRP': 'context_module',
+        'PL': 'context_module',
+        'ORBl': 'context_module',
+        'MOs': 'context_module',
+        'MOp': 'context_module',
+        'SSs': 'context_module',
+        'SSp': 'context_module',
+        'AId': 'context_module',
+        'TEa': 'context_module',
+        'VISam': 'context_module',
+        'VISal': 'context_module',
+        'RT': 'context_module',
+        'CP': 'context_module',
+        'GPe': 'context_module',
+        'SCm': 'context_module',
+        'MRN': 'context_module',
     }
     n_repeats = 2 if keep_originals else 1
     frame = (
