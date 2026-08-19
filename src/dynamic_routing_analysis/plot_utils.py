@@ -2142,3 +2142,94 @@ def plot_gdf_alt(
         """
         charts.append(chart)
     return alt.hconcat(*charts).configure_legend(disable=True)
+
+
+def get_structure_colormap(by_structure=True,by_group=False):
+
+    ###note: not exhaustive; update if new structures are added
+    simplified_structure_grouping = {
+        'Frontal':['ACAd','ACAv','FRP','ORBl','ORBvl','ORBm','PL','ILA'],
+        'Somatomotor':['MOs','MOp','SSp','SSs'],
+        'Lateral':['AId','AIp','AIv','GU','VISC','TEa','PERI','ECT'],
+        'Visual':['VISp', 'VISl', 'VISal', 'VISli', 'VISpl', 'VISpor', 'VISrl'],
+        'Medial':['VISa', 'VISam', 'VISpm', 'RSPagl', 'RSPd', 'RSPv',],
+        'Auditory':['AUDp', 'AUDv', 'AUDd', 'AUDpo'],
+        'CTXsp':['CLA','EPd','EPv','LA','BLA','BMA','PA'],
+        'HPF': ['CA1', 'CA2', 'CA3', 'DG','IG','ENTl', 'ENTm', 'PAR', 'POST', 'PRE', 'SUB', 'ProS'],
+        'OLF': ['OLF','AON','AOB','MOB','TT','TTd','DP','PIR'],
+        'THALsm': ['VAL','VM','VPL','VPLpc','VPM','VPMpc','MGd','MGv','MGm','LGd','PP','PoT'],
+        'THALpm': ['LP','PO','POL','SGN','Eth', #
+                'AV','AMd','AMv','AD','IAM','IAD','LD', #
+                'IMD','MD','SMT','PR', #
+                'PVT','PT','RE','Xi', #
+                'RH','PCN','CM','CL','PF','PIL', #
+                'RT', #
+                'IGL','IntG','LGv','SubG', #
+                'MH','LH' #
+                ],
+        'Striatum':['CP','ACB','OT','LSc','LSr','LSv','CEAm','SF','SH'],
+        'Pallidum':['GPe','GPi','BST','MS','TRS'],
+        'Hypothalamus':['LHA','ZI','FF','PSTN'],
+        'Midbrain - sensory':['SCs','ICd','ICe','SAG','NB',],
+        'Midbrain - motor':['SCm','MRN','RN','APN','MPT','NOT','OP','PAG','PPT','VTA','SNr','SNc','PPN'],
+        'Hindbrain':['CS','DTN',],
+        'Medulla':['GRN']
+    }
+
+    simplified_structure_grouping_order = {
+        'Frontal': 1,
+        'Somatomotor': 2,
+        'Lateral': 3,
+        'Visual': 4,
+        'Medial': 5,
+        'Auditory': 6,
+        'CTXsp': 7,
+        'HPF': 8,
+        'OLF': 9,
+        'THALsm': 10,
+        'THALpm': 11,
+        'Striatum': 12,
+        'Pallidum': 13,
+        'Hypothalamus': 14,
+        'Midbrain - sensory': 15,
+        'Midbrain - motor': 16,
+        'Hindbrain': 17,
+        'Medulla': 18,
+    }
+
+    simplified_structure_colors = {
+        'Frontal': 'red',
+        'Somatomotor': 'tomato',
+        'Lateral': 'orange',
+        'Visual': 'steelblue',
+        'Medial': 'dodgerblue',
+        'Auditory': 'slateblue',
+        'CTXsp': 'mediumturquoise',
+        'HPF': 'powderblue',
+        'OLF': 'limegreen',
+        'THALsm': 'forestgreen',
+        'THALpm': 'skyblue',
+        'Striatum': 'thistle',
+        'Pallidum': 'lightpink',
+        'Hypothalamus': 'orchid',
+        'Midbrain - sensory': 'mediumvioletred',
+        'Midbrain - motor': 'crimson',
+        'Hindbrain': 'maroon',
+        'Medulla': 'saddlebrown',
+    }
+    if by_structure:
+        simplified_structure_by_structure_df = pd.DataFrame([
+            {'structure': structure, 'structure_group': group, 'structure_group_order': simplified_structure_grouping_order[group], 'structure_color': simplified_structure_colors[group]}
+            for group, structures in simplified_structure_grouping.items()
+            for structure in structures
+        ])
+        return simplified_structure_by_structure_df
+
+    elif by_group:
+        simplified_structure_by_group_df = pd.DataFrame([
+            {'structure_group': group, 'structure_group_order': simplified_structure_grouping_order[group], 'structure_color': simplified_structure_colors[group], 'structure_list': simplified_structure_grouping[group]}
+            for group in simplified_structure_grouping_order.keys()
+        ])
+        return simplified_structure_by_group_df
+    else:
+        raise ValueError("Must specify either by_structure=True or by_group=True")
