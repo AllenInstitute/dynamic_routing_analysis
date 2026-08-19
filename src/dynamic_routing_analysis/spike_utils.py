@@ -24,8 +24,11 @@ def makePSTH(spike_times, event_times, time_before, time_after, bin_size):
     event_aligned_spikes=[]
 
     for event_time in event_times:
-        sel_spike_times = spike_times[(spike_times >= event_time - time_before) & (spike_times < event_time + time_after)]-event_time
-        spike_histogram, bin_edges = np.histogram(sel_spike_times, bins = bins)
+        if np.isnan(event_time):
+            spike_histogram = np.full(len(bins)-1, np.nan)
+        else:
+            sel_spike_times = spike_times[(spike_times >= event_time - time_before) & (spike_times < event_time + time_after)]-event_time
+            spike_histogram, bin_edges = np.histogram(sel_spike_times, bins = bins)
 
         event_aligned_spikes.append(spike_histogram)
 
