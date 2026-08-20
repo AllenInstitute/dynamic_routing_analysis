@@ -1194,7 +1194,7 @@ def exclude_structures_from_df(df, exclude_redundant_structures=True, exclude_ge
         unique_structures=df['structure'].unique()
         lowercase_structures=[]
         for ss in unique_structures:
-            if ss[0].islower():
+            if (ss != "context_module") & (ss[0].islower()):
                 lowercase_structures.append(ss)
         if len(lowercase_structures)>0:
             if type(df) == pl.DataFrame:
@@ -1855,20 +1855,6 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
             pl.col('is_all_trials'),
             pl.col('session_id').eq(sel_session),
         )
-        .join(
-            other=(
-                pl.scan_parquet(consolidated_s3_path + 'units.parquet')
-                .with_columns(
-                    pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_'),
-                )
-                .group_by('session_id','structure')
-                .agg(
-                    pl.col('unit_id').len().alias('total_n_units')
-                )
-            ),
-            on=['session_id','structure'],
-            how='inner',
-        )
         .with_columns(
             pl.col('trial_indices').alias('trial_index')
         )
@@ -1887,7 +1873,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
         )
         .group_by(grouping_cols - {'electrode_group_names', 'unit_criteria'})
         .agg(
-            pl.col('balanced_accuracy_test', 'total_n_units').first(),
+            pl.col('balanced_accuracy_test').first(),
             pl.col(final_agg_cols),
         )
         .sort('session_id','structure', 'unit_subsample_size', 'repeat_idx', 'bin_center')
