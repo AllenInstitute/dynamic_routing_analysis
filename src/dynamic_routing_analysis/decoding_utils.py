@@ -7,6 +7,7 @@ activity patterns.
 
 import concurrent.futures as cf
 import contextlib
+import copy
 import datetime
 import logging
 import math
@@ -146,6 +147,8 @@ class Params(pydantic_settings.BaseSettings):
     """ set data scaling method: standard = mean/stdev, robust = median/iqr, none = do not scale """
     test_across_context: bool = False
     """ toggle training decoder model on one context and testing on the other. Requires decoding something other than context, i.e. stimulus id """
+    cross_temporal_decoding: bool = False
+    """ toggle temporal generalization: test each window's cross-validated decoder on every other window's data (adds extra rows flagged is_cross_temporal) """
     save_all_coefs: bool = False
     """ toggle saving decoder coefficients across all train/test folds """
     load_other_spikes_table: bool = False
@@ -391,10 +394,34 @@ class Params(pydantic_settings.BaseSettings):
 # end of run params ------------------------------------------------ #
 
 
+def _cross_temporal_fold_accuracy(train_win: dict, test_win: dict) -> list[float]:
+    """Apply each of train_win's cross-validated fold models to test_win's data at the
+    matched held-out test trials (aligned by trial_index), returning per-fold balanced accuracy."""
+    scaler = train_win['scaler']
+    test_array = test_win['array']
+    test_pos_by_tidx = {int(t): i for i, t in enumerate(test_win['trial_index'])}
+    train_trial_index = train_win['trial_index']
+    train_labels = np.asarray(train_win['labels'])
+    fold_acc: list[float] = []
+    for clf_fold, test_pos in zip(train_win['fold_models'], train_win['test_trials']):
+        test_pos = np.asarray(test_pos)
+        fold_tidx = train_trial_index[test_pos]
+        keep = [j for j, t in enumerate(fold_tidx) if int(t) in test_pos_by_tidx]
+        if not keep:
+            continue
+        rows = [test_pos_by_tidx[int(fold_tidx[j])] for j in keep]
+        X_raw = test_array[rows, :]
+        X = X_raw if isinstance(scaler, str) else scaler.transform(X_raw)
+        y_hat = clf_fold.predict(X)
+        y_true = train_labels[test_pos[keep]]
+        fold_acc.append(balanced_accuracy_score(y_true, y_hat, adjusted=False))
+    return fold_acc
+
+
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                    crossval_index=None,labels_as_index=False,train_test_split_input=None,train_test_split_label=None,
                    regularization=None,penalty=None,solver=None,n_jobs=None,set_random_state=None,
-                   other_data=None,scaler='robust'):
+                   other_data=None,scaler='robust',return_fold_models=False):
     """Train and evaluate a decoder to predict labels from input data.
 
     This function provides a flexible interface for training various classification
@@ -452,6 +479,9 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         - 'robust': RobustScaler (resistant to outliers)
         - 'standard': StandardScaler (z-score normalization)
         - 'none': No scaling
+    return_fold_models : bool, default=False
+        If True, also return a genuine per-fold fitted model for each cross-validation
+        split (captured before the final all-trials refit) under output key 'fold_models'.
 
     Returns
     -------
@@ -480,6 +510,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         - 'train_trials': Training trial indices for each fold
         - 'test_trials': Test trial indices for each fold
         - 'models': Trained model objects for each fold
+        - 'fold_models': Per-fold fitted models (only if return_fold_models=True, else None)
         - 'scaler': Fitted scaler object
         - 'label_names': Unique label values
         - 'labels': Label indices
@@ -624,6 +655,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     train_trials=[]
     test_trials=[]
     models=[]
+    fold_models=[]
     cr_dict_train = []
     balanced_accuracy_train = []
     coefs_all = []
@@ -925,6 +957,9 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
             coefs_all.append(np.full((X.shape[1]), fill_value=False))
 
         models.append(clf)
+        # store a genuine per-fold copy before clf is refit on all trials below
+        if return_fold_models:
+            fold_models.append(copy.deepcopy(clf))
 
     #takes mean over all repeated crossvals for each trial
     if crossval in mean_over_folds_list:
@@ -1012,6 +1047,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     output['test_trials']=test_trials
 
     output['models']=models
+    output['fold_models']=fold_models if return_fold_models else None
     output['scaler']=scaler
     output['label_names']=unique_labels
     output['labels']=labels
@@ -3129,6 +3165,8 @@ def wrap_decoder_helper(
         resample_unit_ids.append(unique_unit_ids[sel_unit_idx])
     resample_unit_ids=np.array(resample_unit_ids)
 
+    # cache per-window aligned data + fold models for optional cross-temporal decoding (opt-in, memory-heavy)
+    ct_cache: dict = {}
 
     for interval_config in params.spike_count_interval_configs:
         for start, stop in interval_config.intervals:
@@ -3458,6 +3496,7 @@ def wrap_decoder_helper(
                             n_jobs=None,
                             other_data=spont_data,
                             scaler=params.scaler,
+                            return_fold_models=params.cross_temporal_decoding and is_all_trials,
                         )
                         result = {}
                         result['balanced_accuracy_test'] = _result['balanced_accuracy_test'].item()
@@ -3569,6 +3608,27 @@ def wrap_decoder_helper(
                             result['coef_crossval_indices'] = np.hstack(coef_crossval_indices).astype('int').tolist()
                             result['coefs_all'] = np.hstack(all_coefs).tolist()
                         result['is_all_trials'] = is_all_trials
+
+                        # cross-temporal decoding: keep schema uniform and cache aligned data + fold models
+                        if params.cross_temporal_decoding:
+                            result['is_cross_temporal'] = False
+                            result['train_time_aligned_to'] = interval_config.event_column_name
+                            result['test_time_aligned_to'] = interval_config.event_column_name
+                            result['train_bin_center'] = result['bin_center']
+                            result['test_bin_center'] = result['bin_center']
+                            if is_all_trials and _result['fold_models'] is not None:
+                                ct_cache.setdefault((train_test_split_label, repeat_idx), {})[
+                                    (interval_config.event_column_name, result['bin_center'])
+                                ] = {
+                                    'array': data,
+                                    'trial_index': trials['trial_index'].to_numpy(),
+                                    'fold_models': _result['fold_models'],
+                                    'scaler': _result['scaler'],
+                                    'test_trials': _result['test_trials'],
+                                    'labels': np.asarray(_result['labels']),
+                                    'template': dict(result),
+                                }
+
                         results.append(result)
                         if params.test:
                             break
@@ -3582,6 +3642,39 @@ def wrap_decoder_helper(
         if params.test:
             logger.info("Test mode: exiting after first event intervals config")
             break
+
+    # cross-temporal decoding: apply each window's fold models to every other window
+    if params.cross_temporal_decoding:
+        logger.info("Computing cross-temporal generalization")
+        for windows in ct_cache.values():
+            window_keys = list(windows.keys())
+            for train_key in window_keys:
+                train_win = windows[train_key]
+                n_train_features = train_win['array'].shape[1]
+                for test_key in window_keys:
+                    if test_key == train_key:
+                        continue
+                    test_win = windows[test_key]
+                    if test_win['array'].shape[1] != n_train_features:
+                        continue
+                    fold_acc = _cross_temporal_fold_accuracy(train_win, test_win)
+                    if not fold_acc:
+                        continue
+                    row = dict(train_win['template'])
+                    row['is_cross_temporal'] = True
+                    row['train_time_aligned_to'] = train_key[0]
+                    row['train_bin_center'] = train_key[1]
+                    row['test_time_aligned_to'] = test_key[0]
+                    row['test_bin_center'] = test_key[1]
+                    row['balanced_accuracy_test'] = float(np.nanmean(fold_acc))
+                    row['balanced_accuracy_test_all'] = [float(a) for a in fold_acc]
+                    row['balanced_accuracy_train'] = None
+                    # per-trial outputs don't apply off-diagonal
+                    for k in list(row.keys()):
+                        if k.startswith('predict_proba') or k.startswith('decision_function'):
+                            row[k] = None
+                    row['trial_indices'] = None
+                    results.append(row)
 
     with lock or contextlib.nullcontext():
         logger.info('Writing data')
