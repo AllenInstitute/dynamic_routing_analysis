@@ -1785,12 +1785,12 @@ def plot_brain_heatmap(
         )
     else:
         gs = matplotlib.gridspec.GridSpec(
-            len(sagittal_planes) + 2,
-            1,
+            len(sagittal_planes) + 1,
+            2,
             figure=fig,
             height_ratios=[height_top / height_sagittal]
-            + [1] * len(sagittal_planes)
-            + [0.1],
+            + [1] * len(sagittal_planes),
+            width_ratios=[1, 0.1],
         )
     axes.append(ax_top := fig.add_subplot(gs[0, 0]))
     gdf = get_heatmap_gdf(
@@ -1961,7 +1961,7 @@ def plot_brain_heatmap(
     if plot_horizontal:
         axes.append(ax_cbar := fig.add_subplot(gs[0, len(sagittal_planes) + 1]))
     else:
-        axes.append(ax_cbar := fig.add_subplot(gs[len(sagittal_planes) + 1, 0]))
+        axes.append(ax_cbar := fig.add_subplot(gs[:, 1]))
     fig.colorbar(
         matplotlib.cm.ScalarMappable(
             norm=matplotlib.colors.Normalize(*clevels),
@@ -1969,8 +1969,8 @@ def plot_brain_heatmap(
         ),
         ax=ax_cbar,
         fraction=0.5,
-        orientation="horizontal" if plot_horizontal else "vertical",
-        location="bottom" if plot_horizontal else "right",
+        orientation="vertical",
+        location="right",
     )
     for ax in axes:
         ax.set_aspect(1)
@@ -2171,9 +2171,9 @@ def get_structure_colormap(by_structure=True,by_group=False):
         'Medial cortex':['VISa', 'VISam', 'VISpm', 'RSPagl', 'RSPd', 'RSPv',],
         'Auditory cortex':['AUDp', 'AUDv', 'AUDd', 'AUDpo'],
         'Cortical subplate':['CLA','EPd','EPv','LA','BLA','BMA','PA'],
-        'Hippocampal formation': ['CA1', 'CA2', 'CA3', 'DG','IG','ENTl', 'ENTm', 'PAR', 'POST', 'PRE', 'SUB', 'ProS'],
-        'Olfactory areas': ['OLF','AON','AOB','MOB','TT','TTd','DP','PIR'],
-        'Thalamus - sensorimotor': ['VAL','VM','VPL','VPLpc','VPM','VPMpc','MGd','MGv','MGm','LGd','PP','PoT'],
+        'Hippocampal formation': ['CA1', 'CA2', 'CA3', 'DG','IG','ENTl', 'ENTm', 'PAR', 'POST', 'PRE', 'SUB', 'ProS','HPF','FC','APr'],
+        'Olfactory areas': ['OLF','AON','AOB','MOB','TT','TTd','DP','PIR','NLOT1','NLOT2','AOBmi','AOBgl'],
+        'Thalamus - sensorimotor': ['VAL','VM','VPL','VPLpc','VPM','VPMpc','MGd','MGv','MGm','LGd','PP','PoT','SPF','SPFp','SPFm'],
         'Thalamus - association': ['LP','PO','POL','SGN','Eth', #
                 'AV','AMd','AMv','AD','IAM','IAD','LD', #
                 'IMD','MD','SMT','PR', #
@@ -2183,12 +2183,14 @@ def get_structure_colormap(by_structure=True,by_group=False):
                 'IGL','IntG','LGv','SubG', #
                 'MH','LH' #
                 ],
-        'Striatum':['CP','ACB','OT','LSc','LSr','LSv','CEAm','SF','SH'],
-        'Pallidum':['GPe','GPi','BST','MS','TRS'],
-        'Hypothalamus':['LHA','ZI','FF','PSTN'],
-        'Midbrain - sensory':['SCs','ICd','ICe','SAG','NB',],
-        'Midbrain - motor':['SCm','MRN','RN','APN','MPT','NOT','OP','PAG','PPT','VTA','SNr','SNc','PPN'],
-        'Hindbrain':['CS','DTN',],
+        'Striatum':['CP','ACB','OT','LSc','LSr','LSv','CEAm','MEA','SF','SH','SFO'],
+        'Pallidum':['GPe','GPi','BST','MS','TRS','NDB','SI'],
+        'Hypothalamus':['LHA','ZI','FF','PSTN','MPO','PVH','PVHd','PH','SUM','Mml','MPN','STN','PeF'],
+        'Midbrain - sensory':['SCs','ICd','ICe','SAG','NB','PBG','SCO'],
+        'Midbrain - motor':[
+            'SCm','MRN','RN','APN','MPT','NOT','OP','PAG','PPT','VTA','SNr','SNc','PPN','PRC','RR',
+            'DT','NPC','CUN','INC','DR','III','Su3','AT','CLI','IPC','IPR','PN','LT','MT','ND','Pa4'],
+        'Hindbrain':['PCG','CS','DTN','PRNc','PRNr','PRNv','NI','P','LDT'],
         'Medulla':['GRN']
     }
 
@@ -2213,26 +2215,27 @@ def get_structure_colormap(by_structure=True,by_group=False):
         'Medulla': 18,
     }
 
-    # CCF-inspired: cortex=greens, thalamus=salmon/coral, striatum=blue, midbrain=magenta, hindbrain=gold
+    # CCF-inspired: cortex=greens (dark→light, warm→cool), thalamus=reds/coral,
+    # striatum/pallidum=blues, midbrain=pink/magenta, hindbrain=amber/brown
     simplified_structure_colors = {
-        'Frontal cortex': '#2B7A3E',
-        'Somatomotor cortex': '#5EBA47',
-        'Lateral cortex': '#98C13D',
-        'Visual cortex': '#1E7B7B',
-        'Medial cortex': '#45A87E',
-        'Auditory cortex': '#3E9B9B',
-        'Cortical subplate': '#2EC4B6',
-        'Hippocampal formation': '#7B68AE',
-        'Olfactory areas': '#A7A844',
-        'Thalamus - sensorimotor': '#E05B5B',
-        'Thalamus - association': '#F49D6E',
-        'Striatum': '#6CB4D9',
-        'Pallidum': '#4A6FA5',
-        'Hypothalamus': '#C93C2B',
-        'Midbrain - sensory': '#D462D4',
-        'Midbrain - motor': '#9B2D9B',
-        'Hindbrain': '#D4A82E',
-        'Medulla': '#8B5E2B',
+        'Frontal cortex': '#1B5E20',
+        'Somatomotor cortex': '#7CB342',
+        'Lateral cortex': '#C0CA33',
+        'Visual cortex': '#00695C',
+        'Medial cortex': '#4CAF50',
+        'Auditory cortex': '#A5D6A7',
+        'Cortical subplate': '#00ACC1',
+        'Hippocampal formation': '#6A1B9A',
+        'Olfactory areas': '#A1887F',
+        'Thalamus - sensorimotor': '#EF5350',
+        'Thalamus - association': '#FF8A65',
+        'Striatum': '#42A5F5',
+        'Pallidum': '#1565C0',
+        'Hypothalamus': '#BF360C',
+        'Midbrain - sensory': '#EC407A',
+        'Midbrain - motor': '#880E4F',
+        'Hindbrain': '#FFA000',
+        'Medulla': '#5D4037',
     }
     if by_structure:
         simplified_structure_by_structure_df = pd.DataFrame([
