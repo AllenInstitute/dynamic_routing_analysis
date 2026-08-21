@@ -1749,6 +1749,7 @@ def plot_brain_heatmap(
     missing_params: Mapping[str, Any] = {},
     plane_line_params: Mapping[str, Any] = {},
     annotation_params: Mapping[str, Any] = {},
+    plot_horizontal: bool = False,
 ) -> tuple[matplotlib.figure.Figure, tuple[pd.DataFrame]]:
     fig = plt.figure()
     gdfs = []
@@ -1774,14 +1775,23 @@ def plot_brain_heatmap(
     max_ml = vol.shape[0] * ccf_utils.RESOLUTION_UM
     height_top = max_ap if horizontal_upright else max_ml
     height_sagittal = max_dv
-    gs = matplotlib.gridspec.GridSpec(
-        len(sagittal_planes) + 2,
-        1,
-        figure=fig,
-        height_ratios=[height_top / height_sagittal]
-        + [1] * len(sagittal_planes)
-        + [0.1],
-    )
+    if plot_horizontal:
+        gs = matplotlib.gridspec.GridSpec(
+            1,
+            len(sagittal_planes) + 2,
+            figure=fig,
+            width_ratios=[1] * (len(sagittal_planes) + 1)
+            + [0.1],
+        )
+    else:
+        gs = matplotlib.gridspec.GridSpec(
+            len(sagittal_planes) + 2,
+            1,
+            figure=fig,
+            height_ratios=[height_top / height_sagittal]
+            + [1] * len(sagittal_planes)
+            + [0.1],
+        )
     axes.append(ax_top := fig.add_subplot(gs[0, 0]))
     gdf = get_heatmap_gdf(
         regions=regions,
@@ -1909,7 +1919,10 @@ def plot_brain_heatmap(
                     | annotation_params,
                 )
     for i, coord in enumerate(sorted(sagittal_planes, reverse=True)):
-        axes.append(ax := fig.add_subplot(gs[i + 1, 0]))
+        if plot_horizontal:
+            axes.append(ax := fig.add_subplot(gs[0, i + 1]))
+        else:
+            axes.append(ax := fig.add_subplot(gs[i + 1, 0]))
         gdf = get_heatmap_gdf(
             regions=regions,
             values=values,
@@ -1945,7 +1958,10 @@ def plot_brain_heatmap(
         ax_top.set_xlim(0, max_ap)
         ax_top.set_ylim(0, max_ml)
 
-    axes.append(ax_cbar := fig.add_subplot(gs[len(sagittal_planes) + 1, 0]))
+    if plot_horizontal:
+        axes.append(ax_cbar := fig.add_subplot(gs[0, len(sagittal_planes) + 1]))
+    else:
+        axes.append(ax_cbar := fig.add_subplot(gs[len(sagittal_planes) + 1, 0]))
     fig.colorbar(
         matplotlib.cm.ScalarMappable(
             norm=matplotlib.colors.Normalize(*clevels),
@@ -1953,8 +1969,8 @@ def plot_brain_heatmap(
         ),
         ax=ax_cbar,
         fraction=0.5,
-        orientation="horizontal",
-        location="bottom",
+        orientation="horizontal" if plot_horizontal else "vertical",
+        location="bottom" if plot_horizontal else "right",
     )
     for ax in axes:
         ax.set_aspect(1)
@@ -2148,17 +2164,17 @@ def get_structure_colormap(by_structure=True,by_group=False):
 
     ###note: not exhaustive; update if new structures are added
     simplified_structure_grouping = {
-        'Frontal':['ACAd','ACAv','FRP','ORBl','ORBvl','ORBm','PL','ILA'],
-        'Somatomotor':['MOs','MOp','SSp','SSs'],
-        'Lateral':['AId','AIp','AIv','GU','VISC','TEa','PERI','ECT'],
-        'Visual':['VISp', 'VISl', 'VISal', 'VISli', 'VISpl', 'VISpor', 'VISrl'],
-        'Medial':['VISa', 'VISam', 'VISpm', 'RSPagl', 'RSPd', 'RSPv',],
-        'Auditory':['AUDp', 'AUDv', 'AUDd', 'AUDpo'],
-        'CTXsp':['CLA','EPd','EPv','LA','BLA','BMA','PA'],
-        'HPF': ['CA1', 'CA2', 'CA3', 'DG','IG','ENTl', 'ENTm', 'PAR', 'POST', 'PRE', 'SUB', 'ProS'],
-        'OLF': ['OLF','AON','AOB','MOB','TT','TTd','DP','PIR'],
-        'THALsm': ['VAL','VM','VPL','VPLpc','VPM','VPMpc','MGd','MGv','MGm','LGd','PP','PoT'],
-        'THALpm': ['LP','PO','POL','SGN','Eth', #
+        'Frontal cortex':['ACAd','ACAv','FRP','ORBl','ORBvl','ORBm','PL','ILA'],
+        'Somatomotor cortex':['MOs','MOp','SSp','SSs'],
+        'Lateral cortex':['AId','AIp','AIv','GU','VISC','TEa','PERI','ECT'],
+        'Visual cortex':['VISp', 'VISl', 'VISal', 'VISli', 'VISpl', 'VISpor', 'VISrl'],
+        'Medial cortex':['VISa', 'VISam', 'VISpm', 'RSPagl', 'RSPd', 'RSPv',],
+        'Auditory cortex':['AUDp', 'AUDv', 'AUDd', 'AUDpo'],
+        'Cortical subplate':['CLA','EPd','EPv','LA','BLA','BMA','PA'],
+        'Hippocampal formation': ['CA1', 'CA2', 'CA3', 'DG','IG','ENTl', 'ENTm', 'PAR', 'POST', 'PRE', 'SUB', 'ProS'],
+        'Olfactory areas': ['OLF','AON','AOB','MOB','TT','TTd','DP','PIR'],
+        'Thalamus - sensorimotor': ['VAL','VM','VPL','VPLpc','VPM','VPMpc','MGd','MGv','MGm','LGd','PP','PoT'],
+        'Thalamus - association': ['LP','PO','POL','SGN','Eth', #
                 'AV','AMd','AMv','AD','IAM','IAD','LD', #
                 'IMD','MD','SMT','PR', #
                 'PVT','PT','RE','Xi', #
@@ -2177,17 +2193,17 @@ def get_structure_colormap(by_structure=True,by_group=False):
     }
 
     simplified_structure_grouping_order = {
-        'Frontal': 1,
-        'Somatomotor': 2,
-        'Lateral': 3,
-        'Visual': 4,
-        'Medial': 5,
-        'Auditory': 6,
-        'CTXsp': 7,
-        'HPF': 8,
-        'OLF': 9,
-        'THALsm': 10,
-        'THALpm': 11,
+        'Frontal cortex': 1,
+        'Somatomotor cortex': 2,
+        'Lateral cortex': 3,
+        'Visual cortex': 4,
+        'Medial cortex': 5,
+        'Auditory cortex': 6,
+        'Cortical subplate': 7,
+        'Hippocampal formation': 8,
+        'Olfactory areas': 9,
+        'Thalamus - sensorimotor': 10,
+        'Thalamus - association': 11,
         'Striatum': 12,
         'Pallidum': 13,
         'Hypothalamus': 14,
@@ -2197,25 +2213,26 @@ def get_structure_colormap(by_structure=True,by_group=False):
         'Medulla': 18,
     }
 
+    # CCF-inspired: cortex=greens, thalamus=salmon/coral, striatum=blue, midbrain=magenta, hindbrain=gold
     simplified_structure_colors = {
-        'Frontal': 'red',
-        'Somatomotor': 'tomato',
-        'Lateral': 'orange',
-        'Visual': 'steelblue',
-        'Medial': 'dodgerblue',
-        'Auditory': 'slateblue',
-        'CTXsp': 'mediumturquoise',
-        'HPF': 'powderblue',
-        'OLF': 'limegreen',
-        'THALsm': 'forestgreen',
-        'THALpm': 'skyblue',
-        'Striatum': 'thistle',
-        'Pallidum': 'lightpink',
-        'Hypothalamus': 'orchid',
-        'Midbrain - sensory': 'mediumvioletred',
-        'Midbrain - motor': 'crimson',
-        'Hindbrain': 'maroon',
-        'Medulla': 'saddlebrown',
+        'Frontal cortex': '#2B7A3E',
+        'Somatomotor cortex': '#5EBA47',
+        'Lateral cortex': '#98C13D',
+        'Visual cortex': '#1E7B7B',
+        'Medial cortex': '#45A87E',
+        'Auditory cortex': '#3E9B9B',
+        'Cortical subplate': '#2EC4B6',
+        'Hippocampal formation': '#7B68AE',
+        'Olfactory areas': '#A7A844',
+        'Thalamus - sensorimotor': '#E05B5B',
+        'Thalamus - association': '#F49D6E',
+        'Striatum': '#6CB4D9',
+        'Pallidum': '#4A6FA5',
+        'Hypothalamus': '#C93C2B',
+        'Midbrain - sensory': '#D462D4',
+        'Midbrain - motor': '#9B2D9B',
+        'Hindbrain': '#D4A82E',
+        'Medulla': '#8B5E2B',
     }
     if by_structure:
         simplified_structure_by_structure_df = pd.DataFrame([
