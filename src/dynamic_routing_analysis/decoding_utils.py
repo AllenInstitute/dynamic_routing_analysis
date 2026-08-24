@@ -85,6 +85,8 @@ class Params(pydantic_settings.BaseSettings):
     # Capsule-specific parameters -------------------------------------- #
     session_id: str | None = pydantic.Field(None, exclude=True, repr=True)
     """If provided, only process this session_id. Otherwise, process all sessions that match the filtering criteria"""
+    structure: str | None = pydantic.Field(None, exclude=True, repr=True)
+    """If provided, only process this structure. Otherwise, process all structures that match the filtering criteria"""
     run_id: str = pydantic.Field(datetime.datetime.now().strftime("%Y%m%d_%H%M%S")) # created at runtime: same for all Params instances
     """A unique string that should be attached to all decoding runs in the same batch"""
     skip_existing: bool = pydantic.Field(True, exclude=True, repr=True)
@@ -2878,6 +2880,9 @@ def decode_context_with_linear_shift(
             .unique(params.units_group_by)
             .collect()
         )
+    
+    if params.structure is not None:
+        combinations_df = combinations_df.filter(pl.col('structure').eq(params.structure))
 
     #option to apply filter by unit metrics
     elif params.filter_units_by_metrics is True:
