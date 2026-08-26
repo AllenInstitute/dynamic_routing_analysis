@@ -1750,6 +1750,7 @@ def plot_brain_heatmap(
     plane_line_params: Mapping[str, Any] = {},
     annotation_params: Mapping[str, Any] = {},
     plot_horizontal: bool = False,
+    plot_2x2: bool = False,
 ) -> tuple[matplotlib.figure.Figure, tuple[pd.DataFrame]]:
     fig = plt.figure()
     gdfs = []
@@ -1760,6 +1761,11 @@ def plot_brain_heatmap(
     else:
         sagittal_planes = tuple(sagittal_planes)  # type: ignore
     sagittal_planes = [i + ccf_utils.get_midline_ccf_ml()  for i in sagittal_planes]
+    if plot_2x2 and len(sagittal_planes) + 1 != 4:
+        raise ValueError(
+            "plot_2x2 requires exactly 4 panels to plot (1 top view + 3 sagittal "
+            f"planes); got {len(sagittal_planes) + 1}"
+        )
     if clevels is not None:
         clevels = tuple(clevels)  # type: ignore
         if len(clevels) != 2:
@@ -1775,7 +1781,30 @@ def plot_brain_heatmap(
     max_ml = vol.shape[0] * ccf_utils.RESOLUTION_UM
     height_top = max_ap if horizontal_upright else max_ml
     height_sagittal = max_dv
-    if plot_horizontal:
+    if plot_2x2:
+        cbar_row_ratio = 0.12
+        height_ratios = [1, 1, cbar_row_ratio]
+        gs = matplotlib.gridspec.GridSpec(
+            3,
+            2,
+            figure=fig,
+            height_ratios=height_ratios,
+            wspace=0.03,
+            hspace=0.03,
+            left=0.01,
+            right=0.99,
+            top=0.99,
+            bottom=0.01,
+        )
+        # size the figure so each 2x2 cell's width:height matches the top
+        # view's A-P:ML aspect, keeping the A-P scale identical across all
+        # panels (sagittal panels then end up width-constrained to match)
+        row_height_frac = 1 / sum(height_ratios)
+        col_width_frac = 0.5
+        fig_aspect = (max_ap / max_ml) * (row_height_frac / col_width_frac)
+        fig_height = 5.0
+        fig.set_size_inches(fig_height * fig_aspect, fig_height)
+    elif plot_horizontal:
         gs = matplotlib.gridspec.GridSpec(
             1,
             len(sagittal_planes) + 2,
@@ -1918,8 +1947,12 @@ def plot_brain_heatmap(
                     }
                     | annotation_params,
                 )
+    grid_2x2_positions = [(0, 1), (1, 0), (1, 1)]
     for i, coord in enumerate(sorted(sagittal_planes, reverse=True)):
-        if plot_horizontal:
+        if plot_2x2:
+            row, col = grid_2x2_positions[i]
+            axes.append(ax := fig.add_subplot(gs[row, col]))
+        elif plot_horizontal:
             axes.append(ax := fig.add_subplot(gs[0, i + 1]))
         else:
             axes.append(ax := fig.add_subplot(gs[i + 1, 0]))
@@ -1958,20 +1991,24 @@ def plot_brain_heatmap(
         ax_top.set_xlim(0, max_ap)
         ax_top.set_ylim(0, max_ml)
 
-    if plot_horizontal:
+    if plot_2x2:
+        axes.append(ax_cbar := fig.add_subplot(gs[2, :]))
+    elif plot_horizontal:
         axes.append(ax_cbar := fig.add_subplot(gs[0, len(sagittal_planes) + 1]))
     else:
         axes.append(ax_cbar := fig.add_subplot(gs[:, 1]))
-    fig.colorbar(
+    cbar = fig.colorbar(
         matplotlib.cm.ScalarMappable(
             norm=matplotlib.colors.Normalize(*clevels),
             cmap=cmap,
         ),
         ax=ax_cbar,
         fraction=0.5,
-        orientation="vertical",
-        location="right",
+        orientation="horizontal" if plot_2x2 else "vertical",
+        location="bottom" if plot_2x2 else "right",
     )
+    if plot_2x2:
+        cbar.ax.tick_params(labelsize=12)
     for ax in axes:
         ax.set_aspect(1)
         ax.set_axis_off()
