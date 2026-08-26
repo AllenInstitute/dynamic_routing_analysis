@@ -2252,27 +2252,26 @@ def get_structure_colormap(by_structure=True,by_group=False):
         'Medulla': 18,
     }
 
-    # CCF-inspired: cortex=greens (dark→light, warm→cool), thalamus=reds/coral,
-    # striatum/pallidum=blues, midbrain=pink/magenta, hindbrain=amber/brown
+    # CCF-inspired: cortex=greens, thalamus=salmon/coral, striatum=blue, midbrain=magenta, hindbrain=gold
     simplified_structure_colors = {
-        'Frontal cortex': '#1B5E20',
-        'Somatomotor cortex': '#7CB342',
-        'Lateral cortex': '#C0CA33',
-        'Visual cortex': '#00695C',
-        'Medial cortex': '#4CAF50',
-        'Auditory cortex': '#A5D6A7',
-        'Cortical subplate': '#00ACC1',
-        'Hippocampal formation': '#6A1B9A',
-        'Olfactory areas': '#A1887F',
-        'Thalamus - sensorimotor': '#EF5350',
-        'Thalamus - association': '#FF8A65',
-        'Striatum': '#42A5F5',
-        'Pallidum': '#1565C0',
-        'Hypothalamus': '#BF360C',
-        'Midbrain - sensory': '#EC407A',
-        'Midbrain - motor': '#880E4F',
-        'Hindbrain': '#FFA000',
-        'Medulla': '#5D4037',
+        'Frontal cortex': '#2B7A3E',
+        'Somatomotor cortex': '#5EBA47',
+        'Lateral cortex': '#98C13D',
+        'Visual cortex': '#1E7B7B',
+        'Medial cortex': '#45A87E',
+        'Auditory cortex': '#3E9B9B',
+        'Cortical subplate': '#2EC4B6',
+        'Hippocampal formation': '#7B68AE',
+        'Olfactory areas': '#A7A844',
+        'Thalamus - sensorimotor': '#E05B5B',
+        'Thalamus - association': '#F49D6E',
+        'Striatum': '#6CB4D9',
+        'Pallidum': '#4A6FA5',
+        'Hypothalamus': '#C93C2B',
+        'Midbrain - sensory': '#D462D4',
+        'Midbrain - motor': '#9B2D9B',
+        'Hindbrain': '#D4A82E',
+        'Medulla': '#8B5E2B',
     }
     if by_structure:
         simplified_structure_by_structure_df = pd.DataFrame([
