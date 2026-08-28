@@ -2462,3 +2462,5 @@ def plot_structure_results(
     # Keep labels readable while preserving original figure size
     fig.subplots_adjust(bottom=0.36, top=0.88)
     fig.tight_layout()
+
+    return fig
