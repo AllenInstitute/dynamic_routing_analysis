@@ -2360,6 +2360,8 @@ def get_structure_averages(
             session_counts = structure_data.groupby('session_id')['unit_id'].nunique()
             valid_sessions = session_counts[session_counts >= min_n_units_per_session].index
             structure_data = structure_data[structure_data['session_id'].isin(valid_sessions)]
+            # average across units within each session
+            structure_data = structure_data.groupby(['session_id','mouse_id'], as_index=False)[cols_to_average].mean()
 
         # Filter mice with at least min_n_sessions sessions
         mouse_counts = structure_data.groupby('mouse_id')['session_id'].nunique()
