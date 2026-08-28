@@ -24,9 +24,11 @@ import pandas as pd
 import polars as pl
 import pyarrow.dataset as ds
 import rasterio.features
+import scipy.stats as stats
 import shapely
 import shapely.geometry
 from matplotlib import patches
+from statsmodels.stats.multitest import fdrcorrection
 
 from dynamic_routing_analysis import ccf_utils, spike_utils
 
@@ -2220,15 +2222,19 @@ def get_structure_colormap(by_structure=True,by_group=False):
                 'IGL','IntG','LGv','SubG', #
                 'MH','LH' #
                 ],
-        'Striatum':['CP','ACB','OT','LSc','LSr','LSv','CEAm','MEA','SF','SH','SFO'],
-        'Pallidum':['GPe','GPi','BST','MS','TRS','NDB','SI'],
+        # 'Striatum':['CP','ACB','OT','LSc','LSr','LSv','CEAm','MEA','SF','SH','SFO'],
+        # 'Pallidum':['GPe','GPi','BST','MS','TRS','NDB','SI'],
+        'Basal Ganglia': ['CP','ACB','OT','LSc','LSr','LSv','CEAm','MEA','SF','SH','SFO',
+                          'GPe','GPi','BST','MS','TRS','NDB','SI'],
         'Hypothalamus':['LHA','ZI','FF','PSTN','MPO','PVH','PVHd','PH','SUM','Mml','MPN','STN','PeF'],
-        'Midbrain - sensory':['SCs','ICd','ICe','SAG','NB','PBG','SCO'],
-        'Midbrain - motor':[
-            'SCm','MRN','RN','APN','MPT','NOT','OP','PAG','PPT','VTA','SNr','SNc','PPN','PRC','RR',
-            'DT','NPC','CUN','INC','DR','III','Su3','AT','CLI','IPC','IPR','PN','LT','MT','ND','Pa4'],
-        'Hindbrain':['PCG','CS','DTN','PRNc','PRNr','PRNv','NI','P','LDT'],
-        'Medulla':['GRN']
+        # 'Midbrain - sensory':['SCs','ICd','ICe','SAG','NB','PBG','SCO'],
+        # 'Midbrain - motor':[
+        #     'SCm','MRN','RN','APN','MPT','NOT','OP','PAG','PPT','VTA','SNr','SNc','PPN','PRC','RR',
+        #     'DT','NPC','CUN','INC','DR','III','Su3','AT','CLI','IPC','IPR','PN','LT','MT','ND','Pa4'],
+        'Midbrain': ['SCs','ICd','ICe','SAG','NB','PBG','SCO','SCm','MRN','RN','APN','MPT','NOT','OP','PAG','PPT','VTA','SNr','SNc','PPN','PRC','RR',
+                    'DT','NPC','CUN','INC','DR','III','Su3','AT','CLI','IPC','IPR','PN','LT','MT','ND','Pa4'],
+        'Hindbrain': ['PCG','CS','DTN','PRNc','PRNr','PRNv','NI','P','LDT'],
+        'Medulla': ['GRN']
     }
 
     simplified_structure_grouping_order = {
@@ -2243,13 +2249,38 @@ def get_structure_colormap(by_structure=True,by_group=False):
         'Olfactory areas': 9,
         'Thalamus - sensorimotor': 10,
         'Thalamus - association': 11,
-        'Striatum': 12,
-        'Pallidum': 13,
-        'Hypothalamus': 14,
-        'Midbrain - sensory': 15,
-        'Midbrain - motor': 16,
-        'Hindbrain': 17,
-        'Medulla': 18,
+        'Hypothalamus': 12,
+        # 'Striatum': 12,
+        # 'Pallidum': 13,
+        'Basal Ganglia': 13,
+        # 'Midbrain - sensory': 15,
+        # 'Midbrain - motor': 16,
+        'Midbrain': 14,
+        'Hindbrain': 15,
+        'Medulla': 16,
+    }
+
+    shortened_structure_group_name={
+        'Frontal cortex': 'Frontal',
+        'Somatomotor cortex': 'Soma-Mot',
+        'Lateral cortex': 'Lat',
+        'Visual cortex': 'Vis',
+        'Medial cortex': 'Med',
+        'Auditory cortex': 'Aud',
+        'Cortical subplate': 'CTXsp',
+        'Hippocampal formation': 'Hipp',
+        'Olfactory areas': 'Olf',
+        'Thalamus - sensorimotor': 'Thal-SM',
+        'Thalamus - association': 'Thal-Assoc',
+        'Hypothalamus': 'HY',
+        # 'Striatum': 12,
+        # 'Pallidum': 13,
+        'Basal Ganglia': 'BG',
+        # 'Midbrain - sensory': 15,
+        # 'Midbrain - motor': 16,
+        'Midbrain': 'MB',
+        'Hindbrain': 'HB',
+        'Medulla': 'Med',
     }
 
     # CCF-inspired: cortex=greens, thalamus=salmon/coral, striatum=blue, midbrain=magenta, hindbrain=gold
@@ -2265,17 +2296,23 @@ def get_structure_colormap(by_structure=True,by_group=False):
         'Olfactory areas': '#A7A844',
         'Thalamus - sensorimotor': '#E05B5B',
         'Thalamus - association': '#F49D6E',
-        'Striatum': '#6CB4D9',
-        'Pallidum': '#4A6FA5',
+        # 'Striatum': '#6CB4D9',
+        # 'Pallidum': '#4A6FA5',
+        'Basal Ganglia': '#4A6FA5',
         'Hypothalamus': '#C93C2B',
-        'Midbrain - sensory': '#D462D4',
-        'Midbrain - motor': '#9B2D9B',
+        # 'Midbrain - sensory': '#D462D4',
+        # 'Midbrain - motor': '#9B2D9B',
+        'Midbrain': '#9B2D9B',
         'Hindbrain': '#D4A82E',
         'Medulla': '#8B5E2B',
     }
     if by_structure:
         simplified_structure_by_structure_df = pd.DataFrame([
-            {'structure': structure, 'structure_group': group, 'structure_group_order': simplified_structure_grouping_order[group], 'structure_color': simplified_structure_colors[group]}
+            {'structure': structure, 
+             'structure_group': group, 
+             'structure_group_order': simplified_structure_grouping_order[group], 
+             'structure_color': simplified_structure_colors[group],
+             'structure_group_short_name': shortened_structure_group_name[group]}
             for group, structures in simplified_structure_grouping.items()
             for structure in structures
         ])
@@ -2283,9 +2320,145 @@ def get_structure_colormap(by_structure=True,by_group=False):
 
     elif by_group:
         simplified_structure_by_group_df = pd.DataFrame([
-            {'structure_group': group, 'structure_group_order': simplified_structure_grouping_order[group], 'structure_color': simplified_structure_colors[group], 'structure_list': simplified_structure_grouping[group]}
+            {'structure_group': group, 
+             'structure_group_order': simplified_structure_grouping_order[group], 
+             'structure_color': simplified_structure_colors[group], 
+             'structure_list': simplified_structure_grouping[group],
+             'structure_group_short_name': shortened_structure_group_name[group]}
             for group in simplified_structure_grouping_order.keys()
         ])
         return simplified_structure_by_group_df
     else:
         raise ValueError("Must specify either by_structure=True or by_group=True")
+
+
+def get_structure_averages(
+    input_data, cols_to_average=[], stats_comp_value=0.0, 
+    min_n_units_per_session=10, min_n_sessions_per_mouse=1, min_n_mice=3,
+    test_type='ttest', excl_structure_list=[]):
+    #inputs: input_data, cols_to_average, stats_comp_value, min_n_units_per_session, min_n_sessions_per_mouse, min_n_mice
+    
+    if 'mouse_id' not in input_data.columns:
+        input_data['mouse_id'] = input_data['session_id'].str.split('_').str[0]
+
+    structure_results = {
+        'structure':[],
+        'n_mice':[],
+        'n_sessions':[],
+    }
+    for col in cols_to_average:
+        structure_results[f'{col}_mean'] = []
+        structure_results[f'{col}_sem'] = []
+        structure_results[f'{col}_p_val'] = []
+
+    for structure in input_data['structure'].unique():
+        if structure in excl_structure_list:
+            continue
+        structure_data = input_data[input_data['structure'] == structure]
+        # Filter sessions with at least min_n_units_per_session units
+        if 'unit_id' in structure_data.columns:
+            session_counts = structure_data.groupby('session_id')['unit_id'].nunique()
+            valid_sessions = session_counts[session_counts >= min_n_units_per_session].index
+            structure_data = structure_data[structure_data['session_id'].isin(valid_sessions)]
+
+        # Filter mice with at least min_n_sessions sessions
+        mouse_counts = structure_data.groupby('mouse_id')['session_id'].nunique()
+        valid_mice = mouse_counts[mouse_counts >= min_n_sessions_per_mouse].index
+        structure_data = structure_data[structure_data['mouse_id'].isin(valid_mice)]
+
+        # Filter structures with at least min_n_mice mice
+        if structure_data['mouse_id'].nunique() >= min_n_mice:
+            structure_results['structure'].append(structure)
+            structure_results['n_mice'].append(structure_data['mouse_id'].nunique())
+            structure_results['n_sessions'].append(structure_data['session_id'].nunique())
+            for col in cols_to_average:
+                structure_results[f'{col}_mean'].append(structure_data.groupby('mouse_id')[col].mean().mean())
+                structure_results[f'{col}_sem'].append(structure_data.groupby('mouse_id')[col].mean().sem())
+                if test_type == 'ttest':
+                    structure_results[f'{col}_p_val'].append(stats.ttest_1samp(structure_data.groupby('mouse_id')[col].mean(), stats_comp_value).pvalue)
+                elif test_type == 'wilcoxon':
+                    structure_results[f'{col}_p_val'].append(stats.wilcoxon(structure_data.groupby('mouse_id')[col].mean(), stats_comp_value).pvalue)
+
+    structure_results = pd.DataFrame.from_dict(structure_results)
+
+    # do multiple comparisons correction for all pval columns
+    for col in cols_to_average:
+        structure_results[f'{col}_adj_p_val'] = fdrcorrection(structure_results[f'{col}_p_val'])[1]
+
+    return structure_results
+
+
+def plot_structure_results(
+        structure_results, col_to_plot, col_alias=None, set_fontsize=8, set_ylim='auto'
+        ):
+    # Build plotting table in explicit display order
+
+    simplified_structure_by_structure=get_structure_colormap(by_structure=True,by_group=False)
+
+    structure_results_merge = structure_results.merge(
+        simplified_structure_by_structure,
+        on='structure',
+        how='left'
+    )
+
+    plot_df = structure_results_merge.sort_values(by=['structure_group_order',col_to_plot+'_mean'],ascending=[True, False])
+    plot_df = plot_df.reset_index(drop=True)
+    x = np.arange(len(plot_df))
+
+    # Keep original dimensions
+    fig, ax = plt.subplots(1, 1, figsize=(7.5, 3))
+
+    for i, row in plot_df.iterrows():
+        if row[col_to_plot+'_adj_p_val'] < 0.05:
+            ax.bar(
+                i,
+                row[col_to_plot+'_mean'],
+                yerr=row[col_to_plot+'_sem'],
+                color=row['structure_color'],
+            )
+        else:
+            ax.bar(
+                i,
+                row[col_to_plot+'_mean'],
+                yerr=row[col_to_plot+'_sem'],
+                facecolor='white',
+                edgecolor=row['structure_color']
+            )
+    if set_ylim!='auto':
+        ax.set_ylim(set_ylim)
+        if np.abs(set_ylim[0]-0.5) <0.1:
+            ax.axhline(0.5, color='black', linestyle='--', linewidth=0.5)
+
+    ax.set_xlim([-0.5, len(plot_df) - 0.5])
+    ax.set_ylabel(col_alias if col_alias is not None else col_to_plot, fontsize=set_fontsize)
+    ax.set_xticks(x)
+    ax.set_xticklabels(plot_df['structure'].tolist(), rotation=90, fontsize=set_fontsize)
+
+    # Mark boundaries between contiguous label groups and get group centers
+    group_centers = []
+    group_labels = []
+    for _, grp in plot_df.groupby('structure_group_short_name', sort=False):
+        idx = grp.index.to_numpy()
+        start, end = int(idx.min()), int(idx.max())
+        group_centers.append((start + end) / 2)
+
+        full_label = grp['structure_group_short_name'].iloc[0]
+        group_labels.append(full_label)
+
+        if end < len(plot_df) - 1:
+            ax.axvline(end + 0.5, color='0.85', linewidth=0.8, zorder=0)
+
+    # Secondary top axis for structure-group labels
+    ax_group = ax.secondary_xaxis('top')
+    ax_group.set_xticks(group_centers)
+    ax_group.set_xticklabels(group_labels, fontsize=set_fontsize - 1)
+    ax_group.tick_params(axis='x', length=0, pad=2)
+    ax_group.spines['top'].set_position(('outward', 4))
+    ax_group.spines['top'].set_visible(False)
+
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    # Keep labels readable while preserving original figure size
+    fig.subplots_adjust(bottom=0.36, top=0.88)
+    fig.tight_layout()
