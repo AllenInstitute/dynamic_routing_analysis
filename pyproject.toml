@@ -32,6 +32,9 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+notebook = [
+    "ipykernel>=7.3.0",
+]
 plot = [
     "rasterio>=1.4.2",
     "shapely>=2.0.6",
