@@ -16,7 +16,7 @@ dependencies = [
     "xarray>=2024.6.0",
     "statsmodels>=0.14.2",
     "scikit-learn>=1.5.1",
-    "lazynwb==1.0.0dev3",
+    "dr-datacube @ git+https://github.com/AllenNeuralDynamics/dr-datacube.git",
     "numcodecs<0.16",
 ]
 requires-python = ">=3.10"
@@ -47,7 +47,7 @@ pynwb = [
     "pynwb>=2.3.3",
 ]
 npc_sessions = [
-    "npc-sessions>=0.0.226",
+    "npc-sessions>=0.0.289",
 ]
 codeocean = [
     "aind-session>=0.3.16",
