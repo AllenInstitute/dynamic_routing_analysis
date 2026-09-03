@@ -1,5 +1,6 @@
 import os
 
+import dr_datacube
 import matplotlib.pyplot as plt
 import npc_lims
 import numpy as np
@@ -1229,29 +1230,17 @@ def compute_metrics_for_alignment(trials, units, session_info, save_path):
         probe_units=alignment_metrics.query('probe==@probe')
         probe_units.to_csv(os.path.join(save_path,session_info.id+'_day_'+str(session_info.experiment_day)+'_'+probe+'_stim_modulation.csv'),index=False)
 
-def get_all_performance():
-    from npc_sessions import DynamicRoutingSession
-
-    ephys_sessions = ephys_sessions=tuple(s for s in npc_lims.get_session_info(is_ephys=True))
-    performance_dict={}
-
-    for session_info in ephys_sessions[:]:
-        
-        try:
-            try:
-                performance = pd.read_parquet(
-                                    npc_lims.get_cache_path('performance',session_info.id,version='any')
-                                )
-            except:
-                session=DynamicRoutingSession(session_info.id)
-                performance = session.performance[:]
-        except:
-            print(session_info.id,'failed to load performance, skipping session')
-            continue
-
-        performance_dict[session_info.id]=performance
-
-    return performance_dict
+def get_all_performance() -> dict[str, pd.DataFrame]:
+    return {
+        session_id: df.to_pandas()
+        for (session_id,), df
+        in (
+            dr_datacube.get_lf('performance', nwb=False)
+            .collect()
+            .partition_by('session_id', as_dict=True)
+            .items()
+        )
+    }
 
 
 def concat_single_unit_metrics_across_sessions(stim_context_loadpath,lick_loadpath,savepath,performance_loadpath=None):
