@@ -53,15 +53,15 @@ def get_session_table() -> pl.DataFrame:
 
 
 @typing.overload
-def get_df(component: str, lazy: Literal[False] = False) ->  pl.DataFrame:
+def get_df(component: str, lazy: Literal[False] = False, nwb: bool = False) ->  pl.DataFrame:
     ...
 
 @typing.overload
-def get_df(component: str, lazy: Literal[True] = True) ->  pl.LazyFrame:
+def get_df(component: str, lazy: Literal[True] = True, nwb: bool = False) ->  pl.LazyFrame:
     ...
 
-def get_df(component: str, lazy: bool = False) -> pl.DataFrame | pl.LazyFrame:
-    lf = dr_datacube.get_lf(component)
+def get_df(component: str, lazy: bool = False, nwb: bool = False) -> pl.DataFrame | pl.LazyFrame:
+    lf = dr_datacube.get_lf(component, nwb=nwb)
     if lazy:
         return lf
     return lf.collect()
