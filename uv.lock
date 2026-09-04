@@ -1642,7 +1642,7 @@ wheels = [
 [[package]]
 name = "dr-datacube"
 version = "0.1.1"
-source = { git = "https://github.com/AllenNeuralDynamics/dr-datacube.git#eb66f969150c3817a01224a32df3f835bc1b063f" }
+source = { git = "https://github.com/AllenNeuralDynamics/dr-datacube.git#9c13e435f9c0c6ea68e4486905f8cb42787092b7" }
 dependencies = [
     { name = "lazynwb" },
     { name = "npc-session" },
