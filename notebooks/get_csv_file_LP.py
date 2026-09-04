@@ -1,16 +1,13 @@
 import sys
 sys.path.append(r"C:\Users\shailaja.akella\Dropbox (Personal)\DR\dynamic_routing_analysis_ethan\src")
 
-import npc_lims
-from npc_sessions import DynamicRoutingSession
 import numpy as np
 import matplotlib.pyplot as plt
 import os
 import glob
-from dynamic_routing_analysis import decoding_utils
 import pandas as pd
 
-
+from dynamic_routing_analysis import decoding_utils
 savepath = r"C:\Users\shailaja.akella\Dropbox (Personal)\DR\dynamic_routing_analysis_ethan\results\all_features_LP_updated"
 
 files=glob.glob(os.path.join(savepath,'*LP.pkl'))

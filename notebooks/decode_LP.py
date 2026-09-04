@@ -1,8 +1,6 @@
 import sys
 sys.path.append(r"C:\Users\shailaja.akella\Dropbox (Personal)\DR\dynamic_routing_analysis_ethan\src")
-import npc_lims
-from dynamic_routing_analysis import decoding_utils
-from npc_sessions import DynamicRoutingSession
+from dynamic_routing_analysis import datacube_utils, decoding_utils
 
 # 1A get all uploaded & annotated ephys sessions
 # ephys_sessions = tuple(s for s in npc_lims.get_session_info(is_ephys=True, is_uploaded=True, is_annotated=True))
@@ -53,12 +51,11 @@ params = {
 
 for ephys_session in ['713655_2024-08-05']:
     try:
-        session = DynamicRoutingSession(ephys_session)
-        print(session.id + ' loaded')
-        if 'structure' in session.electrodes[:].columns:
-            decoding_utils.decode_context_with_linear_shift(session, params)
+        session_id = ephys_session
+        print(session_id + ' loaded')
+        if 'structure' in datacube_utils.get_df('electrodes', session_id=session_id).columns:
+            decoding_utils.decode_context_with_linear_shift(session_id, params)
         else:
             print('no structure column found in electrodes table, moving to next recording')
-        session = []
     except Exception as e:
-        except_list[session.id] = repr(e)
+        except_list[session_id] = repr(e)

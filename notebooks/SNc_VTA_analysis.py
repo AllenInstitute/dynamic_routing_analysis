@@ -8,7 +8,6 @@ import pandas as pd
 
 matplotlib.rcParams['pdf.fonttype'] = 42
 # import npc_lims
-# import npc_sessions
 
 
 #%%
