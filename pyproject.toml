@@ -130,6 +130,9 @@ addopts = [
     "--ignore-glob=*scripts*,*examples*",
     "--doctest-glob=*README.md",
 ]
+markers = [
+    "io_characterization: regression tests that read pinned real-session data",
+]
 doctest_optionflags = [
     "NORMALIZE_WHITESPACE",
     "IGNORE_EXCEPTION_DETAIL",
