@@ -86,7 +86,7 @@ def main():
         session_ids = [params.session_id]
     elif utils.is_pipeline(): 
         # only one nwb will be available 
-        session_ids = set(session_ids) & set(p.stem for p in utils.get_nwb_paths())
+        session_ids = set(session_ids) & set(p.stem for p in datacube_utils.get_nwb_paths())
     else:
         logger.info(f"Using list of {len(session_ids)} session_ids (matching filter and available for use)")
 

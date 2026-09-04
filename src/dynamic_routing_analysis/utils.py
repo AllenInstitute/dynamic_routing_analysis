@@ -492,10 +492,10 @@ def process_conditions_by_area(
 
     # get spike times for all units in area that pass filters for unit and session metrics
     select_units = (
-        get_df('units', lazy=True)
+        datacube_utils.get_df('units', lazy=True)
         .filter(conditions[0].units_filter)
         .join(
-            other=get_session_table(lazy=True).filter(conditions[0].session_table_filter),
+            other=datacube_utils.get_session_table().lazy().filter(conditions[0].session_table_filter),
             on='session_id',
             how='semi', # keeps rows in left table that have a match in right table
         )
@@ -504,7 +504,7 @@ def process_conditions_by_area(
     unit_id_to_spike_times: dict[str, npt.NDArray[np.float64]] = get_spike_times(select_units['unit_id'])
     if not unit_id_to_spike_times:
         raise ValueError(f"No unit spike times returned for {conditions[0].area}: check units and session table filter expressions")
-    trials = get_df('trials')
+    trials = datacube_utils.get_df('trials')
     for condition in conditions:
         # get psth for each unit in area, for trials that match the parameters of this condition
         unit_responses = []
