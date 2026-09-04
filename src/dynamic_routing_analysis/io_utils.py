@@ -271,17 +271,23 @@ def define_kernels(run_params):
 
     return run_params
 
-def get_session_data(
-    session: str,
-    lazy: bool = False,
-    get_df_kwargs: dict | None = None,
-    scan_nwb_kwargs: dict | None = None,
-):
+def extract_session_id(session) -> str:
     if not isinstance(session, str):
         if (id_ := getattr(session, 'id', None)) is not None:
             session = id_
         elif (id_ := getattr(session, 'session_id', None)) is not None:
             session = id_
+    if not isinstance(session, str):
+        raise ValueError(f"Unable to extract session ID from the provided session object: {session!r}")
+    return session
+
+def get_session_data(
+    session: str | None = None,
+    lazy: bool = False,
+    get_df_kwargs: dict | None = None,
+    scan_nwb_kwargs: dict | None = None,
+):
+    session = extract_session_id(session)
     nwb_path = next(
         (
             p for p in dr_datacube.list_nwb_sources()
@@ -290,20 +296,17 @@ def get_session_data(
     )
     if nwb_path is None:
         raise FileNotFoundError(f"No NWB file found for session {session}")
-    performance = lazynwb.get_df(nwb_path, '/intervals/performance', exact_path=True, **(get_df_kwargs or {}))
-    dprimes = pd.DataFrame(performance).cross_modality_dprime.values
+    performance = dr_datacube.get_lf('performance', session_id=session, nwb=False).collect().to_pandas()
+    dprimes = performance.cross_modality_dprime.values
     behavior_info = {
         'session_id': session,
-        'trials': lazynwb.get_df(nwb_path, '/intervals/trials', exact_path=True, **(get_df_kwargs or {})),
+        'trials': dr_datacube.get_lf('trials', session_id=session, nwb=False).collect().to_pandas(),
         'dprime': dprimes,
-        'epoch_info': lazynwb.get_df(nwb_path, '/intervals/epochs', exact_path=True, **(get_df_kwargs or {})),
+        'epoch_info': dr_datacube.get_lf('epochs', session_id=session, nwb=False).collect().to_pandas(),
     }
-    if lazy:
-        units = lazynwb.scan_nwb(nwb_path, '/units', **(scan_nwb_kwargs or {}))
-    else:
-        units = lazynwb.get_df(
-                nwb_path, "/units", exact_path=True, as_polars=True, **(get_df_kwargs or {'exclude_array_columns': False})
-            )
+    units = dr_datacube.get_lf('units', session_id=session, nwb=not dr_datacube.config.use_cache)
+    if not lazy:
+        units = units.collect().to_pandas()
     return units, behavior_info
 
 @deprecated(reason="Use the generic get_session_data instead - all data access is mediated by dr-datacube.")
@@ -640,13 +643,16 @@ def add_kernels(design, run_params, session, fit, behavior_info):
         session         the SDK session object for this experiment
         fit             the fit object for this model
     '''
+    if session is not None and not isinstance(session, str):
+        logger.warning("Passing npc_sessions object to add_kernels is deprecated: pass None or the session ID instead")
+        session = extract_session_id(session)
+    elif session is None and "session_id" in run_params:
+        session = run_params["session_id"]
+    else:
+        raise ValueError("Session ID must be provided either as a str or via run_params['session_id']")
 
     fit['failed_kernels'] = set()
     fit['kernel_error_dict'] = dict()
-
-    if session is None:
-        import npc_sessions
-        session = npc_sessions.DynamicRoutingSession(run_params["session_id"])
 
     for kernel_name in run_params['kernels']:
         if 'num_weights' not in run_params['kernels'][kernel_name]:
