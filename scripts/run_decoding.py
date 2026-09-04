@@ -14,15 +14,14 @@ import json
 import logging
 import pathlib
 import time
-from typing import Annotated, Literal
 
 # 3rd-party imports necessary for processing ----------------------- #
-import lazynwb
+import dr_datacube
 import matplotlib
 import polars as pl
 import upath
 
-lazynwb.config.anon = True
+dr_datacube.config.anon = True
 
 # local modules ---------------------------------------------------- #
 from dynamic_routing_analysis import (codeocean_utils, datacube_utils,

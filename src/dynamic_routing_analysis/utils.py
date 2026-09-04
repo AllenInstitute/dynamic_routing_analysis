@@ -1,6 +1,5 @@
 # stdlib imports --------------------------------------------------- #
 from __future__ import annotations
-import dr_datacube
 
 import concurrent.futures
 import dataclasses
@@ -11,15 +10,13 @@ import logging.handlers
 import multiprocessing
 import os
 import sys
-import time
-import typing
 import uuid
 import zoneinfo
 from collections.abc import Generator, Iterable
 from typing import Any, Literal
 
 # 3rd-party imports necessary for processing ----------------------- #
-import lazynwb
+import dr_datacube
 import numpy as np
 import numpy.typing as npt
 import polars as pl
@@ -143,7 +140,13 @@ def _get_spike_times_single_nwb(nwb_path: str | upath.UPath, unit_ids: str | Ite
         raise FileNotFoundError(nwb_path)
     logging.debug(f"Fetching spike times for {len(unit_ids)} units from {nwb_path}")
 
-    units = lazynwb.scan_nwb(nwb_path, 'units').filter(pl.col('unit_id').is_in(unit_ids)).select('unit_id', 'spike_times').collect()
+    units = (
+        datacube_utils.get_df(
+            "units", session_id=nwb_path.stem, nwb=True
+        )
+        .filter(pl.col("unit_id").is_in(unit_ids))
+        .select("unit_id", "spike_times")
+    )
     unit_id_to_spike_times = dict(zip(units['unit_id'], units['spike_times']))
     return unit_id_to_spike_times
 

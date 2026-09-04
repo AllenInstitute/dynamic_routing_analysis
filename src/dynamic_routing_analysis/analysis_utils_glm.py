@@ -4,14 +4,15 @@ import re
 import io_utils
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
-import npc_lims
 import numpy as np
 import pandas as pd
 import polars as pl
 
+from dynamic_routing_analysis import datacube_utils
+
 
 def get_session_ids():
-    session_ids = pl.read_parquet(npc_lims.get_cache_path('session', version='0.0.265')).filter(
+    session_ids = datacube_utils.get_df('session', version='0.0.265').filter(
                 pl.col("keywords").list.contains("production"),
                 ~pl.col("keywords").list.contains("issues"),
                 pl.col("keywords").list.contains("task"),

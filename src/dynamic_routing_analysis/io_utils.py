@@ -1,10 +1,7 @@
 import logging
 import re
-import typing
-from typing import Literal
 
 import dr_datacube
-import lazynwb
 import numpy as np
 import pandas as pd
 import polars as pl

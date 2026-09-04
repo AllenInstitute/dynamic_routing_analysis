@@ -17,12 +17,10 @@ import matplotlib.colors
 import matplotlib.figure
 import matplotlib.gridspec
 import matplotlib.pyplot as plt
-import npc_lims
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import polars as pl
-import pyarrow.dataset as ds
 import rasterio.features
 import scipy.stats as stats
 import shapely
@@ -30,27 +28,35 @@ import shapely.geometry
 from matplotlib import patches
 from statsmodels.stats.multitest import fdrcorrection
 
-from dynamic_routing_analysis import ccf_utils, spike_utils
+from dynamic_routing_analysis import ccf_utils, datacube_utils, spike_utils
 
 logger = logging.getLogger(__name__)
 
 
-def plot_unit_by_id(sel_unit, save_path=None, show_metric=None, version=None, metric_values=None, plot_lick_mod=False):
+def _load_unit_and_trials(sel_unit, version="any"):
+    unit_df = (
+        datacube_utils.get_df(
+            "units", session_id=sel_unit[:17], version=version
+        )
+        .filter(pl.col("unit_id") == sel_unit)
+        .to_pandas()
+    )
+    session_id = (
+        str(unit_df["subject_id"].values[0])
+        + "_"
+        + str(unit_df["date"].values[0])
+    )
+    trials = datacube_utils.get_df(
+        "trials", session_id=session_id, version=version
+    ).to_pandas()
+    return unit_df, trials
+
+
+def plot_unit_by_id(sel_unit, save_path=None, show_metric=None, version="0.0.272", metric_values=None, plot_lick_mod=False):
     if version is None:
         version="0.0.272"
 
-    unit_df=(
-        pl.scan_parquet(npc_lims.get_cache_path("units", session_id=sel_unit[:17], version=version))
-        .filter(pl.col("unit_id") == sel_unit)
-    ).collect().to_pandas()
-
-    session_id = (
-        str(unit_df["subject_id"].values[0]) + "_" + str(unit_df["date"].values[0])
-    )
-
-    trials = pd.read_parquet(
-        npc_lims.get_cache_path("trials", session_id, version=version)
-    )
+    unit_df, trials = _load_unit_and_trials(sel_unit, version=version)
 
     time_before = 0.5
     time_after = 1.0
@@ -223,21 +229,8 @@ def plot_unit_by_id(sel_unit, save_path=None, show_metric=None, version=None, me
             plt.close()
 
 
-def plot_stim_response_by_unit_id(sel_unit, save_path=None, show_metric=None):
-    unit_df = (
-        ds.dataset(
-            npc_lims.get_cache_path("units", session_id=sel_unit[:17], version="any")
-        )
-        .to_table(filter=(ds.field("unit_id") == sel_unit))
-        .to_pandas()
-    )
-    session_id = (
-        str(unit_df["subject_id"].values[0]) + "_" + str(unit_df["date"].values[0])
-    )
-
-    trials = pd.read_parquet(
-        npc_lims.get_cache_path("trials", session_id, version="any")
-    )
+def plot_stim_response_by_unit_id(sel_unit, save_path=None, show_metric=None, version="any"):
+    unit_df, trials = _load_unit_and_trials(sel_unit, version=version)
 
     ##plot rasters - target only
     fig, ax = plt.subplots(1, 2, figsize=(8, 5), sharex=True, sharey=True)
@@ -374,21 +367,8 @@ def plot_stim_response_by_unit_id(sel_unit, save_path=None, show_metric=None):
         plt.close()
 
 
-def plot_motor_response_by_unit_id(sel_unit, save_path=None, show_metric=None):
-    unit_df = (
-        ds.dataset(
-            npc_lims.get_cache_path("units", session_id=sel_unit[:17], version="any")
-        )
-        .to_table(filter=(ds.field("unit_id") == sel_unit))
-        .to_pandas()
-    )
-    session_id = (
-        str(unit_df["subject_id"].values[0]) + "_" + str(unit_df["date"].values[0])
-    )
-
-    trials = pd.read_parquet(
-        npc_lims.get_cache_path("trials", session_id, version="any")
-    )
+def plot_motor_response_by_unit_id(sel_unit, save_path=None, show_metric=None, version="any"):
+    unit_df, trials = _load_unit_and_trials(sel_unit, version=version)
 
     ##plot rasters - vis stim, aud context
     fig, ax = plt.subplots(1, 2, figsize=(8, 5), sharex=True)
@@ -540,21 +520,8 @@ def plot_motor_response_by_unit_id(sel_unit, save_path=None, show_metric=None):
         plt.close()
 
 
-def plot_context_offset_by_unit_id(sel_unit, save_path=None, show_metric=None):
-    unit_df = (
-        ds.dataset(
-            npc_lims.get_cache_path("units", session_id=sel_unit[:17], version="any")
-        )
-        .to_table(filter=(ds.field("unit_id") == sel_unit))
-        .to_pandas()
-    )
-    session_id = (
-        str(unit_df["subject_id"].values[0]) + "_" + str(unit_df["date"].values[0])
-    )
-
-    trials = pd.read_parquet(
-        npc_lims.get_cache_path("trials", session_id, version="any")
-    )
+def plot_context_offset_by_unit_id(sel_unit, save_path=None, show_metric=None, version="any"):
+    unit_df, trials = _load_unit_and_trials(sel_unit, version=version)
 
     ##plot rasters - target only
     fig, ax = plt.subplots(1, 2, figsize=(8, 5), sharex=True, sharey=True)
@@ -736,19 +703,8 @@ def plot_context_offset_by_unit_id(sel_unit, save_path=None, show_metric=None):
         plt.close()
 
 
-def plot_unit_response_by_task_performance(sel_unit, save_path=None):
-    unit_df = (
-        ds.dataset(npc_lims.get_cache_path("units"))
-        .to_table(filter=(ds.field("unit_id") == sel_unit))
-        .to_pandas()
-    )
-    session_id = (
-        str(unit_df["subject_id"].values[0]) + "_" + str(unit_df["date"].values[0])
-    )
-
-    trials = pd.read_parquet(
-        npc_lims.get_cache_path("trials", session_id, version="any")
-    )
+def plot_unit_response_by_task_performance(sel_unit, save_path=None, version="any"):
+    unit_df, trials = _load_unit_and_trials(sel_unit, version=version)
 
     time_before = 0.5
     time_after = 1
@@ -892,19 +848,8 @@ def plot_unit_response_by_task_performance(sel_unit, save_path=None):
         plt.close()
 
 
-def plot_unit_response_by_task_performance_stim_aligned(sel_unit, save_path=None):
-    unit_df = (
-        ds.dataset(npc_lims.get_cache_path("units"))
-        .to_table(filter=(ds.field("unit_id") == sel_unit))
-        .to_pandas()
-    )
-    session_id = (
-        str(unit_df["subject_id"].values[0]) + "_" + str(unit_df["date"].values[0])
-    )
-
-    trials = pd.read_parquet(
-        npc_lims.get_cache_path("trials", session_id, version="any")
-    )
+def plot_unit_response_by_task_performance_stim_aligned(sel_unit, save_path=None, version="any"):
+    unit_df, trials = _load_unit_and_trials(sel_unit, version=version)
 
     time_before = 0.5
     time_after = 1
@@ -2308,9 +2253,9 @@ def get_structure_colormap(by_structure=True,by_group=False):
     }
     if by_structure:
         simplified_structure_by_structure_df = pd.DataFrame([
-            {'structure': structure, 
-             'structure_group': group, 
-             'structure_group_order': simplified_structure_grouping_order[group], 
+            {'structure': structure,
+             'structure_group': group,
+             'structure_group_order': simplified_structure_grouping_order[group],
              'structure_color': simplified_structure_colors[group],
              'structure_group_short_name': shortened_structure_group_name[group]}
             for group, structures in simplified_structure_grouping.items()
@@ -2320,9 +2265,9 @@ def get_structure_colormap(by_structure=True,by_group=False):
 
     elif by_group:
         simplified_structure_by_group_df = pd.DataFrame([
-            {'structure_group': group, 
-             'structure_group_order': simplified_structure_grouping_order[group], 
-             'structure_color': simplified_structure_colors[group], 
+            {'structure_group': group,
+             'structure_group_order': simplified_structure_grouping_order[group],
+             'structure_color': simplified_structure_colors[group],
              'structure_list': simplified_structure_grouping[group],
              'structure_group_short_name': shortened_structure_group_name[group]}
             for group in simplified_structure_grouping_order.keys()
@@ -2333,11 +2278,11 @@ def get_structure_colormap(by_structure=True,by_group=False):
 
 
 def get_structure_averages(
-    input_data, cols_to_average=[], stats_comp_value=0.0, 
+    input_data, cols_to_average=[], stats_comp_value=0.0,
     min_n_units_per_session=10, min_n_sessions_per_mouse=1, min_n_mice=3,
     test_type='ttest', excl_structure_list=[]):
     #inputs: input_data, cols_to_average, stats_comp_value, min_n_units_per_session, min_n_sessions_per_mouse, min_n_mice
-    
+
     if 'mouse_id' not in input_data.columns:
         input_data['mouse_id'] = input_data['session_id'].str.split('_').str[0]
 

@@ -2,22 +2,18 @@
 from __future__ import annotations
 
 import contextlib
-import dataclasses
 import functools
 import logging
 import logging.handlers
 import pathlib
-import re
 import typing
 from collections.abc import Iterable
 from typing import Literal
 
+# 3rd-party imports necessary for processing ----------------------- #
 import dr_datacube
-import npc_lims
 import polars as pl
 import upath
-# 3rd-party imports necessary for processing ----------------------- #
-from matplotlib.pylab import f
 
 import dynamic_routing_analysis.codeocean_utils as codeocean_utils
 
@@ -32,6 +28,13 @@ EARLY_AUTOREWARDS_SESSION_FILTER = (
 
 def get_datacube_version() -> str:
     return dr_datacube.config.version
+
+
+def _normalize_datacube_version(version: str) -> str:
+    if version == "any":
+        return dr_datacube.config.version
+    return f"v{version.removeprefix('v')}"
+
 
 def is_datacube_available() -> bool:
     with contextlib.suppress(FileNotFoundError):
@@ -53,15 +56,45 @@ def get_session_table() -> pl.DataFrame:
 
 
 @typing.overload
-def get_df(component: str, lazy: Literal[False] = False, nwb: bool = False) ->  pl.DataFrame:
+def get_df(
+    component: str,
+    lazy: Literal[False] = False,
+    nwb: bool = False,
+    session_id: str | None = None,
+    version: str | None = None,
+) -> pl.DataFrame:
     ...
+
 
 @typing.overload
-def get_df(component: str, lazy: Literal[True] = True, nwb: bool = False) ->  pl.LazyFrame:
+def get_df(
+    component: str,
+    lazy: Literal[True] = True,
+    nwb: bool = False,
+    session_id: str | None = None,
+    version: str | None = None,
+) -> pl.LazyFrame:
     ...
 
-def get_df(component: str, lazy: bool = False, nwb: bool = False) -> pl.DataFrame | pl.LazyFrame:
-    lf = dr_datacube.get_lf(component, nwb=nwb)
+
+def get_df(
+    component: str,
+    lazy: bool = False,
+    nwb: bool = False,
+    session_id: str | None = None,
+    version: str | None = None,
+) -> pl.DataFrame | pl.LazyFrame:
+    if version is None:
+        lf = dr_datacube.get_lf(
+            component, session_id=session_id, nwb=nwb
+        )
+    else:
+        with dr_datacube.config.override(
+            version=_normalize_datacube_version(version), use_cache=True
+        ):
+            lf = dr_datacube.get_lf(
+                component, session_id=session_id, nwb=nwb
+            )
     if lazy:
         return lf
     return lf.collect()
@@ -151,8 +184,7 @@ def get_lazynwb(
     session_id_or_path: str | pathlib.Path,
     raise_on_missing: bool = True,
     raise_on_bad_file: bool = True,
-) -> "lazynwb.LazyNWB" | None:  # noqa
-    import lazynwb
+) -> "dr_datacube.lazynwb.LazyNWB" | None:  # noqa
 
     nwb_path = _parse_nwb_path_from_input(
         session_id_or_path, raise_on_missing=raise_on_missing
@@ -161,7 +193,7 @@ def get_lazynwb(
         return None
     logger.info(f"Reading {nwb_path}")
     try:
-        nwb = lazynwb.LazyNWB(nwb_path)
+        nwb = dr_datacube.lazynwb.LazyNWB(nwb_path)
     except RecursionError:
         msg = f"{nwb_path.name} cannot be read due to RecursionError (hdf5 may still be accessible)"
         if not raise_on_bad_file:

@@ -1,10 +1,10 @@
 import glob
 import os
 
-import lazynwb
-import npc_lims
 import numpy as np
 import pandas as pd
+
+import dynamic_routing_analysis.datacube_utils as datacube_utils
 
 vid_angle_npc_names={
     'behavior':'side',
@@ -12,61 +12,40 @@ vid_angle_npc_names={
     'eye':'eye',
 }
 
-def load_trials_or_units(session, table_name, version='any'):
-    # convenience function to load trials or units from cache if available,
-    # otherwise from npc_sessions
-    if session.__class__.__name__ == "NWBFile":
-        return getattr(session, table_name)[:]
-
+def load_trials_or_units(session, table_name, version: str ='any'):
+    """Convenience function to load trials or units from cache if available,
+    otherwise from session object passed"""
     if type(session) is str:
-        temp_session = {'id': session}
-        session = pd.DataFrame([temp_session]).iloc[0]
-
-    if table_name == 'trials':
-        try:
-            table=pd.read_parquet(
-                    npc_lims.get_cache_path('trials',session.id,version=version)
-                )
-            print(session.id,'cached trials loaded')
-        except:
-            print(session.id,'cached trials not found, loading with npc_sessions')
-            try:
-                table = session.trials[:]
-            except:
-                print(session.id,'loading trials failed')
-                return None
-    elif table_name == 'units':
-        try:
-            table=pd.read_parquet(
-                    npc_lims.get_cache_path('units',session.id,version=version)
-                )
-            print(session.id,'cached units loaded')
-        except:
-            print(session.id,'cached units not found, loading with npc_sessions')
-            try:
-                table = session.units[:]
-            except:
-                print(session.id,'loading units failed')
-                return None
-    return table
+        return datacube_utils.get_df(
+            table_name, session_id=session, version=version
+        ).to_pandas()
+    if (attr := getattr(session, table_name)) is not None:
+        return attr[:]
+    raise ValueError(f'Could not load {table_name} for session {session!r}')
 
 
-def generate_spontaneous_trials_table(session_id,distribution='DR',n_trials=1000,min_iti=5.5,datacube_version='any',random_seed=None):
+def generate_spontaneous_trials_table(
+    session_id,
+    distribution='DR',
+    n_trials=1000,
+    min_iti=5.5,
+    datacube_version='0.0.272',
+    random_seed=None,
+):
     # function to generate spontaneous trials for dynamic routing sessions
-    
-    epochs=pd.read_parquet(
-                    npc_lims.get_cache_path('epochs',session_id,version=datacube_version)
-                )
-    
-    path = 's3://aind-scratch-data/dynamic-routing/cache/nwb/v0.0.272/{session_id}.nwb'
-    internal_path = 'processing/behavior/rewards'
-    rewards = lazynwb.get_df(path.format(session_id=session_id), internal_path, as_polars=False)
-    
+
+    epochs = datacube_utils.get_df(
+        'epochs', session_id=session_id, version=datacube_version
+    ).to_pandas()
+    rewards = datacube_utils.get_df(
+        'rewards', session_id=session_id, version=datacube_version, nwb=True
+    ).to_pandas()
+
     spont_epochs=epochs.query('script_name.str.contains("Spontaneous")')
 
     if len(spont_epochs)==0:
         raise ValueError(f'No spontaneous epochs found for session {session_id}')
-    
+
     spont_trials={
         'trial_index':[],
         'session_id':[],
@@ -81,7 +60,7 @@ def generate_spontaneous_trials_table(session_id,distribution='DR',n_trials=1000
         spont_start=row['start_time']
         spont_end=row['stop_time']
         # spont_duration=spont_end-spont_start
-        
+
         sampleITIs=generate_itis(distribution=distribution,n_trials=n_trials,min_iti=min_iti,random_seed=random_seed)
         cum_sampleITIs=np.cumsum(sampleITIs)
         valid_starts=spont_start+cum_sampleITIs[cum_sampleITIs+spont_start<spont_end]
@@ -134,7 +113,7 @@ def generate_itis(distribution='DR',n_trials=None,min_iti=5.5,random_seed=None):
         postResponseWindowFrames = 180
 
     elif distribution=='Templeton':
-        preStimFramesVariableMean = 30 
+        preStimFramesVariableMean = 30
         preStimFramesMax = 240
         postResponseWindowFrames = 120
 
@@ -148,7 +127,7 @@ def generate_itis(distribution='DR',n_trials=None,min_iti=5.5,random_seed=None):
             trial_total_length = (int(min(val,preStimFramesMax)) + responseWindow[1] + postResponseWindowFrames)/60 #in seconds
 
         return trial_total_length
-    
+
 
 def load_facemap_data(session,session_info=None,trials=None,vid_angle=None,keep_n_SVDs=500,use_s3=True):
     # function to load facemap data from s3 or local cache
