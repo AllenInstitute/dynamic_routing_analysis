@@ -49,19 +49,12 @@ def run_encoding(session_id: str):
     return computation
 
 
+url = "https://raw.githubusercontent.com/allenneuraldynamics/dr-datacube/main/assets/datacube_sessions.csv"
 session_ids = (
-    pl.scan_parquet(
-        "s3://aind-scratch-data/dynamic-routing/session_metadata/session_table.parquet"
-    )
-    .filter(
-        "is_ephys",
-        "is_task",
-        "is_annotated",
-        "is_production",
-        pl.col("issues").list.len() == 0,
-    )
-    .collect()
-)["session_id"]
+    pl.read_csv(url)
+    .filter(pl.col("session_type") != "naive")["session_id"]
+    .to_list()
+)
 
 # Stop all running jobs:
 # for session, id_ in json.loads(pathlib.Path("computations.json").read_text()).items():
