@@ -1,5 +1,6 @@
 # stdlib imports --------------------------------------------------- #
 from __future__ import annotations
+import dr_datacube
 
 import concurrent.futures
 import dataclasses
@@ -130,77 +131,9 @@ def setup_logging(
 
 
 # data access ------------------------------------------------------- #
-def get_session_table() -> pl.DataFrame:
-    if codeocean_utils.is_capsule() or codeocean_utils.is_pipeline():
-        return pl.read_parquet(get_datacube_dir() / 'session_table.parquet')
-    else:
-        return pl.read_parquet('s3://aind-scratch-data/dynamic-routing/session_metadata/session_table.parquet', storage_options={'skip_signature': 'true'})
 
-@typing.overload
-def get_df(component: str, lazy: Literal[False] = False) ->  pl.DataFrame:
-    ...
 
-@typing.overload
-def get_df(component: str, lazy: Literal[True] = True) ->  pl.LazyFrame:
-    ...
-
-def get_df(component: str, lazy: bool = False) -> pl.DataFrame | pl.LazyFrame:
-    storage_options = {"skip_signature": "true"} if not codeocean_utils.on_code_ocean() else {}
-    if codeocean_utils.on_code_ocean():
-        path = get_datacube_dir() / 'consolidated' / f'{component}.parquet'
-    else:
-        path = f's3://aind-scratch-data/dynamic-routing/cache/nwb_components/{datacube_utils.datacube_config.datacube_version}/consolidated/{component}.parquet'
-    frame: pl.DataFrame | pl.LazyFrame
-    if lazy:
-        frame = pl.scan_parquet(path, storage_options=storage_options)
-    else:
-        frame = pl.read_parquet(path, storage_options=storage_options) # type: ignore
-    return (
-        frame
-        .with_columns(
-            pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_')
-        )
-    )
-
-@functools.cache
-def get_nwb_paths() -> tuple[upath.UPath, ...]:
-    return tuple(get_data_root().rglob('*.nwb'))
-
-def get_nwb(session_id_or_path: str | upath.UPath, raise_on_missing: bool = True, raise_on_bad_file: bool = True) -> pynwb.NWBFile:
-    if isinstance(session_id_or_path, (upath.UPath, upath.UPath)):
-        nwb_path = session_id_or_path
-    else:
-        if not isinstance(session_id_or_path, str):
-            raise TypeError(f"Input should be a session ID (str) or path to an NWB file (str/Path), got: {session_id_or_path!r}")
-        if upath.UPath(session_id_or_path).exists():
-            nwb_path = session_id_or_path
-        elif session_id_or_path.endswith(".nwb") and any(p.name == session_id_or_path for p in get_nwb_paths()):
-            nwb_path = next(p for p in get_nwb_paths() if p.name == session_id_or_path)
-        else:
-            try:
-                nwb_path = next(p for p in get_nwb_paths() if p.stem == session_id_or_path)
-            except StopIteration:
-                msg = f"Could not find NWB file for {session_id_or_path!r}"
-                if not raise_on_missing:
-                    logger.error(msg)
-                    return
-                else:
-                    raise FileNotFoundError(f"{msg}. Available files: {[p.name for p in get_nwb_paths()]}") from None
-    logger.info(f"Reading {nwb_path}")
-    try:
-        import pynwb
-        nwb = pynwb.NWBHDF5IO(nwb_path).read()
-    except RecursionError:
-        msg = f"{nwb_path.name} cannot be read due to RecursionError (hdf5 may still be accessible)"
-        if not raise_on_bad_file:
-            logger.error(msg)
-            return
-        else:
-            raise RecursionError(msg)
-    else:
-        return nwb
-
-def _get_spike_times_single_nwb(nwb_path: str | upath.UPath, unit_ids: str | Iterable[str], use_pynwb: bool = True) -> dict[str, npt.NDArray[np.float64]]:
+def _get_spike_times_single_nwb(nwb_path: str | upath.UPath, unit_ids: str | Iterable[str], use_pynwb: bool = False) -> dict[str, npt.NDArray[np.float64]]:
     if isinstance(unit_ids, str):
         unit_ids = (unit_ids,)
     unit_ids = tuple(unit_ids)
@@ -209,25 +142,10 @@ def _get_spike_times_single_nwb(nwb_path: str | upath.UPath, unit_ids: str | Ite
     if not nwb_path.exists():
         raise FileNotFoundError(nwb_path)
     logging.debug(f"Fetching spike times for {len(unit_ids)} units from {nwb_path}")
-    if use_pynwb:
-        t0 = time.time()
-        import pynwb
-        nwb = pynwb.NWBHDF5IO(nwb_path, 'r').read()
-        logger.debug(f"Opened NWB in {time.time() - t0:.2f}s")
-        t0 = time.time()
-        nwb_unit_ids = nwb.units.unit_id[:]
-        logger.debug(f"Got unit IDs in NWB in {time.time() - t0:.2f}s")
-        t0 = time.time()
-        nwb_unit_idx = [np.where(nwb_unit_ids == unit_id)[0][0] for unit_id in unit_ids]
-        logger.debug(f"Got unit indices in NWB in {time.time() - t0:.2f}s")
-        t0 = time.time()
-        spike_times = nwb.units.get_unit_spike_times(nwb_unit_idx)
-        logger.debug(f"Got spike times from NWB in {time.time() - t0:.2f}s")
-        return dict(zip(unit_ids, spike_times))
-    else:
-        units = lazynwb.scan_nwb(nwb_path, 'units').filter(pl.col('unit_id').is_in(unit_ids)).select('unit_id', 'spike_times').collect()
-        unit_id_to_spike_times = dict(zip(units['unit_id'], units['spike_times']))
-        return unit_id_to_spike_times
+
+    units = lazynwb.scan_nwb(nwb_path, 'units').filter(pl.col('unit_id').is_in(unit_ids)).select('unit_id', 'spike_times').collect()
+    unit_id_to_spike_times = dict(zip(units['unit_id'], units['spike_times']))
+    return unit_id_to_spike_times
 
 def get_spike_times(unit_ids: str | Iterable[str]) -> dict[str, npt.NDArray[np.float64]]:
     """"""
@@ -352,7 +270,7 @@ def get_per_trial_spike_times(
     if session_id is None and unit_ids is None:
         raise ValueError("Must specify session_id or unit_ids")
     elif unit_ids is None:
-        units_df = get_df('units').select(units_df_cols).filter(pl.col('session_id') == session_id)
+        units_df = dr_datacube.get_lf('units', session_id=session_id, nwb=not dr_datacube.config.use_cache).select(units_df_cols).collect()
         unit_ids = units_df['unit_id']
     else:
         if isinstance(unit_ids, str):
@@ -361,10 +279,10 @@ def get_per_trial_spike_times(
             unit_ids = tuple(unit_ids)
         if not tuple(unit_ids):
             raise ValueError('unit_ids must be None or a non-empty iterable')
-        units_df = get_df('units').select(units_df_cols).filter(pl.col('unit_id').is_in(unit_ids))
+        units_df = dr_datacube.get_lf('units', nwb=True, infer_schema_length=1).select(units_df_cols).filter(pl.col('unit_id').is_in(unit_ids)).collect()
 
     if isinstance(trials_frame, str):
-        trials_df = get_df(trials_frame)
+        trials_df = dr_datacube.get_lf(trials_frame, nwb=False)
     else:
         trials_df = trials_frame
     trials_df = (
@@ -388,8 +306,8 @@ def get_per_trial_spike_times(
                 pl.col(_temp_col_name(col_name)).list.drop_nulls().list.len() == 2,
             )
         )
-    if isinstance(trials_frame, pl.LazyFrame):
-        trials_df = trials_frame.collect()
+    if isinstance(trials_df, pl.LazyFrame):
+        trials_df = trials_df.collect()
 
     spike_times_all_units: dict[str, npt.NDArray] = get_spike_times(unit_ids)
 
