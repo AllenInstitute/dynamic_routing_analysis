@@ -12,6 +12,7 @@ import typing
 from collections.abc import Iterable
 from typing import Literal
 
+import dr_datacube
 import npc_lims
 import polars as pl
 import upath
@@ -22,25 +23,6 @@ import dynamic_routing_analysis.codeocean_utils as codeocean_utils
 
 logger = logging.getLogger(__name__)
 
-PROD_EPHYS_SESSION_FILTER = pl.Expr.and_(
-    *[
-        pl.col("keywords").list.contains("production"),
-        ~pl.col("keywords").list.contains("issues"),
-        pl.col("keywords").list.contains("task"),
-        pl.col("keywords").list.contains("ephys"),
-        pl.col("keywords").list.contains("ccf"),
-        ~pl.col("keywords").list.contains("opto_perturbation"),
-        ~pl.col("keywords").list.contains("opto_control"),
-        ~pl.col("keywords").list.contains("injection_perturbation"),
-        ~pl.col("keywords").list.contains("injection_control"),
-        ~pl.col("keywords").list.contains("hab"),
-        ~pl.col("keywords").list.contains("training"),
-        ~pl.col("keywords").list.contains("context_naive"),
-        ~pl.col("keywords").list.contains("templeton"),
-    ]
-)
-"""does not include Templeton sessions"""
-
 LATE_AUTOREWARDS_SESSION_FILTER: pl.Expr = (
     pl.col("keywords").list.contains("late_autorewards").eq(True)
 )
@@ -48,109 +30,12 @@ EARLY_AUTOREWARDS_SESSION_FILTER = (
     pl.col("keywords").list.contains("early_autorewards").eq(True)
 )
 
-DEFAULT_UNIT_QC = pl.Expr.and_(
-    *[
-        pl.col("activity_drift") <= 0.2,
-        pl.col("isi_violations_ratio") <= 0.5,
-        pl.col("amplitude_cutoff") <= 0.1,
-        pl.col("presence_ratio") >= 0.7,
-        pl.col("decoder_label") != "noise",
-    ]
-)
-
-@dataclasses.dataclass
-class DatacubeConfig:
-    use_scratch_dir: bool = False
-    datacube_version: str | None = None
-
-    @property
-    def nwb_dir(self) -> upath.UPath | pathlib.Path:
-        if not self.datacube_version:
-            self.datacube_version = npc_lims.get_current_cache_version()
-        if self.use_scratch_dir:
-            return npc_lims.get_nwb_path(
-                "366122_2023-12-31", version=self.datacube_version
-            ).parent
-        if codeocean_utils.is_capsule() or codeocean_utils.is_pipeline():
-            d = next(codeocean_utils.get_datacube_dir().rglob("*.nwb"), None)
-            if d is None:
-                raise FileNotFoundError(
-                    f"Cannot find NWB files in {codeocean_utils.get_datacube_dir()}"
-                )
-            datacube_version = parse_version(d.as_posix())
-            if datacube_version != self.datacube_version:
-                logger.warning(
-                    f"Requested datacube version {self.datacube_version} in config does not match discovered asset {d.parent=}"
-                )
-            return d.parent
-        raise ValueError(
-            f"Cannot determine NWB dir: {self.datacube_version=} {self.use_scratch_dir=}"
-        )
-
-    @property
-    def consolidated_parquet_dir(self) -> upath.UPath | pathlib.Path:
-        if self.use_scratch_dir:
-            return (
-                self.nwb_dir.parent.parent
-                / f"nwb_components/{self.datacube_version}/consolidated"
-            )
-        if codeocean_utils.is_capsule() or codeocean_utils.is_pipeline():
-            datacube_version = parse_version(
-                codeocean_utils.get_datacube_dir().as_posix()
-            )
-            if datacube_version != self.datacube_version:
-                logger.warning(
-                    f"Requested datacube version {self.datacube_version} in config does not match discovered asset {codeocean_utils.get_datacube_dir()=}"
-                )
-            return codeocean_utils.get_datacube_dir() / "consolidated"
-        raise ValueError(
-            f"Cannot determine consolidated parquet dir: {self.datacube_version=} {self.use_scratch_dir=}"
-        )
-
-
-datacube_config = DatacubeConfig(
-    use_scratch_dir=not (codeocean_utils.is_capsule() or codeocean_utils.is_pipeline()),
-)
-
-
-def configure(
-    use_scratch_dir: bool = False,
-    datacube_version: str | None = None,
-    nwb_dir: str | upath.UPath | None = None,
-    consolidated_parquet_dir: str | upath.UPath | None = None,
-) -> None:
-    datacube_config.use_scratch_dir = use_scratch_dir
-    if datacube_version:
-        datacube_config.datacube_version = datacube_version
-    if consolidated_parquet_dir:
-        datacube_config.consolidated_parquet_dir = upath.UPath(  # type:ignore[misc]
-            consolidated_parquet_dir
-        )
-    if nwb_dir:
-        datacube_config.nwb_dir = upath.UPath(nwb_dir)  # type:ignore[misc]
-
-
-def parse_version(path: str) -> str:
-    """
-    >>> parse_version("s3://aind-scratch-data/dynamic-routing/cache/nwb/v0.0.210/366122_2023-12-31.nwb.zarr")
-    'v0.0.210'
-    """
-    result = re.search(r"v\d+.\d+.\d+", path)
-    if not result:
-        raise ValueError(f"Could not parse version from path: {path!r}")
-    return result.group(0)
-
-
-@functools.cache
 def get_datacube_version() -> str:
-    return parse_version(codeocean_utils.get_datacube_dir().as_posix())
+    return dr_datacube.config.version
 
-
-@functools.cache
 def is_datacube_available() -> bool:
     with contextlib.suppress(FileNotFoundError):
-        _ = codeocean_utils.get_datacube_dir()
-        return True
+        return dr_datacube.config.asset_dir.exists()
     return False
 
 
@@ -176,19 +61,10 @@ def get_df(component: str, lazy: Literal[True] = True) ->  pl.LazyFrame:
     ...
 
 def get_df(component: str, lazy: bool = False) -> pl.DataFrame | pl.LazyFrame:
-    storage_options = {"skip_signature": "true"} if not codeocean_utils.on_code_ocean() else {}
-    path =  datacube_config.consolidated_parquet_dir / f'{component}.parquet'
-    frame: pl.DataFrame | pl.LazyFrame
+    lf = dr_datacube.get_lf(component)
     if lazy:
-        frame = pl.scan_parquet(path, storage_options=storage_options)
-    else:
-        frame = pl.read_parquet(path, storage_options=storage_options) # type: ignore
-    return (
-        frame
-        .with_columns(
-            pl.col('session_id').str.split('_').list.slice(0, 2).list.join('_')
-        )
-    )
+        return lf
+    return lf.collect()
 
 @typing.overload
 def get_nwb_paths(session_id: str) -> pathlib.Path: ...
@@ -203,13 +79,13 @@ def get_nwb_paths(
     session_id: str | None = None,
 ) -> pathlib.Path | tuple[pathlib.Path, ...]:
     """Returns a single path if a session ID is provided"""
-    paths = datacube_config.nwb_dir.rglob("*.nwb")
+    paths = [upath.UPath(p) for p in dr_datacube.list_nwb_sources()]
     if session_id:
         try:
             return next(p for p in paths if p.stem == session_id)
         except StopIteration:
             raise FileNotFoundError(
-                f"Cannot find NWB file for {session_id!r} in {datacube_config.nwb_dir}"
+                f"Cannot find NWB file for {session_id!r} in {dr_datacube.config.nwb_dir}"
             ) from None
     else:
         return tuple(p for p in paths if p.is_file())
@@ -325,49 +201,6 @@ def get_passing_blocks_performance_filter(
     return combine_exprs([cross_modal_dprime_filter, min_n_trials_filter, min_n_responses_filter])
 
 
-def get_passing_session_ids(
-    cross_modality_dprime: float | None = 1.0,
-    min_trials: int | None = 10,
-    min_contingent_rewards: int | None = 10,
-    of_each_rewarded_modality: bool = True,
-    min_n_blocks: int = 2,
-    include_templeton: bool = False,
-) -> pl.Series:
-    passing_block_filter = get_passing_blocks_performance_filter(
-        cross_modality_dprime=cross_modality_dprime,
-        min_trials=min_trials,
-        min_contingent_rewards=min_contingent_rewards,
-    )
-    n_blocks_each_context: pl.Expr = (
-        pl.col("rewarded_modality")
-        .filter(passing_block_filter)
-        .unique_counts()
-        .over("session_id", mapping_strategy="join")
-    )
-    if include_templeton:
-        templeton_session_ids = get_session_table().filter("is_templeton")["session_id"]
-        templeton_filter = pl.col("session_id").is_in(templeton_session_ids)
-    else:
-        templeton_filter = pl.lit(False)
-    if of_each_rewarded_modality:
-        passing_session_filter = (
-            # at least n_blocks of each context, and two contexts:
-            (
-                n_blocks_each_context.list.eval(pl.element() >= min_n_blocks).list.all()
-                & (n_blocks_each_context.list.len() == 2)
-            ) | templeton_filter
-        )
-    else:
-        passing_session_filter = (
-            # at least n_blocks of any context:
-            (
-                n_blocks_each_context.list.sum()
-                >= min_n_blocks
-            ) | templeton_filter
-        )
-    return get_df("performance").filter(passing_session_filter.explode())["session_id"].unique().sort()
-
-
 def get_prod_trials(
     cross_modal_dprime_threshold: float = 1.0,
     late_autorewards: bool | None = None,
@@ -389,34 +222,34 @@ def get_prod_trials(
     }[late_autorewards]
 
     # session_ids to use based on project, experiment-type, training history etc.:
-    session_ids_by_type: pl.Series = get_df("session").filter(
-        PROD_EPHYS_SESSION_FILTER, late_autorewards_expr
-    )["session_id"]
+    session_table = (
+        dr_datacube.get_session_table(with_behavior_filter=True)
+        .filter(late_autorewards_expr)
+    )
+    session_types = ["brainwide"]
     if include_templeton:
-        templeton_session_ids = get_session_table().filter("is_templeton")["session_id"]
-        session_ids_by_type = session_ids_by_type.append(templeton_session_ids)
+        session_types.append("templeton")
+    session_table = session_table.filter(pl.col("session_type").is_in(session_types))
 
     if by_session: 
         # keep all blocks from sessions that pass the performance criteria
-        session_ids_by_performance = get_passing_session_ids(
-            cross_modality_dprime=cross_modal_dprime_threshold,
-            include_templeton=include_templeton,
-        )
         trials = (
             get_df("trials")
             .filter(
-                pl.col("session_id").is_in(
-                    set(session_ids_by_type).intersection(session_ids_by_performance)
-                ),
+                pl.col("session_id").is_in(session_table["session_id"].implode())
             )
         )
     else:
         if include_templeton:
-            templeton_filter = pl.col("session_id").is_in(templeton_session_ids)
+            templeton_filter = pl.col("session_id").is_in(session_table.filter(pl.col("session_type") == "templeton")["session_id"].implode())
         else:
             templeton_filter = pl.lit(False)
-        passing_blocks: pl.DataFrame = get_df("performance").filter(
-            get_passing_blocks_performance_filter(cross_modality_dprime=cross_modal_dprime_threshold) | templeton_filter
+        passing_blocks: pl.DataFrame = (
+            get_df("performance")
+            .filter(
+                get_passing_blocks_performance_filter(cross_modality_dprime=cross_modal_dprime_threshold) 
+                | templeton_filter
+            )
         )
         trials = (
             get_df("trials")
