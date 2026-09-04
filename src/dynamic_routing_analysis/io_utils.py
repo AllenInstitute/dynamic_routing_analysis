@@ -282,7 +282,7 @@ def extract_session_id(session) -> str:
     return session
 
 def get_session_data(
-    session: str | None = None,
+    session: str,
     lazy: bool = False,
     get_df_kwargs: dict | None = None,
     scan_nwb_kwargs: dict | None = None,
@@ -644,13 +644,14 @@ def add_kernels(design, run_params, session, fit, behavior_info):
         fit             the fit object for this model
     '''
     if session is not None and not isinstance(session, str):
-        logger.warning("Passing npc_sessions object to add_kernels is deprecated: pass None or the session ID instead")
+        logger.warning("Passing npc_sessions object to add_kernels is deprecated and unnecessary: pass the session ID instead")
         session = extract_session_id(session)
     elif session is None and "session_id" in run_params:
         session = run_params["session_id"]
     else:
         raise ValueError("Session ID must be provided either as a str or via run_params['session_id']")
-
+    assert session is not None, "Session ID must be provided"
+    
     fit['failed_kernels'] = set()
     fit['kernel_error_dict'] = dict()
 
@@ -741,7 +742,7 @@ def context_belief(kernel_name, session, fit, behavior_info):
         session_key = [key for key in context_belief_mouse.keys() if sessiondate in key]
         return context_belief_mouse[session_key[0]]
 
-    session_id = session if isinstance(session, str) else session.id
+    session_id = extract_session_id(session)
     context_belief = get_context_belief_vals(session_id)
     this_kernel = np.zeros(len(fit['bin_centers_all']))
     epoch_trace = fit['epoch_trace_all']
@@ -804,10 +805,13 @@ def pupil(kernel_name, session, fit, behavior_info):
         df['pupil_area'] = df['pupil_area'].bfill()
         return df
 
-    if isinstance(session, str) and datacube_utils.is_datacube_available():
-        df = process_pupil_data(_datacube_data(session, '/processing/behavior/eye_tracking'), behavior_info)
-    else:
-        df = process_pupil_data(session.processing['behavior']['eye_tracking'][:], behavior_info)
+
+    df = process_pupil_data(
+        dr_datacube.get_lf(
+            '/processing/behavior/eye_tracking', session_id=session, nwb=True
+        ).collect().to_pandas(),
+        behavior_info,
+    )
     this_kernel = bin_timeseries(df.pupil_area.values, df.timestamps.values, fit['timebins_all'])
     this_kernel = pd.Series(this_kernel).ffill().bfill().to_numpy()
     if np.isnan(this_kernel).all():
@@ -816,11 +820,14 @@ def pupil(kernel_name, session, fit, behavior_info):
 
 
 def running(kernel_name, session, fit, behavior_info):
-    if isinstance(session, str) and datacube_utils.is_datacube_available():
-        timeseries = _datacube_data(session, '/processing/behavior/running_speed', is_timeseries=True)
-    else:
-        timeseries = session.processing['behavior']['running_speed']
-    this_kernel = bin_timeseries(timeseries.data[:], timeseries.timestamps[:], fit['timebins_all'])
+    timeseries = dr_datacube.get_lf(
+        '/processing/behavior/running_speed', session_id=session, nwb=True
+    ).collect().to_pandas()
+    this_kernel = bin_timeseries(
+        timeseries['data'].values,
+        timeseries['timestamps'].values,
+        fit['timebins_all'],
+    )
     this_kernel = pd.Series(this_kernel).ffill().bfill().to_numpy()
     if np.isnan(this_kernel).all():
         raise ValueError(f"The trace is all nans for {kernel_name}")
@@ -828,12 +835,11 @@ def running(kernel_name, session, fit, behavior_info):
 
 
 def licks(kernel_name, session, fit, behavior_info):
-    if isinstance(session, str) and datacube_utils.is_datacube_available():
-        timeseries = _datacube_data(session, '/processing/behavior/licks', is_timeseries=True)
-    else:
-        timeseries = session.processing['behavior']['licks']
-    lick_times = timeseries.timestamps[:]
-    lick_duration = timeseries.data[:]
+    timeseries = dr_datacube.get_lf(
+        '/processing/behavior/licks', session_id=session, nwb=True
+    ).collect().to_pandas()
+    lick_times = timeseries['timestamps'].values
+    lick_duration = timeseries['data'].values
     lick_duration_threshold = 0.5
     lick_times = lick_times[lick_duration < lick_duration_threshold]
 
@@ -865,16 +871,12 @@ def facial_features(kernel_name, session, fit, behavior_info):
         return xy, confidence
 
     map_names = {'ears': 'ear_base_l', 'jaw': 'jaw', 'nose': 'nose_tip', 'whisker_pad': 'whisker_pad_l_side'}
-    if isinstance(session, str) and datacube_utils.is_datacube_available():
-        try:
-            df = _datacube_data(session, '/processing/behavior/lp_side_camera')
-        except KeyError:
-            raise IndexError(f'{session} is not a session with video.')
-    else:
-        try:
-            df = session.processing['behavior']['lp_side_camera'][:]
-        except IndexError:
-            raise IndexError(f'{session.id} is not a session with video.')
+    try:
+        df = dr_datacube.get_lf(
+            '/processing/behavior/lp_side_camera', session_id=session, nwb=True
+        ).collect().to_pandas()
+    except KeyError:
+        raise IndexError(f'{session} is not a session with video.')
     timestamps = df['timestamps'].values.astype('float')
     lp_part_name = map_names[kernel_name]
     part_xy, confidence = part_info_LP(lp_part_name, df)
