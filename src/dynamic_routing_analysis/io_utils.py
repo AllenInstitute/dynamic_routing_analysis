@@ -643,15 +643,15 @@ def add_kernels(design, run_params, session, fit, behavior_info):
         session         the SDK session object for this experiment
         fit             the fit object for this model
     '''
-    if session is not None and not isinstance(session, str):
+    if session is None:
+        session = run_params.get("session_id")
+    elif not isinstance(session, str):
         logger.warning("Passing npc_sessions object to add_kernels is deprecated and unnecessary: pass the session ID instead")
         session = extract_session_id(session)
-    elif session is None and "session_id" in run_params:
-        session = run_params["session_id"]
-    else:
+
+    if session is None:
         raise ValueError("Session ID must be provided either as a str or via run_params['session_id']")
-    assert session is not None, "Session ID must be provided"
-    
+
     fit['failed_kernels'] = set()
     fit['kernel_error_dict'] = dict()
 
@@ -771,22 +771,6 @@ def context_templeton(kernel_name, session, fit, behavior_info):
     this_kernel[np.where((fit['bin_centers_all'] >= switch_times[-1]) & (fit['bin_centers_all'] <= trial_times[-1]))] = signed_context
 
     return this_kernel
-
-
-@typing.overload
-def _datacube_data(session_id: str, internal_path: str, is_timeseries: Literal[False]) -> pd.DataFrame:
-    ...
-
-@typing.overload
-def _datacube_data(session_id: str, internal_path: str, is_timeseries: Literal[True]) -> lazynwb.TimeSeries:
-    ...
-
-def _datacube_data(session_id: str, internal_path: str, is_timeseries: bool = False) -> pd.DataFrame | lazynwb.TimeSeries:
-    if is_timeseries:
-        return lazynwb.get_timeseries(datacube_utils.get_nwb_paths(session_id), internal_path, exact_path=True, match_all=False)
-    else:
-        return lazynwb.get_df(datacube_utils.get_nwb_paths(session_id), internal_path, exact_path=True)
-
 
 def pupil(kernel_name, session, fit, behavior_info):
     def process_pupil_data(df, behavior_info):
