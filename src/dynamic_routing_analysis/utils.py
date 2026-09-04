@@ -591,7 +591,7 @@ def get_nwb_paths() -> tuple[upath.UPath, ...]:
     if codeocean_utils.on_code_ocean():
         return tuple(get_data_root().rglob('*.nwb'))
     else:
-        return tuple(upath.UPath(f's3://aind-scratch-data/dynamic-routing/cache/nwb/{datacube_utils.datacube_config.datacube_version}').glob('*.nwb*'))
+        return tuple(upath.UPath(f's3://aind-scratch-data/dynamic-routing/cache/nwb/{datacube_utils.get_datacube_version()}').glob('*.nwb*'))
 
 def ensure_nonempty_results_dir() -> None:
     """A pipeline run can crash if a results folder is expected and not found or is empty

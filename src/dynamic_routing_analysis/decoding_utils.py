@@ -373,8 +373,8 @@ class Params(pydantic_settings.BaseSettings):
 
     @pydantic.computed_field(repr=False)
     def datacube_version(self) -> str | None:
-        return datacube_utils.datacube_config.datacube_version
-
+        return datacube_utils.get_datacube_version()
+        
     # set the priority of the sources:
     @classmethod
     def settings_customise_sources(
