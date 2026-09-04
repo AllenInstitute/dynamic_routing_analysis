@@ -304,7 +304,10 @@ def get_session_data(
         'dprime': dprimes,
         'epoch_info': dr_datacube.get_lf('epochs', session_id=session, nwb=False).collect().to_pandas(),
     }
-    units = dr_datacube.get_lf('units', session_id=session, nwb=not dr_datacube.config.use_cache)
+    units = (
+        dr_datacube.get_lf('units', session_id=session, nwb=not dr_datacube.config.use_cache)
+        .drop('waveform_mean', 'waveform_std', 'spike_amplitudes', strict=False)
+    )
     if not lazy:
         units = units.collect().to_pandas()
     return units, behavior_info
