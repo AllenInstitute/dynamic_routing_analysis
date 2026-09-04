@@ -3,12 +3,13 @@ import re
 import typing
 from typing import Literal
 
+import dr_datacube
 import lazynwb
-import npc_lims
 import numpy as np
 import pandas as pd
 import polars as pl
 import xarray as xr
+from deprecated import deprecated
 from tqdm import tqdm
 
 import dynamic_routing_analysis.datacube_utils as datacube_utils
@@ -270,54 +271,59 @@ def define_kernels(run_params):
 
     return run_params
 
-
-def _create_behavior_info(session_id, trials, performance, epochs):
-    dprimes = performance.cross_modality_dprime.values
-    return {
-        'session_id': session_id,
-        'trials': trials,
-        'dprime': dprimes,
-        'epoch_info': epochs,
-    }
-
-def get_session_data_from_session_obj(session):
-    """Fetch data from DynamicRoutingSession."""
-    behavior_info = _create_behavior_info(
-        trials=session.trials[:],
-        performance=session.intervals['performance'][:],
-        epochs=session.epochs[:],
+def get_session_data(
+    session: str,
+    lazy: bool = False,
+    get_df_kwargs: dict | None = None,
+    scan_nwb_kwargs: dict | None = None,
+):
+    if not isinstance(session, str):
+        if (id_ := getattr(session, 'id', None)) is not None:
+            session = id_
+        elif (id_ := getattr(session, 'session_id', None)) is not None:
+            session = id_
+    nwb_path = next(
+        (
+            p for p in dr_datacube.list_nwb_sources()
+            if session in p
+        ), None
     )
-    return session.units[:], behavior_info
+    if nwb_path is None:
+        raise FileNotFoundError(f"No NWB file found for session {session}")
+    performance = lazynwb.get_df(nwb_path, '/intervals/performance', exact_path=True, **(get_df_kwargs or {}))
+    dprimes = pd.DataFrame(performance).cross_modality_dprime.values
+    behavior_info = {
+        'session_id': session,
+        'trials': lazynwb.get_df(nwb_path, '/intervals/trials', exact_path=True, **(get_df_kwargs or {})),
+        'dprime': dprimes,
+        'epoch_info': lazynwb.get_df(nwb_path, '/intervals/epochs', exact_path=True, **(get_df_kwargs or {})),
+    }
+    if lazy:
+        units = lazynwb.scan_nwb(nwb_path, '/units', **(scan_nwb_kwargs or {}))
+    else:
+        units = lazynwb.get_df(
+                nwb_path, "/units", exact_path=True, as_polars=True, **(get_df_kwargs or {'exclude_array_columns': False})
+            )
+    return units, behavior_info
 
-def get_session_data(session):
-    return get_session_data_from_session_obj(session)
+@deprecated(reason="Use the generic get_session_data instead - all data access is mediated by dr-datacube.")
+def get_session_data_from_session_obj(session) -> tuple[pl.LazyFrame, dict[str, pd.DataFrame]]:
+    """Fetch data from DynamicRoutingSession."""
+    return get_session_data(session)
 
 
+@deprecated(reason="Use the generic get_session_data instead - all data access is mediated by dr-datacube.")
 def get_session_data_from_datacube(
     session_id,
     lazy: bool = False,
     get_df_kwargs: dict | None = None,
     scan_nwb_kwargs: dict | None = None,
 ) -> tuple[pl.LazyFrame, dict[str, pd.DataFrame]]:
-    nwb_path = datacube_utils.get_nwb_paths(session_id)
-    behavior_info = _create_behavior_info(
-        session_id = session_id,
-        trials=lazynwb.get_df(nwb_path, '/intervals/trials', exact_path=True, **(get_df_kwargs or {})),
-        performance=lazynwb.get_df(nwb_path, '/intervals/performance', exact_path=True, **(get_df_kwargs or {})),
-        epochs=lazynwb.get_df(nwb_path, '/intervals/epochs', exact_path=True, **(get_df_kwargs or {})),
-    )
-    if lazy:
-        return lazynwb.scan_nwb(nwb_path, '/units', **(scan_nwb_kwargs or {})), behavior_info
-    else:
-        return (
-            lazynwb.get_df(
-                nwb_path, "/units", exact_path=True, as_polars=True, **(get_df_kwargs or {})
-            ),
-            behavior_info,
-        )
+    return get_session_data(session_id, lazy=lazy, get_df_kwargs=get_df_kwargs, scan_nwb_kwargs=scan_nwb_kwargs)
 
 
-def get_session_data_from_cache(session_id, version='0.0.260'):
+@deprecated(reason="Use the generic get_session_data instead - all data access is mediated by dr-datacube.")
+def get_session_data_from_cache(session_id, version=None):
 
     '''
     :param session_id: ecephys session_id
@@ -325,37 +331,9 @@ def get_session_data_from_cache(session_id, version='0.0.260'):
     :return: session object (if found), units_table, trials table,
                 epoch information and session performance
     '''
-
-    # to get current cache version
-    # npc_lims.get_current_cache_version()
-    try:
-        # Attempt to load data from cached files
-        behavior_info = _create_behavior_info(
-            trials=pd.read_parquet(
-                npc_lims.get_cache_path('trials', session_id, version=version)
-            ),
-            performance=pd.read_parquet(
-                npc_lims.get_cache_path('performance', session_id, version=version)
-            ),
-            epochs=pd.read_parquet(
-                npc_lims.get_cache_path('epochs', session_id, version=version)
-            ),
-        )
-        units_table_path = npc_lims.get_cache_path("units", session_id, version=version)
-        schema = pl.scan_parquet(units_table_path).collect_schema()
-        units_table = pd.read_parquet(
-            units_table_path, columns=[c for c in schema if c not in ['waveform_mean', 'waveform_sd',]]
-        )
-        return units_table, behavior_info
-
-    except FileNotFoundError:
-        # Attempt to load data from DynamicRoutingSession as a fallback
-        logger.warning(f"File not found for session_id {session_id}. Attempting fallback.")
-        return get_session_data_from_session_obj(session_id)
-
-    except Exception as e:
-        raise FileNotFoundError(f"Unexpected error occurred: {e}")
-
+    if version is not None:
+        logger.warning(f"{version=} ignored: set dr_datacube.config.version globally to control cache version")
+    return get_session_data(session_id)
 
 def setup_units_table(run_params, units_table):
     '''

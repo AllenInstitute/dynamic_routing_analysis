@@ -9,6 +9,7 @@ authors = [
 ]
 dependencies = [
     "numpy>=1.24.4",
+    "deprecated>=1.2.14",
     "pandas>=2.0.3",
     "polars[pandas,plot]>=1.32.0",
     "matplotlib>=3.7.2",

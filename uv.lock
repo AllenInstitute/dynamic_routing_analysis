@@ -1033,6 +1033,7 @@ wheels = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "debugpy"
 version = "1.8.21"
 source = { registry = "https://pypi.org/simple" }
@@ -1068,6 +1069,17 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/60/8b/32f9823da46cde7df2087faa08cd98d01b908f8dcab982cdba9c84e85355/decorator-5.3.1.tar.gz", hash = "sha256:4cbcdd55a6efadb9dbea26b858f4fb3264567b52d69ca0d25b721b553f60ea82", size = 58084, upload-time = "2026-05-18T06:03:28.057Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/05/7f/798705f5296a58ca505d600456748d1be48078eac8a7050d8a98bc9edb89/decorator-5.3.1-py3-none-any.whl", hash = "sha256:f47fe6fdbd2edd623ecfe36875d37aba411624e2670dd395dddae1358689bb3c", size = 10365, upload-time = "2026-05-18T06:03:26.517Z" },
+=======
+name = "deprecated"
+version = "1.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/49/85/12f0a49a7c4ffb70572b6c2ef13c90c88fd190debda93b23f026b25f9634/deprecated-1.3.1.tar.gz", hash = "sha256:b1b50e0ff0c1fddaa5708a2c6b0a6588bb09b892825ab2b214ac9ea9d92a5223", size = 2932523, upload-time = "2025-10-30T08:19:02.757Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/84/d0/205d54408c08b13550c733c4b85429e7ead111c7f0014309637425520a9a/deprecated-1.3.1-py2.py3-none-any.whl", hash = "sha256:597bfef186b6f60181535a29fbe44865ce137a5079f295b479886c82729d5f3f", size = 11298, upload-time = "2025-10-30T08:19:00.758Z" },
+>>>>>>> 027252b (Unify get_session_data methods)
 ]
 
 [[package]]
@@ -1106,6 +1118,7 @@ name = "dynamic-routing-analysis"
 version = "0.1.1"
 source = { editable = "." }
 dependencies = [
+    { name = "deprecated" },
     { name = "dr-datacube" },
     { name = "matplotlib" },
     { name = "npc-lims" },
@@ -1163,6 +1176,7 @@ testing = [
 requires-dist = [
     { name = "aind-session", marker = "extra == 'codeocean'", specifier = ">=0.3.16" },
     { name = "altair", extras = ["save"], marker = "extra == 'plot'", specifier = ">=5.4.1" },
+    { name = "deprecated", specifier = ">=1.2.14" },
     { name = "dr-datacube", git = "https://github.com/AllenNeuralDynamics/dr-datacube.git" },
     { name = "geopandas", marker = "extra == 'plot'", specifier = ">=1.0.1" },
     { name = "ipykernel", marker = "extra == 'notebook'", specifier = ">=7.3.0" },
