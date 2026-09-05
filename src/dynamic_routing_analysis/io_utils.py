@@ -80,77 +80,6 @@ pd.set_option('display.max_columns', None)
 np.random.seed(0)
 
 
-class RunParams:
-    def __init__(self, session_id):
-        self.run_params = {
-            "session_id": session_id,
-            "project": "DynamicRouting",
-            "cache_version": '0.0.265',
-            "time_of_interest": 'quiescent',
-            "spontaneous_duration": 2 * 60,  # in seconds
-            "input_variables": None,
-            "input_offsets": True,
-            "input_window_lengths": None,  # offset
-
-            "drop_variables": None,
-            "linear_shift_variables": None,
-            "linear_shift_by": 0.1, # in seconds
-            "unit_inclusion_criteria": {'isi_violations': 0.1,
-                                        'presence_ratio': 0.99,
-                                        'amplitude_cutoff': 0.1,
-                                        'firing_rate': 1},
-            "run_on_qc_units": True,
-            "unit_ids_to_use": None,
-            "spike_bin_width": 0.1,
-            "smooth_spikes_half_gaussian": False,
-            "half_gaussian_std_dev": 0.05,
-            "areas_to_include": None,
-            "areas_to_exclude": None,
-            "orthogonalize_against_context": ['facial_features'],
-            "quiescent_start_time": -1.5,
-            "quiescent_stop_time": 0,
-            "trial_start_time": -2,
-            "trial_stop_time": 3,
-            "intercept": True,
-            "model_label": 'fullmodel'
-        }
-
-    def update_metric(self, key, value):
-        """Update or add a parameter in the run_params dictionary."""
-        if key not in self.run_params:
-            logger.warning(f"{key} is not a valid key. Adding new parameter '{key}' with value {value}")
-        if key == 'unit_inclusion_criteria':
-            for criteria in value.keys():
-                if criteria in self.run_params[key]:
-                    self.run_params[key][criteria] = value[criteria]
-                else:
-                    logger.warning(f"{criteria} is not a valid key for unit_inclusion_criteria. Skipping.")
-        else:
-            self.run_params[key] = value
-
-    def update_multiple_metrics(self, updates: dict):
-        """Update multiple parameters at once."""
-        for key, value in updates.items():
-            self.update_metric(key, value)
-
-    def get_params(self):
-        """Retrieve the run_params dictionary."""
-        self.define_kernels()
-        return self.run_params
-
-    def validate_params(self):
-        """Validation logic to ensure parameters are consistent."""
-
-        if self.run_params["time_of_interest"] not in ['trial', 'full_trial', 'spontaneous_trial',
-                                                        'quiescent', 'spontaneous_quiescent', 'quiescent_spontaneous',
-                                                        'full_spontaneous',
-                                                        'full']:
-            raise ValueError(f"Invalid time_of_interest: {self.run_params['time_of_interest']}")
-
-        if self.run_params["spike_bin_width"] <= 0:
-            raise ValueError(f"Invalid spike_bin_width: {self.run_params['spike_bin_width']}")
-
-
 def define_kernels(run_params):
     '''
         Returns kernel info for input variables
@@ -308,77 +237,6 @@ def get_session_data(
     if not lazy:
         units = units.collect().to_pandas()
     return units, behavior_info
-
-@deprecated(reason="Use the generic get_session_data instead - all data access is mediated by dr-datacube.")
-def get_session_data_from_session_obj(session) -> tuple[pl.LazyFrame, dict[str, pd.DataFrame]]:
-    """Fetch data from DynamicRoutingSession."""
-    return get_session_data(session)
-
-
-@deprecated(reason="Use the generic get_session_data instead - all data access is mediated by dr-datacube.")
-def get_session_data_from_datacube(
-    session_id,
-    lazy: bool = False,
-    get_df_kwargs: dict | None = None,
-    scan_nwb_kwargs: dict | None = None,
-) -> tuple[pl.LazyFrame, dict[str, pd.DataFrame]]:
-    return get_session_data(session_id, lazy=lazy, get_df_kwargs=get_df_kwargs, scan_nwb_kwargs=scan_nwb_kwargs)
-
-
-@deprecated(reason="Use the generic get_session_data instead - all data access is mediated by dr-datacube.")
-def get_session_data_from_cache(session_id, version=None):
-
-    '''
-    :param session_id: ecephys session_id
-    :param version: cache version
-    :return: session object (if found), units_table, trials table,
-                epoch information and session performance
-    '''
-    if version is not None:
-        logger.warning(f"{version=} ignored: set dr_datacube.config.version globally to control cache version")
-    return get_session_data(session_id)
-
-def setup_units_table(run_params, units_table):
-    '''
-        Returns the units_table with the column indicating QC
-        Filters the table for area specific runs
-    '''
-
-    units_table['good_unit'] = (units_table['isi_violations_ratio'] < run_params['unit_inclusion_criteria'][
-        'isi_violations']) & \
-                               (units_table['presence_ratio'] > run_params['unit_inclusion_criteria'][
-                                   'presence_ratio']) & \
-                               (units_table['amplitude_cutoff'] < run_params['unit_inclusion_criteria'][
-                                   'amplitude_cutoff']) & \
-                               (units_table['firing_rate'] > run_params['unit_inclusion_criteria']['firing_rate'])
-
-    if run_params['run_on_qc_units']:
-        units_table = units_table[units_table.good_unit]
-
-    unit_ids_to_use = run_params.get('unit_ids_to_use', [])
-    if unit_ids_to_use:
-        units_table = units_table[units_table.unit_id.isin(unit_ids_to_use)]
-
-    areas_to_include = run_params.get('areas_to_include', [])
-    if areas_to_include:
-        units_table = units_table[units_table.structure.isin(areas_to_include)]
-
-    areas_to_exclude = run_params.get('areas_to_exclude', [])
-    if areas_to_exclude:
-        units_table = units_table[~units_table.structure.isin(areas_to_exclude)]
-
-    return units_table
-
-
-def setup_trials_table(run_params, trials_table):
-    '''
-       Returns trials table excluding aborted trials if running encoding on quiescent period
-    '''
-
-    # TO-DO: find out how? Find out what else to include in the trials table.
-
-    return trials_table
-
 
 def get_spont_times(run_params, behavior_info):
     '''
@@ -616,20 +474,6 @@ def process_spikes(units_table, run_params, fit):
     return fit
 
 
-def extract_unit_data(run_params, units_table, behavior_info):
-    '''
-        Creates the fit dictionary
-        establishes time bins
-        processes spike times into spike counts for each time bin
-    '''
-
-    fit = dict()
-    fit = establish_timebins(run_params, fit, behavior_info)
-    fit = process_spikes(units_table, run_params, fit)
-
-    return fit
-
-
 def add_kernels(design, run_params, session, fit, behavior_info):
     '''
         Iterates through the kernels in run_params['kernels'] and adds
@@ -696,7 +540,7 @@ def add_kernel_by_label(kernel_name, design, run_params, session, fit, behavior_
             input_x = standardize_inputs(input_x)
 
     except Exception as e:
-        logger.warning(f"Exception: {e}")
+        logger.exception(f"Exception occurred while adding kernel: {kernel_name}")
         logger.warning('Attempting to continue without this kernel.')
 
         fit['failed_kernels'].add(kernel_name)
@@ -714,6 +558,8 @@ def add_kernel_by_label(kernel_name, design, run_params, session, fit, behavior_
             offset=run_params['kernels'][kernel_name]['offset'],
             num_weights=run_params['kernels'][kernel_name]['num_weights']
         )
+    if fit['failed_kernels']:
+        print(f"Failed kernels for {session}: {fit['failed_kernels']}")
     return design, fit
 
 
@@ -823,7 +669,7 @@ def licks(kernel_name, session, fit, behavior_info):
         '/processing/behavior/licks', session_id=session, nwb=True
     ).collect().to_pandas()
     lick_times = timeseries['timestamps'].values
-    lick_duration = timeseries['data'].values
+    lick_duration = timeseries['duration'].values
     lick_duration_threshold = 0.5
     lick_times = lick_times[lick_duration < lick_duration_threshold]
 

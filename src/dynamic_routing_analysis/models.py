@@ -3,12 +3,13 @@ import logging
 import numpy as np
 from numpy.linalg import LinAlgError
 from scipy.linalg import solve
+from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import ElasticNet as SklearnElasticNet
 from sklearn.linear_model import LassoLars as SklearnLasso
 
 logger = logging.getLogger(__name__) # debug < info < warning < error
 
-class Ridge:
+class Ridge(RegressorMixin, BaseEstimator):
     def __init__(self, lam=None, W=None):
         self.lam = lam
         self.r2 = None
@@ -82,7 +83,7 @@ class Ridge:
         return y
 
 
-class Lasso:
+class Lasso(RegressorMixin, BaseEstimator):
     def __init__(self, lam=None, W=None):
         self.lam = lam  # Regularization strength (alpha in sklearn)
         self.W = W  # Model weights
@@ -168,7 +169,7 @@ class Lasso:
         return np.dot(X, self.W)
 
 
-class ElasticNet:
+class ElasticNet(RegressorMixin, BaseEstimator):
     def __init__(self, lam = None, l1_ratio=None, W=None):
         self.lam = lam  # Regularization strength (alpha in sklearn)
         self.l1_ratio = l1_ratio  # Mix between L1 and L2 regularization
@@ -257,7 +258,7 @@ class ElasticNet:
 
 
 
-class ReducedRankRegression:
+class ReducedRankRegression(RegressorMixin, BaseEstimator):
     def __init__(self, rank=None, W=None):
         self.rank = rank # Desired rank for dimensionality reduction
         self.W = W  # Model weights

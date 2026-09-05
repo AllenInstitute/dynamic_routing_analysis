@@ -45,15 +45,10 @@ def is_datacube_available() -> bool:
 # data access ------------------------------------------------------- #
 @functools.cache
 def get_session_table() -> pl.DataFrame:
-    if codeocean_utils.on_code_ocean():
-        return pl.read_parquet(
-            (codeocean_utils.get_datacube_dir() / "session_table.parquet").as_posix()
-        )
     return pl.read_parquet(
-        's3://aind-scratch-data/dynamic-routing/session_metadata/session_table.parquet',
-        storage_options={"skip_signature": "true"},
+        (dr_datacube.config.asset_dir / "session_table.parquet").as_posix(),
+        storage_options=dr_datacube.config.storage_options,
     )
-
 
 @typing.overload
 def get_df(
