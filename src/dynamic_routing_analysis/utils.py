@@ -130,19 +130,14 @@ def setup_logging(
 # data access ------------------------------------------------------- #
 
 
-def _get_spike_times_single_nwb(nwb_path: str | upath.UPath, unit_ids: str | Iterable[str], use_pynwb: bool = False) -> dict[str, npt.NDArray[np.float64]]:
+def _get_spike_times_single_nwb(session_id: str, unit_ids: str | Iterable[str], use_pynwb: bool = False) -> dict[str, npt.NDArray[np.float64]]:
     if isinstance(unit_ids, str):
         unit_ids = (unit_ids,)
     unit_ids = tuple(unit_ids)
-    if isinstance(nwb_path, str):
-        nwb_path = upath.UPath(nwb_path)
-    if not nwb_path.exists():
-        raise FileNotFoundError(nwb_path)
-    logging.debug(f"Fetching spike times for {len(unit_ids)} units from {nwb_path}")
-
+    logging.debug(f"Fetching spike times for {len(unit_ids)} units from session {session_id}")
     units = (
-        datacube_utils.get_df(
-            "units", session_id=nwb_path.stem, nwb=True
+        dr_datacube.get_lf(
+            "units", session_id=session_id, nwb=True,
         )
         .filter(pl.col("unit_id").is_in(unit_ids))
         .select("unit_id", "spike_times")
@@ -164,13 +159,9 @@ def get_spike_times(unit_ids: str | Iterable[str]) -> dict[str, npt.NDArray[np.f
     future_to_nwb_session_id = {}
     with concurrent.futures.ThreadPoolExecutor() as executor:
         for session_id in session_to_unit_ids:
-            nwb_paths = get_nwb_paths()
-            nwb_path = next((p for p in nwb_paths if session_id in [p.stem]), None)
-            if nwb_path is None:
-                raise FileNotFoundError(f"No NWB file found for session {session_id}")
             future = executor.submit(
                 _get_spike_times_single_nwb,
-                nwb_path=nwb_path,
+                session_id=session_id,
                 unit_ids=session_to_unit_ids[session_id],
                 use_pynwb=False,
             )
@@ -282,7 +273,7 @@ def get_per_trial_spike_times(
             unit_ids = tuple(unit_ids)
         if not tuple(unit_ids):
             raise ValueError('unit_ids must be None or a non-empty iterable')
-        units_df = dr_datacube.get_lf('units', nwb=True, infer_schema_length=1).select(units_df_cols).filter(pl.col('unit_id').is_in(unit_ids)).collect()
+        units_df = dr_datacube.get_lf('units', nwb=False, infer_schema_length=1).select(units_df_cols).filter(pl.col('unit_id').is_in(unit_ids)).collect()
 
     if isinstance(trials_frame, str):
         trials_df = dr_datacube.get_lf(trials_frame, nwb=False)
