@@ -2870,7 +2870,7 @@ def decode_context_with_linear_shift(
 
     if params.filter_units_by_metrics is False:
         combinations_df = (
-            datacube_utils.get_df('units', lazy=True)
+            datacube_utils.get_df('units', lazy=True, nwb=False)
             .drop_nulls('structure')
             .filter(
                 pl.col('session_id').is_in(session_ids),
@@ -2905,7 +2905,7 @@ def decode_context_with_linear_shift(
             metrics_table=(
                 pl.scan_parquet(metrics_table_path)
                 .join(
-                    datacube_utils.get_df('units', lazy=True),
+                    datacube_utils.get_df('units', lazy=True, nwb=False),
                     on='unit_id'
                     )
             )
@@ -3011,7 +3011,7 @@ def wrap_decoder_helper(
     results = []
 
     all_trials = (
-        datacube_utils.get_df('trials', lazy=True)
+        datacube_utils.get_df('trials', lazy=True, nwb=False)
         .filter(
             pl.col('session_id') == session_id,
         ).with_columns( #make new columns for is_response_or_reward and response_or_reward_time
@@ -3043,7 +3043,7 @@ def wrap_decoder_helper(
                     trials_frame=spont_trials,
                     as_counts=True,
                     unit_ids=(
-                        datacube_utils.get_df('units', lazy=True)
+                        datacube_utils.get_df('units', lazy=True, nwb=False)
                         .pipe(group_structures)
                         .filter(
                             params.units_query,
@@ -3109,7 +3109,7 @@ def wrap_decoder_helper(
 
     if params.filter_units_by_metrics is False:
         unique_unit_ids=(
-            datacube_utils.get_df('units', lazy=True)
+            datacube_utils.get_df('units', lazy=True, nwb=False)
             .pipe(group_structures)
             .filter(
                 params.units_query,
@@ -3142,7 +3142,7 @@ def wrap_decoder_helper(
             metrics_table=(
                 pl.scan_parquet(metrics_table_path)
                 .join(
-                    datacube_utils.get_df('units', lazy=True),
+                    datacube_utils.get_df('units', lazy=True, nwb=False),
                     on='unit_id'
                     )
             )
@@ -3213,7 +3213,7 @@ def wrap_decoder_helper(
                         trials_frame=all_trials,
                         as_counts=True,
                         unit_ids=(
-                            datacube_utils.get_df('units', lazy=True)
+                            datacube_utils.get_df('units', lazy=True, nwb=False)
                             .pipe(group_structures)
                             .filter(
                                 params.units_query,
@@ -3250,7 +3250,7 @@ def wrap_decoder_helper(
                         raise ValueError('other_spikes_table_path must be provided if load_other_spikes_table is True')
                     
                     unit_ids=(
-                        datacube_utils.get_df('units', lazy=True)
+                        datacube_utils.get_df('units', lazy=True, nwb=False)
                         .pipe(group_structures)
                         .filter(
                             params.units_query,
@@ -3286,7 +3286,7 @@ def wrap_decoder_helper(
                             trials_frame=all_trials,
                             as_counts=True,
                             unit_ids=(
-                                datacube_utils.get_df('units', lazy=True)
+                                datacube_utils.get_df('units', lazy=True, nwb=False)
                                 .pipe(group_structures)
                                 .filter(
                                     params.units_query,
@@ -3340,7 +3340,7 @@ def wrap_decoder_helper(
             if (
                 trials['block_index'].n_unique() == 1
                 and not (
-                    datacube_utils.get_df('session')
+                    datacube_utils.get_df('session', lazy=False, nwb=False)
                     .filter(
                         pl.col('session_id') == trials['session_id'][0],
                         pl.col('keywords').list.contains('templeton'),
