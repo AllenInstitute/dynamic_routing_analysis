@@ -141,6 +141,7 @@ def _get_spike_times_single_nwb(session_id: str, unit_ids: str | Iterable[str], 
         )
         .filter(pl.col("unit_id").is_in(unit_ids))
         .select("unit_id", "spike_times")
+        .collect()
     )
     unit_id_to_spike_times = dict(zip(units['unit_id'], units['spike_times']))
     return unit_id_to_spike_times
