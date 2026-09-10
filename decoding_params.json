@@ -1,0 +1,10 @@
+{
+    "result_prefix": "test_DRA_refactor",
+    "session_id": "664851_2023-11-13",
+    "unit_subsample_size": 20,
+    "min_n_units": 20,
+    "spike_count_intervals": "pre_stim_single_bin_0.5",
+    "label_to_decode": "rewarded_modality",
+    "linear_shift": 0,
+    "crossval": "leave_2_blocks_out_half_block_shifts"
+}
