@@ -224,6 +224,7 @@ def insert_is_observed(
     assert (type_ := units_lf.collect_schema()["obs_intervals"]).inner == (
         pl.Float64
     ), f"Expected exploded obs_intervals to be pl.List[float64], got {type_}"
+    units_lf = units_lf.cast({"obs_intervals": pl.List})
     intervals_lf = (
         intervals_lf.join(
             units_lf.select(unit_id_col, "obs_intervals"), on=unit_id_col, how="left"
