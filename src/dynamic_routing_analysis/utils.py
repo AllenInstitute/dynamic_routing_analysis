@@ -261,7 +261,7 @@ def get_per_trial_spike_times(
     if session_id is None and unit_ids is None:
         raise ValueError("Must specify session_id or unit_ids")
     elif unit_ids is None:
-        units_df = dr_datacube.get_lf('units', session_id=session_id, nwb=not dr_datacube.config.use_cache).select(units_df_cols).collect()
+        units_df = dr_datacube.get_lf('unit_metrics', session_id=session_id, nwb=not dr_datacube.config.use_cache).select(units_df_cols).collect()
         unit_ids = units_df['unit_id']
     else:
         if isinstance(unit_ids, str):
@@ -270,7 +270,7 @@ def get_per_trial_spike_times(
             unit_ids = tuple(unit_ids)
         if not tuple(unit_ids):
             raise ValueError('unit_ids must be None or a non-empty iterable')
-        units_df = dr_datacube.get_lf('units', nwb=False).select(units_df_cols).filter(pl.col('unit_id').is_in(unit_ids)).collect()
+        units_df = dr_datacube.get_lf('unit_metrics', nwb=False).select(units_df_cols).filter(pl.col('unit_id').is_in(unit_ids)).collect()
 
     if isinstance(trials_frame, str):
         trials_df = dr_datacube.get_lf(trials_frame, nwb=False)
