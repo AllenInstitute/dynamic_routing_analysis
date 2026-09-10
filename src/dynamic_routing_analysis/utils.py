@@ -218,14 +218,10 @@ def insert_is_observed(
             "intervals_frame must contain 'start_time' and 'stop_time' columns"
         )
 
-    if units_schema["obs_intervals"] in (
-        pl.List(pl.List(pl.Float64())),
-        pl.List(pl.List(pl.Int64())),
-        pl.List(pl.List(pl.Null())),
-    ):
+    if units_schema["obs_intervals"].inner.base_type() in (pl.List, pl.Array,):
         logger.info("Converting 'obs_intervals' column to list of lists")
         units_lf = units_lf.explode("obs_intervals")
-    assert (type_ := units_lf.collect_schema()["obs_intervals"]) == pl.List(
+    assert (type_ := units_lf.collect_schema()["obs_intervals"]).inner == (
         pl.Float64
     ), f"Expected exploded obs_intervals to be pl.List(f64), got {type_}"
     intervals_lf = (
