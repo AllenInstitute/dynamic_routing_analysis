@@ -2883,9 +2883,6 @@ def decode_context_with_linear_shift(
             .unique(params.units_group_by)
             .collect()
         )
-    
-    if params.structure is not None:
-        combinations_df = combinations_df.filter(pl.col('structure').eq(params.structure))
 
     #option to apply filter by unit metrics
     elif params.filter_units_by_metrics is True:
@@ -2925,7 +2922,9 @@ def decode_context_with_linear_shift(
                 .unique(params.units_group_by)
                 .collect()
             )
-
+            
+    if params.structure is not None:
+            combinations_df = combinations_df.filter(pl.col('structure').eq(params.structure))
 
     if params.skip_existing and params.data_path.exists():
         existing = (
