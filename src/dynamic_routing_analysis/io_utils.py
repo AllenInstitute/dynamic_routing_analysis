@@ -701,14 +701,17 @@ def facial_features(kernel_name, session, fit, behavior_info):
         return xy, confidence
 
     map_names = {'ears': 'ear_base_l', 'jaw': 'jaw', 'nose': 'nose_tip', 'whisker_pad': 'whisker_pad_l_side'}
+    lp_part_name = map_names[kernel_name]
     try:
-        df = dr_datacube.get_lf(
-            '/processing/behavior/lp_side_camera', session_id=session, nwb=True
-        ).collect().to_pandas()
+        df = (
+            dr_datacube.get_lf('/processing/behavior/lp_side_camera', nwb=True, session_id=session)
+            .select("timestamps", pl.selectors.contains(lp_part_name))
+            .drop(pl.selectors.contains('pca_error'))
+            .collect().to_pandas()
+        )
     except KeyError:
         raise IndexError(f'{session} is not a session with video.')
     timestamps = df['timestamps'].values.astype('float')
-    lp_part_name = map_names[kernel_name]
     part_xy, confidence = part_info_LP(lp_part_name, df)
     this_kernel = bin_timeseries(part_xy, timestamps, fit['timebins_all'])
     this_kernel = pd.Series(this_kernel).ffill().bfill().to_numpy()
