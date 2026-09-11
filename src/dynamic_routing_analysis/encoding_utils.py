@@ -322,7 +322,7 @@ def get_local_fullmodel_data(
         local_fullmodel_data_path(session_id, params).write_bytes(pickle.dumps(data))
         if dr_datacube.on_codeocean() and params.test:
             pathlib.Path(
-                local_fullmodel_data_path(session_id)
+                local_fullmodel_data_path(session_id, params)
                 .as_posix()
                 .replace("scratch", "results")
             ).write_bytes(pickle.dumps(data))
