@@ -21,8 +21,6 @@ import matplotlib
 import polars as pl
 import upath
 
-dr_datacube.config.anon = True
-
 # local modules ---------------------------------------------------- #
 from dynamic_routing_analysis import (codeocean_utils, datacube_utils,
                                       decoding_utils, utils)
@@ -42,9 +40,8 @@ logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR) # suppress 
         
 # processing function ---------------------------------------------- #
 
-if not codeocean_utils.on_code_ocean():
-    datacube_utils.configure(datacube_version='v0.0.272', use_scratch_dir=True)
-    # datacube_utils.configure(datacube_version='v0.0.288', use_scratch_dir=True)
+# if not codeocean_utils.on_code_ocean():
+#     datacube_utils.configure(datacube_version='v0.0.289', use_scratch_dir=True)
 
 def main():
     t0 = time.time()
@@ -71,11 +68,8 @@ def main():
         
     
     # if session_id is passed as a command line argument, we will only process that session,
-    # otherwise we process all session IDs that match filtering criteria:
-    #TODO session table is not versioned - current content represents naive datacube
-    session_table = datacube_utils.get_session_table().to_pandas()
-    session_table['issues']=session_table['issues'].astype(str)
-    session_ids: list[str] = session_table.query(params.session_table_query)['session_id'].values.tolist()
+    # otherwise we process all session IDs IN DATACUBE that match filtering criteria:
+    session_ids: list[str] = dr_datacube.get_session_table(with_behavior_filter=False)
     logger.info(f"Found {len(session_ids)} session_ids after filtering session table")
     
     if params.session_id is not None:
