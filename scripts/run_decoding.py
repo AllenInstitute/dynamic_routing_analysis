@@ -69,7 +69,7 @@ def main():
     
     # if session_id is passed as a command line argument, we will only process that session,
     # otherwise we process all session IDs IN DATACUBE that match filtering criteria:
-    session_ids: list[str] = dr_datacube.get_session_table(with_behavior_filter=False)
+    session_ids: list[str] = dr_datacube.get_session_table(with_behavior_filter=False)['session_id'].to_list()
     logger.info(f"Found {len(session_ids)} session_ids after filtering session table")
     
     if params.session_id is not None:
