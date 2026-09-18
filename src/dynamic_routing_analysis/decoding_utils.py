@@ -1852,6 +1852,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
         'session_id',
         'structure',
         'bin_center',
+        'time_aligned_to',
         'electrode_group_names',
         'unit_subsample_size',
         'unit_criteria',
