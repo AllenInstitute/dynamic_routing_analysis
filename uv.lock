@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -1656,18 +1656,25 @@ name = "dynamic-routing-analysis"
 version = "0.1.1"
 source = { editable = "." }
 dependencies = [
+    { name = "altair", extra = ["save"] },
     { name = "deprecated" },
     { name = "dr-datacube" },
+    { name = "geopandas" },
+    { name = "ipykernel" },
     { name = "matplotlib", version = "3.10.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "matplotlib", version = "3.11.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "npc-lims" },
+    { name = "numba" },
     { name = "numcodecs", version = "0.13.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numcodecs", version = "0.15.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "polars", extra = ["pandas", "plot"] },
+    { name = "pynrrd" },
+    { name = "rasterio" },
     { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-learn", version = "1.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "shapely" },
     { name = "statsmodels" },
     { name = "xarray", version = "2025.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "xarray", version = "2026.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -1677,19 +1684,8 @@ dependencies = [
 codeocean = [
     { name = "aind-session" },
 ]
-notebook = [
-    { name = "ipykernel" },
-]
 npc-sessions = [
     { name = "npc-sessions" },
-]
-plot = [
-    { name = "altair", extra = ["save"] },
-    { name = "geopandas" },
-    { name = "numba" },
-    { name = "pynrrd" },
-    { name = "rasterio" },
-    { name = "shapely" },
 ]
 pynwb = [
     { name = "pynwb" },
@@ -1717,28 +1713,28 @@ testing = [
 [package.metadata]
 requires-dist = [
     { name = "aind-session", marker = "extra == 'codeocean'", specifier = ">=0.3.16" },
-    { name = "altair", extras = ["save"], marker = "extra == 'plot'", specifier = ">=5.4.1" },
+    { name = "altair", extras = ["save"], specifier = ">=5.4.1" },
     { name = "deprecated", specifier = ">=1.2.14" },
     { name = "dr-datacube", git = "https://github.com/AllenNeuralDynamics/dr-datacube.git" },
-    { name = "geopandas", marker = "extra == 'plot'", specifier = ">=1.0.1" },
-    { name = "ipykernel", marker = "extra == 'notebook'", specifier = ">=7.3.0" },
+    { name = "geopandas", specifier = ">=1.0.1" },
+    { name = "ipykernel", specifier = ">=7.3.0" },
     { name = "matplotlib", specifier = ">=3.7.2" },
     { name = "npc-lims", specifier = ">=0.1.0" },
     { name = "npc-sessions", marker = "extra == 'npc-sessions'", specifier = ">=0.0.289" },
-    { name = "numba", marker = "extra == 'plot'", specifier = ">=0.60.0" },
+    { name = "numba", specifier = ">=0.60.0" },
     { name = "numcodecs", specifier = "<0.16" },
     { name = "numpy", specifier = ">=1.24.4" },
     { name = "pandas", specifier = ">=2.0.3" },
     { name = "polars", extras = ["pandas", "plot"], specifier = ">=1.32.0" },
-    { name = "pynrrd", marker = "extra == 'plot'", specifier = ">=1.1.3" },
+    { name = "pynrrd", specifier = ">=1.1.3" },
     { name = "pynwb", marker = "extra == 'pynwb'", specifier = ">=2.3.3" },
-    { name = "rasterio", marker = "extra == 'plot'", specifier = ">=1.4.2" },
+    { name = "rasterio", specifier = ">=1.4.2" },
     { name = "scikit-learn", specifier = ">=1.5.1" },
-    { name = "shapely", marker = "extra == 'plot'", specifier = ">=2.0.6" },
+    { name = "shapely", specifier = ">=2.0.6" },
     { name = "statsmodels", specifier = ">=0.14.2" },
     { name = "xarray", specifier = ">=2024.6.0" },
 ]
-provides-extras = ["notebook", "plot", "pynwb", "npc-sessions", "codeocean"]
+provides-extras = ["pynwb", "npc-sessions", "codeocean"]
 
 [package.metadata.requires-dev]
 bump = [
