@@ -1,5 +1,6 @@
 import json
 import pathlib
+import threading
 import time
 
 import aind_session
@@ -7,12 +8,15 @@ import codeocean.capsule
 import codeocean.computation
 import codeocean.data_asset
 import polars as pl
-import tqdm
 
 client = aind_session.get_codeocean_client()
 
-result_prefix = "v268"
-run_id = "linear_shift_good_blocks"
+print(client)
+result_prefix = 'v289'
+run_id = "2"
+SHORT_TIME_SLEEP = 3
+LONG_TIME_SLEEP = 60
+N_CONCURRENT_COMPUTATIONS = 20
 
 
 def run_encoding(session_id: str):
@@ -39,11 +43,11 @@ def run_encoding(session_id: str):
                 param_name="use_process_pool",
                 value="False",  # all values must be supplied as strings
             ),
-            # codeocean.computation.NamedRunParam(
-            #     param_name="override_params_json",
-            #     value='{"time_of_interest": "quiescent"}',  # all values must be supplied as strings
-            # ),
-        ],
+            codeocean.computation.NamedRunParam(
+                param_name="override_params_json",
+                value='{"time_of_interest": "quiescent", "spike_bin_width": 0.1, "skip_existing": 0, "run_linear_shift": 1, "run_dropout": 1}', # all values must be supplied as strings
+            ),
+    ],
     )
     computation = client.computations.run_capsule(run_params)
     return computation
@@ -64,30 +68,75 @@ session_ids = (
 
 session_ids_16gb = ["713655_2024-08-07", "706401_2024-04-22"]
 
-session_to_computation = {}
-for session_id in tqdm.tqdm(session_ids, desc="Sessions", unit="session"):
-    # if session_id in session_ids_16gb:
-    #     print(f"Skipping {session_id} because it is requires more than a capsule with more than 8GB memory")
-    #     continue
-    print(session_id)
-    session_to_computation[session_id] = run_encoding(session_id).id
-    pathlib.Path("computations.json").write_text(
-        json.dumps(session_to_computation, indent=4)
-    )
-    time.sleep(5)  # Sleep to avoid hitting the API rate limit
+sessions_to_run = set(session_ids)
+sessions_running: set[str] = set()
+sessions_succeeded = set()
+session_id_to_computation: dict[str, codeocean.computation.Computation] = dict()
 
-# Wait for all computations to finish:
-for session, id_ in json.loads(pathlib.Path("computations.json").read_text()).items():
-    computation = client.computations.wait_until_completed(
-        client.computations.get_computation(id_),
-        polling_interval=60,
+def save_all() -> None:
+    pathlib.Path("glm_queue.json").write_text(
+        json.dumps(
+            {
+            "session_id_to_computation": {
+                    session_id: session_id_to_computation[session_id].id
+                    for session_id in session_id_to_computation
+                },
+            "sessions_to_run": list(sessions_to_run),
+            "sessions_running": list(sessions_running),
+            "sessions_succeeded": list(sessions_succeeded),
+            },
+            indent=4,
         )
+    )
 
-if computation.end_status != codeocean.computation.ComputationEndStatus.Succeeded:
-    print("at least one computation failed - not writing consolidated results")
-    quit()
+def check_running_sessions():
+    while sessions_to_run or sessions_running:
+        for session_id in list(sessions_running):
+            time.sleep(SHORT_TIME_SLEEP)  # Sleep to avoid hitting the API rate limit
+            computation = client.computations.get_computation(session_id_to_computation[session_id].id)
+            if computation.state not in (codeocean.computation.ComputationState.Failed, codeocean.computation.ComputationState.Completed):
+                continue
+            if computation.end_status == codeocean.computation.ComputationEndStatus.Succeeded:
+                sessions_running.remove(session_id)
+                sessions_succeeded.add(session_id)
+                save_all()
+                print(f"Computation {computation.id} for session {session_id} succeeded")
+                continue
+            if computation.end_status == codeocean.computation.ComputationEndStatus.Failed:
+                sessions_running.remove(session_id)
+                sessions_to_run.add(session_id)
+                save_all()
+                print(f"Computation {computation.id} for session {session_id} failed - re-queuing")
+                continue
+        if len(sessions_running) > 0:
+            time.sleep(LONG_TIME_SLEEP)  # Wait a minute before checking all computations again
 
-print("writing consolidated results parquet files to S3")
+thread = threading.Thread(target=check_running_sessions, daemon=True)
+thread.start()
+while len(sessions_succeeded) < len(session_ids):
+    if len(sessions_running) >= N_CONCURRENT_COMPUTATIONS:
+        time.sleep(LONG_TIME_SLEEP)
+        continue
+    if not sessions_to_run:
+        # no sessions left to run, but there are still some running (which could go back into sessions_to_run)
+        time.sleep(LONG_TIME_SLEEP)
+        continue
+    session_id = sessions_to_run.pop()
+    computation = run_encoding(session_id)
+    session_id_to_computation[session_id] = computation
+    sessions_running.add(session_id)
+    save_all()
+    print(f"Started computation {computation.id} for session {session_id}")
+    time.sleep(SHORT_TIME_SLEEP)  # Sleep to avoid hitting the API rate limit
+
+print("Waiting for all computations to complete (should take no time as all codeocean computations are complete at this point)")
+thread.join()
+print("All computations completed")
+
+# for session, id_ in json.loads(pathlib.Path("computations.json").read_text()).items():
+#     client.computations.delete_computation(id_)
+
+print('writing consolidated results parquet files to S3')
 client.computations.run_capsule(
     codeocean.computation.RunParams(
         capsule_id="1003b011-db1f-4c50-b2d3-df7f9dc1dc6e",
