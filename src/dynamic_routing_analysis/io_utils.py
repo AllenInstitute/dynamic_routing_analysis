@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import xarray as xr
-from deprecated import deprecated
 from tqdm import tqdm
 
 import dynamic_routing_analysis.datacube_utils as datacube_utils
@@ -110,7 +109,7 @@ def define_kernels(run_params):
             selected_keys = categories['stimulus'] + categories['movements'] + categories['choice']\
                  + [context_var]  +['session_time']
         elif 'quiescent' in time_of_interest:
-            selected_keys = categories['movements_no_licks'] + [context_var, 'session_time'] + categories['choice']
+            selected_keys = categories['movements_no_licks'] + [context_var, 'session_time']
             for choice in categories['choice']:
                 master_kernels_list[choice]['length'] = run_params['quiescent_stop_time'] - run_params['quiescent_start_time']
                 master_kernels_list[choice]['offset'] = -master_kernels_list[choice]['length']
