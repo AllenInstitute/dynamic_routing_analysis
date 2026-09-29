@@ -2247,7 +2247,7 @@ def get_structure_colormap(by_structure=True,by_group=False):
         'Thalamus - association': '#F49D6E',
         # 'Striatum': '#6CB4D9',
         # 'Pallidum': '#4A6FA5',
-        'Basal Ganglia': '#4A6FA5',
+        'Basal Ganglia': '#6CB4D9',
         'Hypothalamus': '#C93C2B',
         # 'Midbrain - sensory': '#D462D4',
         # 'Midbrain - motor': '#9B2D9B',
