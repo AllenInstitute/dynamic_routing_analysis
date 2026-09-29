@@ -1698,6 +1698,7 @@ def plot_brain_heatmap(
     annotation_params: Mapping[str, Any] = {},
     plot_horizontal: bool = False,
     plot_2x2: bool = False,
+    set_colorbar_ticks: Iterable[float] | None = None,
 ) -> tuple[matplotlib.figure.Figure, tuple[pd.DataFrame]]:
     fig = plt.figure()
     gdfs = []
@@ -1966,6 +1967,9 @@ def plot_brain_heatmap(
         return chart, tuple(gdfs)
     else:
         return fig, tuple(gdfs)
+
+    if set_colorbar_ticks is not None:
+        cbar.set_ticks(set_colorbar_ticks)
 
 
 def plot_gdf_alt(
