@@ -1699,6 +1699,8 @@ def plot_brain_heatmap(
     plot_horizontal: bool = False,
     plot_2x2: bool = False,
     set_colorbar_ticks: Iterable[float] | None = None,
+    set_colorbar_label: str | None = None,
+    set_colorbar_fontsize: int = 18,
 ) -> tuple[matplotlib.figure.Figure, tuple[pd.DataFrame]]:
     fig = plt.figure()
     gdfs = []
@@ -1956,20 +1958,22 @@ def plot_brain_heatmap(
         location="bottom" if plot_2x2 else "right",
     )
     if plot_2x2:
-        cbar.ax.tick_params(labelsize=12)
+        cbar.ax.tick_params(labelsize=set_colorbar_fontsize)
     for ax in axes:
         ax.set_aspect(1)
         ax.set_axis_off()
         ax.set_clip_on(False)
-
+    if set_colorbar_ticks is not None:
+            cbar.set_ticks(set_colorbar_ticks)
+    if set_colorbar_label is not None:
+            cbar.set_label(set_colorbar_label, size=set_colorbar_fontsize)
     if interactive:
         chart = plot_gdf_alt(gdfs, ccf_colors=False, cmap=cmap, clevels=clevels)
         return chart, tuple(gdfs)
     else:
-        return fig, tuple(gdfs)
+        return fig, tuple(gdfs)     
 
-    if set_colorbar_ticks is not None:
-        cbar.set_ticks(set_colorbar_ticks)
+    
 
 
 def plot_gdf_alt(
@@ -2211,25 +2215,25 @@ def get_structure_colormap(by_structure=True,by_group=False):
 
     shortened_structure_group_name={
         'Frontal cortex': 'Frontal',
-        'Somatomotor cortex': 'Soma-Mot',
-        'Lateral cortex': 'Lat',
-        'Visual cortex': 'Vis',
-        'Medial cortex': 'Med',
-        'Auditory cortex': 'Aud',
+        'Somatomotor cortex': 'Som-Mot',
+        'Lateral cortex': 'Lateral',
+        'Visual cortex': 'Visual',
+        'Medial cortex': 'Medial',
+        'Auditory cortex': 'Auditory',
         'Cortical subplate': 'CTXsp',
-        'Hippocampal formation': 'Hipp',
-        'Olfactory areas': 'Olf',
+        'Hippocampal formation': 'Hipp.',
+        'Olfactory areas': 'Olfactory',
         'Thalamus - sensorimotor': 'Thal-SM',
-        'Thalamus - association': 'Thal-Assoc',
-        'Hypothalamus': 'HY',
+        'Thalamus - association': 'Thal-Assoc.',
+        'Hypothalamus': 'Hypothal.',
         # 'Striatum': 12,
         # 'Pallidum': 13,
-        'Basal Ganglia': 'BG',
+        'Basal Ganglia': 'Basal Gang.',
         # 'Midbrain - sensory': 15,
         # 'Midbrain - motor': 16,
-        'Midbrain': 'MB',
-        'Hindbrain': 'HB',
-        'Medulla': 'Med',
+        'Midbrain': 'Midbrain',
+        'Hindbrain': 'Hindbrain',
+        'Medulla': 'Medulla',
     }
 
     # CCF-inspired: cortex=greens, thalamus=salmon/coral, striatum=blue, midbrain=magenta, hindbrain=gold
@@ -2357,7 +2361,7 @@ def plot_structure_results(
     x = np.arange(len(plot_df))
 
     # Keep original dimensions
-    fig, ax = plt.subplots(1, 1, figsize=(7.5, 3))
+    fig, ax = plt.subplots(1, 1, figsize=(6.8, 3.3))
 
     for i, row in plot_df.iterrows():
         if row[col_to_plot+'_adj_p_val'] < 0.05:
@@ -2381,9 +2385,17 @@ def plot_structure_results(
             ax.axhline(0.5, color='black', linestyle='--', linewidth=0.5)
 
     ax.set_xlim([-0.5, len(plot_df) - 0.5])
-    ax.set_ylabel(col_alias if col_alias is not None else col_to_plot, fontsize=set_fontsize)
+    ax.set_ylabel(col_alias if col_alias is not None else col_to_plot, fontsize=set_fontsize+0.5)
     ax.set_xticks(x)
-    ax.set_xticklabels(plot_df['structure'].tolist(), rotation=90, fontsize=set_fontsize)
+    ax.set_xticklabels(plot_df['structure'].tolist(), rotation=90, fontsize=set_fontsize-1.0)
+    #stagger x-axis labels to improve readability
+    # for i, label in enumerate(ax.xaxis.get_majorticklabels()):
+    #     if i % 2 != 0:
+    #         # Increase the padding for odd-indexed labels
+    #         label.set_y(-0.1)
+        # else:
+        #     # Keep the padding for even-indexed labels unchanged
+        #     label.set_y(0)
 
     # Mark boundaries between contiguous label groups and get group centers
     group_centers = []
@@ -2402,10 +2414,10 @@ def plot_structure_results(
     # Secondary top axis for structure-group labels
     ax_group = ax.secondary_xaxis('top')
     ax_group.set_xticks(group_centers)
-    ax_group.set_xticklabels(group_labels, fontsize=set_fontsize - 1)
     ax_group.tick_params(axis='x', length=0, pad=2)
     ax_group.spines['top'].set_position(('outward', 4))
     ax_group.spines['top'].set_visible(False)
+    ax_group.set_xticklabels(group_labels, rotation=90, fontsize=set_fontsize+0.5, ha='center')
 
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
