@@ -2892,20 +2892,40 @@ def decode_context_with_linear_shift(
         session_ids = [session_ids]
 
     if params.filter_units_by_metrics is False:
-        combinations_df = (
-            dr_datacube.get_lf('unit_metrics', nwb=False)
-            .drop_nulls('structure')
-            .filter(
-                pl.col('session_id').is_in(session_ids),
-                params.units_query,
+        if params.structure=="all":
+            combinations_df = (
+                dr_datacube.get_lf('unit_metrics', nwb=False)
+                .drop_nulls('structure')
+                .filter(
+                    pl.col('session_id').is_in(session_ids),
+                    params.units_query,
+                )
+                .with_columns(
+                    pl.col('structure').alias('original_structure'),
+                    pl.lit('all').alias('structure')
+                )
+                .pipe(group_structures, keep_originals=True)
+                .pipe(repeat_multi_probe_areas)
+                .filter(params.min_n_units_query)
+                .select(params.units_group_by)
+                .unique(params.units_group_by)
+                .collect()
             )
-            .pipe(group_structures, keep_originals=True)
-            .pipe(repeat_multi_probe_areas)
-            .filter(params.min_n_units_query)
-            .select(params.units_group_by)
-            .unique(params.units_group_by)
-            .collect()
-        )
+        else:
+            combinations_df = (
+                dr_datacube.get_lf('unit_metrics', nwb=False)
+                .drop_nulls('structure')
+                .filter(
+                    pl.col('session_id').is_in(session_ids),
+                    params.units_query,
+                )
+                .pipe(group_structures, keep_originals=True)
+                .pipe(repeat_multi_probe_areas)
+                .filter(params.min_n_units_query)
+                .select(params.units_group_by)
+                .unique(params.units_group_by)
+                .collect()
+            )
 
     #option to apply filter by unit metrics
     elif params.filter_units_by_metrics is True:
@@ -2946,7 +2966,7 @@ def decode_context_with_linear_shift(
                 .collect()
             )
             
-    if params.structure is not None:
+    if params.structure is not None and params.structure is not 'all':
             combinations_df = combinations_df.filter(pl.col('structure').eq(params.structure))
 
     if params.skip_existing and params.data_path.exists():
