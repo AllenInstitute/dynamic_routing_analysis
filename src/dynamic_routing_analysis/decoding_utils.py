@@ -3640,6 +3640,7 @@ def wrap_decoder_helper(
                             # don't save trial indices for all shifts
                             result['trial_indices'] = None
 
+                        result['unit_criteria']=params.unit_criteria
                         result['unit_ids'] = unit_ids
                         # result['coefs'] = _result['coefs'][0].tolist()
                         result['coefs'] = np.nanmean(np.vstack(_result['coefs_all']),axis=0).tolist()
