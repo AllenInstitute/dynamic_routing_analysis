@@ -202,6 +202,27 @@ class Params(pydantic_settings.BaseSettings):
             'medium_drift': drift_base & (pl.col('activity_drift') <= 0.15),
 
             'strict_drift': drift_base & (pl.col('activity_drift') <= 0.1),
+
+            'drift_0.5': drift_base & (pl.col('activity_drift') <= 0.5),
+            'drift_0.475': drift_base & (pl.col('activity_drift') <= 0.475),
+            'drift_0.45': drift_base & (pl.col('activity_drift') <= 0.45),
+            'drift_0.425': drift_base & (pl.col('activity_drift') <= 0.425),
+            'drift_0.4': drift_base & (pl.col('activity_drift') <= 0.4),
+            'drift_0.375': drift_base & (pl.col('activity_drift') <= 0.375),
+            'drift_0.35': drift_base & (pl.col('activity_drift') <= 0.35),
+            'drift_0.325': drift_base & (pl.col('activity_drift') <= 0.325),
+            'drift_0.3': drift_base & (pl.col('activity_drift') <= 0.3),
+            'drift_0.275': drift_base & (pl.col('activity_drift') <= 0.275),
+            'drift_0.25': drift_base & (pl.col('activity_drift') <= 0.25),
+            'drift_0.225': drift_base & (pl.col('activity_drift') <= 0.225),
+            'drift_0.2': drift_base & (pl.col('activity_drift') <= 0.2),
+            'drift_0.175': drift_base & (pl.col('activity_drift') <= 0.175),
+            'drift_0.15': drift_base & (pl.col('activity_drift') <= 0.15),
+            'drift_0.125': drift_base & (pl.col('activity_drift') <= 0.125),
+            'drift_0.1': drift_base & (pl.col('activity_drift') <= 0.1),
+            'drift_0.075': drift_base & (pl.col('activity_drift') <= 0.075),
+            'drift_0.05': drift_base & (pl.col('activity_drift') <= 0.05),
+            'drift_0.025': drift_base & (pl.col('activity_drift') <= 0.025),
         }[self.unit_criteria]
 
     @pydantic.computed_field(repr=False)
