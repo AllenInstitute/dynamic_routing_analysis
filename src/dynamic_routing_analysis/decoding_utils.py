@@ -152,6 +152,8 @@ class Params(pydantic_settings.BaseSettings):
     """ toggle training decoder model on one context and testing on the other. Requires decoding something other than context, i.e. stimulus id """
     cross_temporal_decoding: bool = False
     """ toggle temporal generalization: test each window's cross-validated decoder on every other window's data (adds extra rows flagged is_cross_temporal) """
+    save_cross_temporal_trial_predictions: bool = False
+    """ toggle saving trial-level predictions for cross-temporal decoding """
     save_all_coefs: bool = False
     """ toggle saving decoder coefficients across all train/test folds """
     load_other_spikes_table: bool = False
@@ -1448,6 +1450,7 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
         'unit_subsample_size',
         'bin_size',
         'bin_center',
+        'unit_criteria',
     }
 
     combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
@@ -1485,7 +1488,7 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
                 pl.col('mean_true').sub(pl.col('median_null')).alias('mean_diff'),
             )
             # get the means over sessions:
-            .group_by('structure', 'unit_subsample_size','bin_size','bin_center')#, 'unit_criteria')
+            .group_by('structure', 'unit_subsample_size','bin_size','bin_center', 'unit_criteria')
             .agg(
                 pl.col('mean_true').mean(),
                 pl.col('mean_true').std().truediv(pl.col('mean_true').count().pow(0.5)).alias('sem_true'),
@@ -1530,7 +1533,7 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
 
             )
             # get the means over sessions:
-            .group_by('structure', 'unit_subsample_size','bin_size','bin_center')#, 'unit_criteria')
+            .group_by('structure', 'unit_subsample_size','bin_size','bin_center', 'unit_criteria')
             .agg(
                 pl.col('mean_true').mean(),
                 pl.col('mean_true').std().truediv(pl.col('mean_true').count().pow(0.5)).alias('sem_true'),
@@ -3150,21 +3153,39 @@ def wrap_decoder_helper(
     resample_unit_ids=[]
 
     if params.filter_units_by_metrics is False:
-        unique_unit_ids=(
-            dr_datacube.get_lf('unit_metrics', nwb=False)
-            .pipe(group_structures)
-            .filter(
-                params.units_query,
-                pl.col('session_id') == session_id,
-                pl.col('structure') == structure,
-                pl.col('electrode_group_name').is_in(electrode_group_names),
+        if params.structure=='all':
+            unique_unit_ids=(
+                dr_datacube.get_lf('unit_metrics', nwb=False)
+                .pipe(group_structures)
+                .with_columns(
+                    pl.lit('all').alias('structure')
+                )
+                .filter(
+                    params.units_query,
+                    pl.col('session_id') == session_id,
+                )
+                .select('unit_id')
+                .sort('unit_id')
+                .collect()
+                ['unit_id']
+                .unique()
             )
-            .select('unit_id')
-            .sort('unit_id')
-            .collect()
-            ['unit_id']
-            .unique()
-        )
+        else:
+            unique_unit_ids=(
+                dr_datacube.get_lf('unit_metrics', nwb=False)
+                .pipe(group_structures)
+                .filter(
+                    params.units_query,
+                    pl.col('session_id') == session_id,
+                    pl.col('structure') == structure,
+                    pl.col('electrode_group_name').is_in(electrode_group_names),
+                )
+                .select('unit_id')
+                .sort('unit_id')
+                .collect()
+                ['unit_id']
+                .unique()
+            )
 
     # option to filter by separate unit metrics table (unit IDs must match!)
     # unit metrics data asset folder must contain a single .parquet file!
@@ -3715,6 +3736,9 @@ def wrap_decoder_helper(
                     row['balanced_accuracy_test_all'] = [float(a) for a in fold_acc]
                     row['balanced_accuracy_train'] = None
                     # per-trial outputs don't apply off-diagonal
+                    if params.save_cross_temporal_trial_predictions:
+                        row['predict_proba'] = [float(a) for a in test_win['predict_proba']]
+                        row['decision_function'] = [float(a) for a in test_win['decision_function']]
                     for k in list(row.keys()):
                         if k.startswith('predict_proba') or k.startswith('decision_function'):
                             row[k] = None
