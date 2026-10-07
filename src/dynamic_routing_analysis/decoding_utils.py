@@ -152,6 +152,8 @@ class Params(pydantic_settings.BaseSettings):
     """ toggle training decoder model on one context and testing on the other. Requires decoding something other than context, i.e. stimulus id """
     cross_temporal_decoding: bool = False
     """ toggle temporal generalization: test each window's cross-validated decoder on every other window's data (adds extra rows flagged is_cross_temporal) """
+    save_cross_temporal_trial_predictions: bool = False
+    """ toggle saving trial-level predictions for cross-temporal decoding """
     save_all_coefs: bool = False
     """ toggle saving decoder coefficients across all train/test folds """
     load_other_spikes_table: bool = False
@@ -202,6 +204,27 @@ class Params(pydantic_settings.BaseSettings):
             'medium_drift': drift_base & (pl.col('activity_drift') <= 0.15),
 
             'strict_drift': drift_base & (pl.col('activity_drift') <= 0.1),
+
+            'drift_0.5': drift_base & (pl.col('activity_drift') <= 0.5),
+            'drift_0.475': drift_base & (pl.col('activity_drift') <= 0.475),
+            'drift_0.45': drift_base & (pl.col('activity_drift') <= 0.45),
+            'drift_0.425': drift_base & (pl.col('activity_drift') <= 0.425),
+            'drift_0.4': drift_base & (pl.col('activity_drift') <= 0.4),
+            'drift_0.375': drift_base & (pl.col('activity_drift') <= 0.375),
+            'drift_0.35': drift_base & (pl.col('activity_drift') <= 0.35),
+            'drift_0.325': drift_base & (pl.col('activity_drift') <= 0.325),
+            'drift_0.3': drift_base & (pl.col('activity_drift') <= 0.3),
+            'drift_0.275': drift_base & (pl.col('activity_drift') <= 0.275),
+            'drift_0.25': drift_base & (pl.col('activity_drift') <= 0.25),
+            'drift_0.225': drift_base & (pl.col('activity_drift') <= 0.225),
+            'drift_0.2': drift_base & (pl.col('activity_drift') <= 0.2),
+            'drift_0.175': drift_base & (pl.col('activity_drift') <= 0.175),
+            'drift_0.15': drift_base & (pl.col('activity_drift') <= 0.15),
+            'drift_0.125': drift_base & (pl.col('activity_drift') <= 0.125),
+            'drift_0.1': drift_base & (pl.col('activity_drift') <= 0.1),
+            'drift_0.075': drift_base & (pl.col('activity_drift') <= 0.075),
+            'drift_0.05': drift_base & (pl.col('activity_drift') <= 0.05),
+            'drift_0.025': drift_base & (pl.col('activity_drift') <= 0.025),
         }[self.unit_criteria]
 
     @pydantic.computed_field(repr=False)
@@ -1427,6 +1450,7 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
         'unit_subsample_size',
         'bin_size',
         'bin_center',
+        'unit_criteria',
     }
 
     combine_multi_probe_expr = get_multi_probe_expr(combine_multi_probe_rec)
@@ -1464,7 +1488,7 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
                 pl.col('mean_true').sub(pl.col('median_null')).alias('mean_diff'),
             )
             # get the means over sessions:
-            .group_by('structure', 'unit_subsample_size','bin_size','bin_center')#, 'unit_criteria')
+            .group_by('structure', 'unit_subsample_size','bin_size','bin_center', 'unit_criteria')
             .agg(
                 pl.col('mean_true').mean(),
                 pl.col('mean_true').std().truediv(pl.col('mean_true').count().pow(0.5)).alias('sem_true'),
@@ -1509,7 +1533,7 @@ def load_structure_average_decoder_accuracy(results_path, session_list, combine_
 
             )
             # get the means over sessions:
-            .group_by('structure', 'unit_subsample_size','bin_size','bin_center')#, 'unit_criteria')
+            .group_by('structure', 'unit_subsample_size','bin_size','bin_center', 'unit_criteria')
             .agg(
                 pl.col('mean_true').mean(),
                 pl.col('mean_true').std().truediv(pl.col('mean_true').count().pow(0.5)).alias('sem_true'),
@@ -2871,20 +2895,40 @@ def decode_context_with_linear_shift(
         session_ids = [session_ids]
 
     if params.filter_units_by_metrics is False:
-        combinations_df = (
-            dr_datacube.get_lf('unit_metrics', nwb=False)
-            .drop_nulls('structure')
-            .filter(
-                pl.col('session_id').is_in(session_ids),
-                params.units_query,
+        if params.structure=="all":
+            combinations_df = (
+                dr_datacube.get_lf('unit_metrics', nwb=False)
+                .drop_nulls('structure')
+                .filter(
+                    pl.col('session_id').is_in(session_ids),
+                    params.units_query,
+                )
+                .with_columns(
+                    pl.col('structure').alias('original_structure'),
+                    pl.lit('all').alias('structure')
+                )
+                .pipe(group_structures, keep_originals=True)
+                .pipe(repeat_multi_probe_areas)
+                .filter(params.min_n_units_query)
+                .select(params.units_group_by)
+                .unique(params.units_group_by)
+                .collect()
             )
-            .pipe(group_structures, keep_originals=True)
-            .pipe(repeat_multi_probe_areas)
-            .filter(params.min_n_units_query)
-            .select(params.units_group_by)
-            .unique(params.units_group_by)
-            .collect()
-        )
+        else:
+            combinations_df = (
+                dr_datacube.get_lf('unit_metrics', nwb=False)
+                .drop_nulls('structure')
+                .filter(
+                    pl.col('session_id').is_in(session_ids),
+                    params.units_query,
+                )
+                .pipe(group_structures, keep_originals=True)
+                .pipe(repeat_multi_probe_areas)
+                .filter(params.min_n_units_query)
+                .select(params.units_group_by)
+                .unique(params.units_group_by)
+                .collect()
+            )
 
     #option to apply filter by unit metrics
     elif params.filter_units_by_metrics is True:
@@ -2925,7 +2969,7 @@ def decode_context_with_linear_shift(
                 .collect()
             )
             
-    if params.structure is not None:
+    if params.structure is not None and params.structure is not 'all':
             combinations_df = combinations_df.filter(pl.col('structure').eq(params.structure))
 
     if params.skip_existing and params.data_path.exists():
@@ -3109,21 +3153,39 @@ def wrap_decoder_helper(
     resample_unit_ids=[]
 
     if params.filter_units_by_metrics is False:
-        unique_unit_ids=(
-            dr_datacube.get_lf('unit_metrics', nwb=False)
-            .pipe(group_structures)
-            .filter(
-                params.units_query,
-                pl.col('session_id') == session_id,
-                pl.col('structure') == structure,
-                pl.col('electrode_group_name').is_in(electrode_group_names),
+        if params.structure=='all':
+            unique_unit_ids=(
+                dr_datacube.get_lf('unit_metrics', nwb=False)
+                .pipe(group_structures)
+                .with_columns(
+                    pl.lit('all').alias('structure')
+                )
+                .filter(
+                    params.units_query,
+                    pl.col('session_id') == session_id,
+                )
+                .select('unit_id')
+                .sort('unit_id')
+                .collect()
+                ['unit_id']
+                .unique()
             )
-            .select('unit_id')
-            .sort('unit_id')
-            .collect()
-            ['unit_id']
-            .unique()
-        )
+        else:
+            unique_unit_ids=(
+                dr_datacube.get_lf('unit_metrics', nwb=False)
+                .pipe(group_structures)
+                .filter(
+                    params.units_query,
+                    pl.col('session_id') == session_id,
+                    pl.col('structure') == structure,
+                    pl.col('electrode_group_name').is_in(electrode_group_names),
+                )
+                .select('unit_id')
+                .sort('unit_id')
+                .collect()
+                ['unit_id']
+                .unique()
+            )
 
     # option to filter by separate unit metrics table (unit IDs must match!)
     # unit metrics data asset folder must contain a single .parquet file!
@@ -3599,6 +3661,7 @@ def wrap_decoder_helper(
                             # don't save trial indices for all shifts
                             result['trial_indices'] = None
 
+                        result['unit_criteria']=params.unit_criteria
                         result['unit_ids'] = unit_ids
                         # result['coefs'] = _result['coefs'][0].tolist()
                         result['coefs'] = np.nanmean(np.vstack(_result['coefs_all']),axis=0).tolist()
@@ -3673,6 +3736,9 @@ def wrap_decoder_helper(
                     row['balanced_accuracy_test_all'] = [float(a) for a in fold_acc]
                     row['balanced_accuracy_train'] = None
                     # per-trial outputs don't apply off-diagonal
+                    if params.save_cross_temporal_trial_predictions:
+                        row['predict_proba'] = [float(a) for a in test_win['predict_proba']]
+                        row['decision_function'] = [float(a) for a in test_win['decision_function']]
                     for k in list(row.keys()):
                         if k.startswith('predict_proba') or k.startswith('decision_function'):
                             row[k] = None
