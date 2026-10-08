@@ -2880,7 +2880,7 @@ def repeat_multi_probe_areas(frame: polars._typing.FrameType) -> polars._typing.
     return (
         pl.concat(
             [
-                frame.with_columns(pl.col('electrode_group_name').cast(pl.List(pl.String)).alias('electrode_group_names')),
+                frame.with_columns(pl.list(pl.col('electrode_group_name')).alias('electrode_group_names')),
                 duplicates,
             ],
         )
