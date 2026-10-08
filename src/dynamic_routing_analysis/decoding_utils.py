@@ -3400,6 +3400,15 @@ def wrap_decoder_helper(
                     .select(params.label_to_decode, 'start_time', 'trial_index', 'block_index', 'session_id', 'rewarded_modality', 'is_vis_stim', 'is_aud_stim', 'is_correct')
                 )
 
+            if trials.is_empty():
+                logger.warning(
+                    "No matching trials found for %s %s %s; skipping",
+                    session_id,
+                    structure,
+                    electrode_group_names,
+                )
+                continue
+
             if (
                 trials['block_index'].n_unique() == 1
                 and trials['session_id'][0] in dr_datacube.get_session_ids_from_github(session_type='templeton', with_behavior_filter=False)
