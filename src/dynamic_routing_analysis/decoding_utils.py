@@ -2880,7 +2880,7 @@ def repeat_multi_probe_areas(frame: polars._typing.FrameType) -> polars._typing.
     return (
         pl.concat(
             [
-                frame.with_columns(pl.col('electrode_group_name').cast(pl.List(pl.String)).alias('electrode_group_names')),
+                frame.with_columns(pl.list(pl.col('electrode_group_name')).alias('electrode_group_names')),
                 duplicates,
             ],
         )
@@ -3399,6 +3399,15 @@ def wrap_decoder_helper(
                     .sort('trial_index')
                     .select(params.label_to_decode, 'start_time', 'trial_index', 'block_index', 'session_id', 'rewarded_modality', 'is_vis_stim', 'is_aud_stim', 'is_correct')
                 )
+
+            if trials.is_empty():
+                logger.warning(
+                    "No matching trials found for %s %s %s; skipping",
+                    session_id,
+                    structure,
+                    electrode_group_names,
+                )
+                continue
 
             if (
                 trials['block_index'].n_unique() == 1
