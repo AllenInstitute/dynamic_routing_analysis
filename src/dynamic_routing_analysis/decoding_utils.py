@@ -633,9 +633,6 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
 
     output={}
 
-    if sel_train_indices is None:
-        sel_train_indices = np.arange(len(labels))
-
     if scaler == 'standard':
         scaler = StandardScaler()
     elif scaler == 'robust':
@@ -3080,6 +3077,18 @@ def wrap_decoder_helper(
         .collect()
     )
 
+    sel_train_indices_np = (
+        dr_datacube.get_lf('trials', nwb=False)
+        .filter(
+            pl.col('session_id') == session_id,
+        ).filter(
+            params.sel_train_indices,
+        )
+        .select(pl.col('trial_index'))
+        .collect()
+        .to_numpy()
+    )
+
     if params.test_on_spontaneous:
         #make random seed from the session id for consistency
         random_seed = int(session_id.replace('_','').replace('-',''))
@@ -3581,7 +3590,7 @@ def wrap_decoder_helper(
                             other_data=spont_data,
                             scaler=params.scaler,
                             return_fold_models=params.cross_temporal_decoding and is_all_trials,
-                            sel_train_indices=np.where(params.sel_train_indices)[0] if params.sel_train_indices is not None else None,
+                            sel_train_indices=sel_train_indices_np,
                         )
                         result = {}
                         result['balanced_accuracy_test'] = _result['balanced_accuracy_test'].item()
