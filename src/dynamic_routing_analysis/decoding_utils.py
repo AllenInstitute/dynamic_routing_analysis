@@ -447,7 +447,7 @@ def _cross_temporal_fold_accuracy(train_win: dict, test_win: dict) -> list[float
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                    crossval_index=None,labels_as_index=False,train_test_split_input=None,train_test_split_label=None,
                    regularization=None,penalty=None,solver=None,n_jobs=None,set_random_state=None,
-                   other_data=None,scaler='robust',return_fold_models=False):
+                   other_data=None,scaler='robust',return_fold_models=False,sel_train_indices=None):
     """Train and evaluate a decoder to predict labels from input data.
 
     This function provides a flexible interface for training various classification
@@ -508,6 +508,8 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     return_fold_models : bool, default=False
         If True, also return a genuine per-fold fitted model for each cross-validation
         split (captured before the final all-trials refit) under output key 'fold_models'.
+    sel_train_indices : array-like, optional
+        Indices of selected training trials. If provided, only these trials will be used for training.
 
     Returns
     -------
@@ -628,6 +630,9 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                                C=regularization,penalty=penalty,solver=solver,n_jobs=n_jobs)
 
     output={}
+
+    if sel_train_indices is None:
+        sel_train_indices = np.arange(len(labels))
 
     if scaler == 'standard':
         scaler = StandardScaler()
@@ -918,6 +923,9 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                             '5x_5_fold']
 
     for train,test in train_test_split:
+
+        if sel_train_indices is not None:
+            train = [i for i in train if i in sel_train_indices]
 
         clf.fit(X[train],y[train])
         prediction=clf.predict(X[test])
