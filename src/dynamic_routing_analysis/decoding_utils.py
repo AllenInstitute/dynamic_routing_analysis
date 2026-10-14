@@ -160,6 +160,8 @@ class Params(pydantic_settings.BaseSettings):
     """ toggle loading spikes table from other source for decoding i.e. glm residuals on s3 or isilon """
     other_spikes_table_path: str | None = None
     """ path to other spikes table """
+    sel_train_indices: Annotated[str | Expr, pydantic.AfterValidator(to_polars_expr)] = pydantic.Field(default_factory = lambda:pl.lit(True))
+    """ indices of selected training trials """
 
     results_path: Annotated[upath.UPath, pydantic.BeforeValidator(to_upath)] = upath.UPath(
         "s3://aind-scratch-data/dynamic-routing/decoding/results"
@@ -3579,6 +3581,7 @@ def wrap_decoder_helper(
                             other_data=spont_data,
                             scaler=params.scaler,
                             return_fold_models=params.cross_temporal_decoding and is_all_trials,
+                            sel_train_indices=np.where(params.sel_train_indices)[0] if params.sel_train_indices is not None else None,
                         )
                         result = {}
                         result['balanced_accuracy_test'] = _result['balanced_accuracy_test'].item()
