@@ -1273,7 +1273,7 @@ def exclude_structures_from_df(df, exclude_redundant_structures=True, exclude_ge
 
     return df
 
-def get_consolidated_s3_path(datacube_version='272'):
+def get_consolidated_s3_path(datacube_version='289'):
     return f"s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.{datacube_version}/consolidated/"
 
 def load_single_session_decoder_accuracy(results_path, sel_session, combine_multi_probe_rec=True, use_linear_shift=True):
@@ -1566,7 +1566,7 @@ def load_session_wise_decoder_accuracy(
         results_path, session_list, session_table,
         combine_multi_probe_rec=True, keep_original_structure=False,
         exclude_redundant_structures=True, exclude_general_structures=True,
-        is_all_trials=False, use_linear_shift=True, datacube_version='272'):
+        is_all_trials=False, use_linear_shift=True, datacube_version='289'):
     """Load decoder accuracy with session-level metadata.
 
     Loads decoder results for multiple sessions and enriches them with behavioral
@@ -1814,7 +1814,7 @@ def load_session_wise_decoder_accuracy(
 
 
 def load_single_session_decoder_confidence(results_path, sel_session, combine_multi_probe_rec=True, 
-                                           predict_proba_alias='predict_proba', datacube_version='272'):
+                                           predict_proba_alias='predict_proba', datacube_version='289'):
     """Load decoder confidence (predicted probabilities) for a single session.
 
     Loads trial-by-trial decoder predictions and enriches them with trial metadata
@@ -1955,7 +1955,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
 
 def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session, combine_multi_probe_rec=True, 
                                                        predict_proba_alias='predict_proba_spont',
-                                                       datacube_version='272'):
+                                                       datacube_version='289'):
     """Load decoder predictions for spontaneous (non-task) epochs in a single session.
 
     Applies trained decoders to spontaneous activity epochs to assess whether context
@@ -2108,7 +2108,7 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
 def load_session_wise_decoder_confidence(
         results_path, session_list, combine_multi_probe_rec=True,
         exclude_redundant_structures=True, exclude_general_structures=True,
-        predict_proba_alias='predict_proba', datacube_version='272'):
+        predict_proba_alias='predict_proba', datacube_version='289'):
     """Load decoder confidence across multiple sessions with trial-level predictions.
 
     Aggregates trial-by-trial decoder predictions across sessions, averaging over
@@ -2281,7 +2281,7 @@ def load_session_wise_decoder_confidence(
 def load_session_wise_decoder_confidence_spont_epoch(
         results_path, session_list, combine_multi_probe_rec=True,
         exclude_redundant_structures=True, exclude_general_structures=True,
-        predict_proba_alias='predict_proba_spont', datacube_version='272'):
+        predict_proba_alias='predict_proba_spont', datacube_version='289'):
     """Load decoder predictions for spontaneous epochs across multiple sessions.
 
     Aggregates decoder predictions during spontaneous (non-task) periods across
@@ -2526,7 +2526,7 @@ def load_decoder_coefs(results_path, session_list, combine_multi_probe_rec=True,
 
     return decoder_coefs_df
 
-def get_average_session_structure_ccf_coords(results_session_df,all_units_table_path=None,datacube_version='272'):
+def get_average_session_structure_ccf_coords(results_session_df,all_units_table_path=None,datacube_version='289'):
     """Calculate average CCF coordinates for each session-structure combination.
 
     Computes the mean Allen Institute Common Coordinate Framework (CCF) coordinates
@@ -2542,7 +2542,7 @@ def get_average_session_structure_ccf_coords(results_session_df,all_units_table_
     all_units_table_path : str, optional
         Path to consolidated units table parquet file containing CCF coordinates.
         If None, uses default path:
-        's3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet'
+        's3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.289/consolidated/units.parquet'
 
     Returns
     -------
@@ -2576,7 +2576,7 @@ def get_average_session_structure_ccf_coords(results_session_df,all_units_table_
     >>> plt.scatter(merged['ccf_ap'], merged['mean_diff'])
     """
 
-    consolidated_s3_path=get_consolidated_s3_path(datacube_version='272')
+    consolidated_s3_path=get_consolidated_s3_path(datacube_version='289')
 
     if type(results_session_df) == pd.DataFrame or type(results_session_df) == pl.DataFrame:
         if type(results_session_df) == pl.DataFrame:
@@ -2652,8 +2652,8 @@ def get_context_switch_table(predict_proba_pd, session_list, sel_unit_subsample_
 
     get_trials_rel_to_switch=[-3,-2,-1,0,1,2,3,4]
 
-    all_performance=pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/performance.parquet').collect().to_pandas()
-    all_trials=pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/trials.parquet').collect().to_pandas()
+    all_performance=pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.289/consolidated/performance.parquet').collect().to_pandas()
+    all_trials=pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.289/consolidated/trials.parquet').collect().to_pandas()
 
     if sel_unit_subsample_size is None:
         #get the first unique unit_subsample_size
