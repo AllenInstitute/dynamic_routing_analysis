@@ -120,9 +120,12 @@ class Params(pydantic_settings.BaseSettings):
     regularization: float | None = None
     """ set regularization (C) for the decoder. Setting to None reverts to the default value (usually 1.0) """
     penalty: str | None = None
-    """ set penalty for the decoder. Setting to None reverts to default """
+    """ set penalty for the decoder. Setting to None reverts to default. deprecated. """
     solver: str | None = None
     """ set solver for the decoder. Setting to None reverts to default """
+    l1_ratio: float | None = 0
+    """ set l1 ratio for the decoder if applicable. Setting to None reverts to default """
+    
     units_group_by: list[str] = ['session_id', 'structure', 'electrode_group_names']
 
     trials_filter: Annotated[str | Expr, pydantic.AfterValidator(to_polars_expr)] = pydantic.Field(default_factory = lambda:pl.lit(True))
@@ -448,7 +451,7 @@ def _cross_temporal_fold_accuracy(train_win: dict, test_win: dict) -> list[float
 
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                    crossval_index=None,labels_as_index=False,train_test_split_input=None,train_test_split_label=None,
-                   regularization=None,penalty=None,solver=None,n_jobs=None,set_random_state=None,
+                   regularization=None,penalty=None,l1_ratio=None,solver=None,n_jobs=None,set_random_state=None,
                    other_data=None,scaler='robust',return_fold_models=False,sel_train_indices=None):
     """Train and evaluate a decoder to predict labels from input data.
 
@@ -585,7 +588,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         from sklearn.svm import LinearSVC
         if regularization is None:
             regularization = 1.0
-        if penalty is None:
+        if penalty is not None:
             penalty = 'l2'
         if solver is not None:
             logger.warning('Solver not used for LinearSVC')
@@ -624,8 +627,11 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         from sklearn.linear_model import LogisticRegression
         if regularization is None:
             regularization = 1.0
-        if penalty is None:
-            penalty = 'l2'
+        if penalty is not None:
+            # penalty = 'l2'
+            logger.warning('Penalty is deprecated for logistic regression, use l1_ratio instead.')
+        if l1_ratio is None:
+            l1_ratio = 0 # default to 0, or L2
         if solver is None:
             solver = 'lbfgs'
         clf=LogisticRegression(max_iter=5000,class_weight='balanced',
@@ -3585,6 +3591,7 @@ def wrap_decoder_helper(
                             train_test_split_label=train_test_split_label,
                             regularization=params.regularization,
                             penalty=params.penalty,
+                            l1_ratio=params.l1_ratio,
                             solver=params.solver,
                             n_jobs=None,
                             other_data=spont_data,
