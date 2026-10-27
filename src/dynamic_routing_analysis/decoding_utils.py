@@ -2654,9 +2654,13 @@ def get_session_structure_results(predict_proba_pd, sel_session, sel_structure, 
     return example_area_results
 
 
-def get_context_switch_table(predict_proba_pd, session_list, sel_unit_subsample_size=None, sel_time_aligned_to='stim_start_time'):
+def get_context_switch_table(predict_proba_pd, session_list, sel_unit_subsample_size=None, sel_time_aligned_to='stim_start_time',
+                             trials_rel_to_switch=None):
 
-    get_trials_rel_to_switch=[-3,-2,-1,0,1,2,3,4]
+    if trials_rel_to_switch is None:
+        get_trials_rel_to_switch=[-3,-2,-1,0,1,2,3,4]
+    else:
+        get_trials_rel_to_switch=list(trials_rel_to_switch)
 
     all_performance=pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.289/consolidated/performance.parquet').collect().to_pandas()
     all_trials=pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.289/consolidated/trials.parquet').collect().to_pandas()
@@ -2766,7 +2770,8 @@ def get_context_switch_table(predict_proba_pd, session_list, sel_unit_subsample_
                     context_switch_table['dprime_after_switch'].append(dprime_after_switch)
 
     context_switch_table=pd.DataFrame(context_switch_table)
-    context_switch_table['bin_centers']=context_switch_table['bin_centers'].round(4)
+    # bin_centers holds one array per row (object dtype), so round elementwise
+    context_switch_table['bin_centers']=context_switch_table['bin_centers'].apply(lambda x: np.round(x,4))
 
     delta_predict_proba_2_bins=[]
     delta_predict_proba_3_bins=[]
