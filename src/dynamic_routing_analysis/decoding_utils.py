@@ -120,9 +120,12 @@ class Params(pydantic_settings.BaseSettings):
     regularization: float | None = None
     """ set regularization (C) for the decoder. Setting to None reverts to the default value (usually 1.0) """
     penalty: str | None = None
-    """ set penalty for the decoder. Setting to None reverts to default """
+    """ set penalty for the decoder. Setting to None reverts to default. deprecated. """
     solver: str | None = None
     """ set solver for the decoder. Setting to None reverts to default """
+    l1_ratio: float | None = 0
+    """ set l1 ratio for the decoder if applicable. Setting to None reverts to default """
+    
     units_group_by: list[str] = ['session_id', 'structure', 'electrode_group_names']
 
     trials_filter: Annotated[str | Expr, pydantic.AfterValidator(to_polars_expr)] = pydantic.Field(default_factory = lambda:pl.lit(True))
@@ -160,6 +163,8 @@ class Params(pydantic_settings.BaseSettings):
     """ toggle loading spikes table from other source for decoding i.e. glm residuals on s3 or isilon """
     other_spikes_table_path: str | None = None
     """ path to other spikes table """
+    sel_train_indices: Annotated[str | Expr, pydantic.AfterValidator(to_polars_expr)] = pydantic.Field(default_factory = lambda:pl.lit(True))
+    """ indices of selected training trials """
 
     results_path: Annotated[upath.UPath, pydantic.BeforeValidator(to_upath)] = upath.UPath(
         "s3://aind-scratch-data/dynamic-routing/decoding/results"
@@ -446,8 +451,8 @@ def _cross_temporal_fold_accuracy(train_win: dict, test_win: dict) -> list[float
 
 def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                    crossval_index=None,labels_as_index=False,train_test_split_input=None,train_test_split_label=None,
-                   regularization=None,penalty=None,solver=None,n_jobs=None,set_random_state=None,
-                   other_data=None,scaler='robust',return_fold_models=False):
+                   regularization=None,penalty=None,l1_ratio=None,solver=None,n_jobs=None,set_random_state=None,
+                   other_data=None,scaler='robust',return_fold_models=False,sel_train_indices=None):
     """Train and evaluate a decoder to predict labels from input data.
 
     This function provides a flexible interface for training various classification
@@ -508,6 +513,8 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
     return_fold_models : bool, default=False
         If True, also return a genuine per-fold fitted model for each cross-validation
         split (captured before the final all-trials refit) under output key 'fold_models'.
+    sel_train_indices : array-like, optional
+        Indices of selected training trials. If provided, only these trials will be used for training.
 
     Returns
     -------
@@ -581,7 +588,7 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         from sklearn.svm import LinearSVC
         if regularization is None:
             regularization = 1.0
-        if penalty is None:
+        if penalty is not None:
             penalty = 'l2'
         if solver is not None:
             logger.warning('Solver not used for LinearSVC')
@@ -620,8 +627,11 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
         from sklearn.linear_model import LogisticRegression
         if regularization is None:
             regularization = 1.0
-        if penalty is None:
-            penalty = 'l2'
+        if penalty is not None:
+            # penalty = 'l2'
+            logger.warning('Penalty is deprecated for logistic regression, use l1_ratio instead.')
+        if l1_ratio is None:
+            l1_ratio = 0 # default to 0, or L2
         if solver is None:
             solver = 'lbfgs'
         clf=LogisticRegression(max_iter=5000,class_weight='balanced',
@@ -918,6 +928,9 @@ def decoder_helper(input_data,labels,decoder_type='linearSVC',crossval='5_fold',
                             '5x_5_fold']
 
     for train,test in train_test_split:
+
+        if sel_train_indices is not None:
+            train = [i for i in train if i in sel_train_indices]
 
         clf.fit(X[train],y[train])
         prediction=clf.predict(X[test])
@@ -1266,7 +1279,7 @@ def exclude_structures_from_df(df, exclude_redundant_structures=True, exclude_ge
 
     return df
 
-def get_consolidated_s3_path(datacube_version='272'):
+def get_consolidated_s3_path(datacube_version='289'):
     return f"s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.{datacube_version}/consolidated/"
 
 def load_single_session_decoder_accuracy(results_path, sel_session, combine_multi_probe_rec=True, use_linear_shift=True):
@@ -1559,7 +1572,7 @@ def load_session_wise_decoder_accuracy(
         results_path, session_list, session_table,
         combine_multi_probe_rec=True, keep_original_structure=False,
         exclude_redundant_structures=True, exclude_general_structures=True,
-        is_all_trials=False, use_linear_shift=True, datacube_version='272'):
+        is_all_trials=False, use_linear_shift=True, datacube_version='289'):
     """Load decoder accuracy with session-level metadata.
 
     Loads decoder results for multiple sessions and enriches them with behavioral
@@ -1807,7 +1820,7 @@ def load_session_wise_decoder_accuracy(
 
 
 def load_single_session_decoder_confidence(results_path, sel_session, combine_multi_probe_rec=True, 
-                                           predict_proba_alias='predict_proba', datacube_version='272'):
+                                           predict_proba_alias='predict_proba', datacube_version='289'):
     """Load decoder confidence (predicted probabilities) for a single session.
 
     Loads trial-by-trial decoder predictions and enriches them with trial metadata
@@ -1948,7 +1961,7 @@ def load_single_session_decoder_confidence(results_path, sel_session, combine_mu
 
 def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session, combine_multi_probe_rec=True, 
                                                        predict_proba_alias='predict_proba_spont',
-                                                       datacube_version='272'):
+                                                       datacube_version='289'):
     """Load decoder predictions for spontaneous (non-task) epochs in a single session.
 
     Applies trained decoders to spontaneous activity epochs to assess whether context
@@ -2101,7 +2114,7 @@ def load_single_session_decoder_confidence_spont_epoch(results_path, sel_session
 def load_session_wise_decoder_confidence(
         results_path, session_list, combine_multi_probe_rec=True,
         exclude_redundant_structures=True, exclude_general_structures=True,
-        predict_proba_alias='predict_proba', datacube_version='272'):
+        predict_proba_alias='predict_proba', datacube_version='289'):
     """Load decoder confidence across multiple sessions with trial-level predictions.
 
     Aggregates trial-by-trial decoder predictions across sessions, averaging over
@@ -2274,7 +2287,7 @@ def load_session_wise_decoder_confidence(
 def load_session_wise_decoder_confidence_spont_epoch(
         results_path, session_list, combine_multi_probe_rec=True,
         exclude_redundant_structures=True, exclude_general_structures=True,
-        predict_proba_alias='predict_proba_spont', datacube_version='272'):
+        predict_proba_alias='predict_proba_spont', datacube_version='289'):
     """Load decoder predictions for spontaneous epochs across multiple sessions.
 
     Aggregates decoder predictions during spontaneous (non-task) periods across
@@ -2519,7 +2532,7 @@ def load_decoder_coefs(results_path, session_list, combine_multi_probe_rec=True,
 
     return decoder_coefs_df
 
-def get_average_session_structure_ccf_coords(results_session_df,all_units_table_path=None,datacube_version='272'):
+def get_average_session_structure_ccf_coords(results_session_df,all_units_table_path=None,datacube_version='289'):
     """Calculate average CCF coordinates for each session-structure combination.
 
     Computes the mean Allen Institute Common Coordinate Framework (CCF) coordinates
@@ -2535,7 +2548,7 @@ def get_average_session_structure_ccf_coords(results_session_df,all_units_table_
     all_units_table_path : str, optional
         Path to consolidated units table parquet file containing CCF coordinates.
         If None, uses default path:
-        's3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/units.parquet'
+        's3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.289/consolidated/units.parquet'
 
     Returns
     -------
@@ -2569,7 +2582,7 @@ def get_average_session_structure_ccf_coords(results_session_df,all_units_table_
     >>> plt.scatter(merged['ccf_ap'], merged['mean_diff'])
     """
 
-    consolidated_s3_path=get_consolidated_s3_path(datacube_version='272')
+    consolidated_s3_path=get_consolidated_s3_path(datacube_version='289')
 
     if type(results_session_df) == pd.DataFrame or type(results_session_df) == pl.DataFrame:
         if type(results_session_df) == pl.DataFrame:
@@ -2641,12 +2654,16 @@ def get_session_structure_results(predict_proba_pd, sel_session, sel_structure, 
     return example_area_results
 
 
-def get_context_switch_table(predict_proba_pd, session_list, sel_unit_subsample_size=None, sel_time_aligned_to='stim_start_time'):
+def get_context_switch_table(predict_proba_pd, session_list, sel_unit_subsample_size=None, sel_time_aligned_to='stim_start_time',
+                             trials_rel_to_switch=None):
 
-    get_trials_rel_to_switch=[-3,-2,-1,0,1,2,3,4]
+    if trials_rel_to_switch is None:
+        get_trials_rel_to_switch=[-3,-2,-1,0,1,2,3,4]
+    else:
+        get_trials_rel_to_switch=list(trials_rel_to_switch)
 
-    all_performance=pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/performance.parquet').collect().to_pandas()
-    all_trials=pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.272/consolidated/trials.parquet').collect().to_pandas()
+    all_performance=pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.289/consolidated/performance.parquet').collect().to_pandas()
+    all_trials=pl.scan_parquet('s3://aind-scratch-data/dynamic-routing/cache/nwb_components/v0.0.289/consolidated/trials.parquet').collect().to_pandas()
 
     if sel_unit_subsample_size is None:
         #get the first unique unit_subsample_size
@@ -2753,7 +2770,8 @@ def get_context_switch_table(predict_proba_pd, session_list, sel_unit_subsample_
                     context_switch_table['dprime_after_switch'].append(dprime_after_switch)
 
     context_switch_table=pd.DataFrame(context_switch_table)
-    context_switch_table['bin_centers']=context_switch_table['bin_centers'].round(4)
+    # bin_centers holds one array per row (object dtype), so round elementwise
+    context_switch_table['bin_centers']=context_switch_table['bin_centers'].apply(lambda x: np.round(x,4))
 
     delta_predict_proba_2_bins=[]
     delta_predict_proba_3_bins=[]
@@ -3068,6 +3086,18 @@ def wrap_decoder_helper(
         )
         .sort('trial_index')
         .collect()
+    )
+
+    sel_train_indices_np = (
+        dr_datacube.get_lf('trials', nwb=False)
+        .filter(
+            pl.col('session_id') == session_id,
+        ).filter(
+            params.sel_train_indices,
+        )
+        .select(pl.col('trial_index'))
+        .collect()
+        .to_numpy()
     )
 
     if params.test_on_spontaneous:
@@ -3566,11 +3596,13 @@ def wrap_decoder_helper(
                             train_test_split_label=train_test_split_label,
                             regularization=params.regularization,
                             penalty=params.penalty,
+                            l1_ratio=params.l1_ratio,
                             solver=params.solver,
                             n_jobs=None,
                             other_data=spont_data,
                             scaler=params.scaler,
                             return_fold_models=params.cross_temporal_decoding and is_all_trials,
+                            sel_train_indices=sel_train_indices_np,
                         )
                         result = {}
                         result['balanced_accuracy_test'] = _result['balanced_accuracy_test'].item()
