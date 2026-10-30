@@ -2843,26 +2843,29 @@ def group_structures(frame: polars._typing.FrameType, keep_originals=True) -> po
         "ECT5": 'ECT',
         "ECT6a": 'ECT',
         "ECT4": 'ECT',
-        # NOTE: context module contains structures in the top 25% of decoding accuracy 
-        # (using 10 units, strict activity_drift<=0.1, min 3 sessions)
+        # NOTE: context module contains structures in the top 30% of decoding accuracy 
+        # (using 10 units, strict activity_drift<=0.1, min 3 mice)
+        'SCm': 'context_module',
+        'GPe': 'context_module',
+        'MRN': 'context_module',
+        'PAG': 'context_module',
+        'CP': 'context_module',
+        'MOs': 'context_module',
+        'AId': 'context_module',
+        'PL': 'context_module',
         'ACAd': 'context_module',
         'FRP': 'context_module',
         'ORBl': 'context_module',
-        'PL': 'context_module', 
-        'MOs': 'context_module',
-        'MOp': 'context_module',
-        'SSp': 'context_module',
-        'SSs': 'context_module',
-        'AId': 'context_module',
         'VISam': 'context_module',
-        'VM': 'context_module',
+        'GU': 'context_module',
+        'SSs': 'context_module',
+        'MOp': 'context_module',
         'POL': 'context_module',
-        'CP': 'context_module',
-        'GPe': 'context_module',
-        'SCm': 'context_module',
-        'MRN': 'context_module',
-        'RN': 'context_module',
-        'PAG': 'context_module'
+        'VM': 'context_module',
+        'ZI': 'context_module',
+        'SSp': 'context_module',
+        'TEa': 'context_module',
+        'VISC': 'context_module',
     }
     n_repeats = 2 if keep_originals else 1
     frame = (
