@@ -119,7 +119,7 @@ class Params(pydantic_settings.BaseSettings):
     decoder_type: Literal['linearSVC', 'nonlinearSVC', 'LDA', 'RandomForest', 'LogisticRegression'] = 'LogisticRegression'
     regularization: float | None = None
     """ set regularization (C) for the decoder. Setting to None reverts to the default value (usually 1.0) """
-    penalty: str | None = None
+    penalty: str | None = 'deprecated'
     """ set penalty for the decoder. Setting to None reverts to default. deprecated. """
     solver: str | None = None
     """ set solver for the decoder. Setting to None reverts to default """
@@ -3011,7 +3011,7 @@ def decode_context_with_linear_shift(
                 .collect()
             )
             
-    if params.structure is not None and params.structure is not 'all':
+    if params.structure is not None and params.structure != 'all':
             combinations_df = combinations_df.filter(pl.col('structure').eq(params.structure))
 
     if params.skip_existing and params.data_path.exists():
@@ -3124,6 +3124,29 @@ def wrap_decoder_helper(
         .to_numpy()
     )
 
+    def _selected_unit_ids() -> pl.Series:
+        """Unit ids for this session/structure/probe combination.
+        When structure == 'all', every unit's structure label is replaced with 'all'
+        (matching how the combinations table was built), otherwise the
+        `structure == 'all'` filter would match zero units."""
+        lf = dr_datacube.get_lf('unit_metrics', nwb=False).pipe(group_structures)
+        if structure == 'all':
+            lf = lf.with_columns(pl.lit('all').alias('structure'))
+        return (
+            lf
+            .filter(
+                params.units_query,
+                pl.col('session_id') == session_id,
+                pl.col('structure') == structure,
+                pl.col('electrode_group_name').is_in(electrode_group_names),
+            )
+            .select('unit_id')
+            .sort('unit_id')
+            .collect()
+            ['unit_id']
+            .unique()
+        )
+
     if params.test_on_spontaneous:
         #make random seed from the session id for consistency
         random_seed = int(session_id.replace('_','').replace('-',''))
@@ -3141,20 +3164,7 @@ def wrap_decoder_helper(
                     },
                     trials_frame=spont_trials,
                     as_counts=True,
-                    unit_ids=(
-                        dr_datacube.get_lf('unit_metrics', nwb=False)
-                        .pipe(group_structures)
-                        .filter(
-                            params.units_query,
-                            pl.col('session_id') == session_id,
-                            pl.col('structure') == structure,
-                            pl.col('electrode_group_name').is_in(electrode_group_names),
-                        )
-                        .select('unit_id')
-                        .collect()
-                        ['unit_id']
-                        .unique()
-                    ),
+                    unit_ids=_selected_unit_ids(),
                 )
                 .filter(
                     pl.col('n_spikes_window').is_not_null(),
@@ -3207,39 +3217,7 @@ def wrap_decoder_helper(
     resample_unit_ids=[]
 
     if params.filter_units_by_metrics is False:
-        if params.structure=='all':
-            unique_unit_ids=(
-                dr_datacube.get_lf('unit_metrics', nwb=False)
-                .pipe(group_structures)
-                .with_columns(
-                    pl.lit('all').alias('structure')
-                )
-                .filter(
-                    params.units_query,
-                    pl.col('session_id') == session_id,
-                )
-                .select('unit_id')
-                .sort('unit_id')
-                .collect()
-                ['unit_id']
-                .unique()
-            )
-        else:
-            unique_unit_ids=(
-                dr_datacube.get_lf('unit_metrics', nwb=False)
-                .pipe(group_structures)
-                .filter(
-                    params.units_query,
-                    pl.col('session_id') == session_id,
-                    pl.col('structure') == structure,
-                    pl.col('electrode_group_name').is_in(electrode_group_names),
-                )
-                .select('unit_id')
-                .sort('unit_id')
-                .collect()
-                ['unit_id']
-                .unique()
-            )
+        unique_unit_ids = _selected_unit_ids()
 
     # option to filter by separate unit metrics table (unit IDs must match!)
     # unit metrics data asset folder must contain a single .parquet file!
@@ -3329,20 +3307,7 @@ def wrap_decoder_helper(
                         },
                         trials_frame=all_trials,
                         as_counts=True,
-                        unit_ids=(
-                            dr_datacube.get_lf('unit_metrics', nwb=False)
-                            .pipe(group_structures)
-                            .filter(
-                                params.units_query,
-                                pl.col('session_id') == session_id,
-                                pl.col('structure') == structure,
-                                pl.col('electrode_group_name').is_in(electrode_group_names),
-                            )
-                            .select('unit_id')
-                            .collect()
-                            ['unit_id']
-                            .unique()
-                        ),
+                        unit_ids=_selected_unit_ids(),
                     )
                     .with_columns(
                         pl.col('n_spikes_baseline')*2*(stop-start),
@@ -3366,20 +3331,7 @@ def wrap_decoder_helper(
                     if params.other_spikes_table_path is None:
                         raise ValueError('other_spikes_table_path must be provided if load_other_spikes_table is True')
                     
-                    unit_ids=(
-                        dr_datacube.get_lf('unit_metrics', nwb=False)
-                        .pipe(group_structures)
-                        .filter(
-                            params.units_query,
-                            pl.col('session_id') == session_id,
-                            pl.col('structure') == structure,
-                            pl.col('electrode_group_name').is_in(electrode_group_names),
-                        )
-                        .select('unit_id')
-                        .collect()
-                        ['unit_id']
-                        .unique()
-                    )
+                    unit_ids=_selected_unit_ids()
 
                     spike_counts_df = (
                         pl.scan_parquet(params.other_spikes_table_path)
@@ -3402,20 +3354,7 @@ def wrap_decoder_helper(
                             },
                             trials_frame=all_trials,
                             as_counts=True,
-                            unit_ids=(
-                                dr_datacube.get_lf('unit_metrics', nwb=False)
-                                .pipe(group_structures)
-                                .filter(
-                                    params.units_query,
-                                    pl.col('session_id') == session_id,
-                                    pl.col('structure') == structure,
-                                    pl.col('electrode_group_name').is_in(electrode_group_names),
-                                )
-                                .select('unit_id')
-                                .collect()
-                                ['unit_id']
-                                .unique()
-                            ),
+                            unit_ids=_selected_unit_ids(),
                         )
                         .filter(
                             pl.col('n_spikes_window').is_not_null(),
