@@ -119,7 +119,7 @@ class Params(pydantic_settings.BaseSettings):
     decoder_type: Literal['linearSVC', 'nonlinearSVC', 'LDA', 'RandomForest', 'LogisticRegression'] = 'LogisticRegression'
     regularization: float | None = None
     """ set regularization (C) for the decoder. Setting to None reverts to the default value (usually 1.0) """
-    penalty: str | None = 'deprecated'
+    penalty: str | None = None
     """ set penalty for the decoder. Setting to None reverts to default. deprecated. """
     solver: str | None = None
     """ set solver for the decoder. Setting to None reverts to default """
