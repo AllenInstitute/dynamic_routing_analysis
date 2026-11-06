@@ -137,7 +137,7 @@ class Params(pydantic_settings.BaseSettings):
     label_to_decode: str = 'rewarded_modality'
     """ designate label to decode; corresponds to column in the trials table"""
     spike_count_intervals: Literal['pre_stim_single_bin_0.1', 'pre_stim_single_bin_0.2', 'pre_stim_single_bin_0.5', 'pre_stim_single_bin_1.5', 
-                                   'stim_single_bin_0.1', 
+                                   'stim_single_bin_0.1', 'stim_single_bin_0.5', 'stim_single_bin_0.1_0.5',
                                    'binned_stim_and_response', 'binned_stim_and_response_0.025', 'binned_stim_and_response_0.5',
                                    'binned_stim_0.5','binned_stim_0.1','binned_stim_0.05',
                                    'binned_stim_only_0.05','binned_stim_only_0.025','binned_stim_only_0.02','binned_stim_only_0.01','binned_stim_only_0.005',
@@ -279,6 +279,22 @@ class Params(pydantic_settings.BaseSettings):
                     start_time=0.0,
                     stop_time=0.1,
                     bin_size=0.1,
+                ),
+            ],
+            'stim_single_bin_0.5': [
+                BinnedRelativeIntervalConfig(
+                    event_column_name='stim_start_time',
+                    start_time=0.0,
+                    stop_time=0.5,
+                    bin_size=0.5,
+                ),
+            ],
+            'stim_single_bin_0.1_0.5': [
+                BinnedRelativeIntervalConfig(
+                    event_column_name='stim_start_time',
+                    start_time=0.1,
+                    stop_time=0.5,
+                    bin_size=0.4,
                 ),
             ],
             'binned_stim_and_response': [
