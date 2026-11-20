@@ -45,7 +45,12 @@ def run_encoding(session_id: str):
             ),
             codeocean.computation.NamedRunParam(
                 param_name="override_params_json",
-                value='{"time_of_interest": "quiescent", "spike_bin_width": 0.1, "skip_existing": 0, "run_linear_shift": 1, "run_dropout": 1}', # all values must be supplied as strings
+                # value='{"time_of_interest": "quiescent", "spike_bin_width": 0.1, "skip_existing": 0, "run_linear_shift": 1, "run_dropout": 1}', # all values must be supplied as strings #full trial run
+                value=(
+                    '{"time_of_interest": "spontaneous_full", "spike_bin_width": 0.1,'
+                    '"input_variables": ["movements"], "orthogonalize_against_context": [],'
+                    '"skip_existing": 0, "run_linear_shift": 0, "run_dropout": 0}'
+                ),
             ),
     ],
     )
