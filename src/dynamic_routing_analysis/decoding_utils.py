@@ -1290,7 +1290,7 @@ def exclude_structures_from_df(df, exclude_redundant_structures=True, exclude_ge
     """
     redundant_structures =['SCop', 'SCsg', 'SCzo', 'SCig', 'SCiw', 'SCdg', 'SCdw', 'ECT1', 'ECT2/3', 'ECT4', 'ECT5', 'ECT6a', 'ECT6b']
     general_structures =['CTXsp', 'STR', 'PAL', 'TH', 'HY', 'MB', 'P', 'MY', 'CB', 'VL', 'V3', 'V4', 'SEZ',
-                         'fiber tracts', 'scwm', 'root', 'lot', 'out of brain', 'undefined']
+                         'fiber tracts', 'scwm', 'root', 'lot', 'aco','ccb', 'out of brain', 'undefined']
 
     if exclude_redundant_structures:
         if type(df) == pl.DataFrame:
