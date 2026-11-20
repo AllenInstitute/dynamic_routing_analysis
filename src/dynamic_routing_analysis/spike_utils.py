@@ -1284,7 +1284,7 @@ def concat_single_unit_metrics_across_sessions(stim_context_loadpath,lick_loadpa
     all_data.to_pickle(os.path.join(savepath,"all_data_plus_performance.pkl"))
 
 
-def calculate_single_unit_metric_adjusted_pvals(sel_units,sel_project):
+def calculate_single_unit_metric_adjusted_pvals(sel_units):
 
     adj_pvals=pd.DataFrame({
         'unit_id':sel_units['unit_id'].values,
@@ -1389,9 +1389,6 @@ def calculate_single_unit_metric_adjusted_pvals(sel_units,sel_project):
         'ccf_dv':sel_units['ccf_dv'],
         'ccf_ml':sel_units['ccf_ml'],
     })
-
-    # if 'Templeton' in sel_project:
-    #     adj_pvals['lick']=np.ones(len(adj_pvals))
 
     adj_pvals['any_stim']=adj_pvals[['vis1','vis2','sound1','sound2']].min(axis=1)
 
